@@ -3,7 +3,7 @@
     <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
         <item name="colorPrimary">@color/md_blue_600</item>
         <item name="colorPrimaryDark">@color/md_blue_800</item>
-        <item name="colorAccent">@color/md_orange_A200</item>
+        <item name="colorAccent">@color/md_blue_400</item>
 
         <item name="preferenceTheme">@style/PreferenceThemeOverlay.v14.Material</item>
 
@@ -60,7 +60,6 @@
     <style name="AppTheme.AlternateFAB" parent="Widget.AppCompat.Button">
         <item name="android:tint">@color/md_blue_600</item>
         <item name="colorAccent">@color/md_white_1000</item>
-
         <item name="colorButtonNormal">@color/md_blue_600</item>
     </style>
 
@@ -146,6 +145,17 @@
 
     <style name="SecondaryTextView" parent="@android:style/TextAppearance.Small">
         <item name="android:textColor">#BEBEBE</item>
+    </style>
+
+    <style name="MGRSPrimary">
+        <item name="android:textColor">@color/mgrs</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textStyle">normal</item>
+    </style>
+
+    <style name="MGRSDetail" parent="MGRSPrimary">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">normal</item>
     </style>
 
     <style name="horizontal_divider">

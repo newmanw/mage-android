@@ -21,6 +21,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -33,13 +34,13 @@ import mil.nga.wkb.geom.GeometryType;
 import mil.nga.wkb.geom.LineString;
 import mil.nga.wkb.geom.Point;
 
-public class StaticFeatureLoadTask extends AsyncTask<Layer, Object, Void> {
+public class StaticFeatureLoadTask extends AsyncTask<Layer, Object, Layer> {
 
 	private static final String LOG_NAME = StaticFeatureLoadTask.class.getName();
 
+	private Context context;
 	private StaticGeometryCollection staticGeometryCollection;
 	private GoogleMap map;
-	private Context context;
 
 	public StaticFeatureLoadTask(Context context, StaticGeometryCollection staticGeometryCollection, GoogleMap map) {
 		this.context = context;
@@ -48,13 +49,15 @@ public class StaticFeatureLoadTask extends AsyncTask<Layer, Object, Void> {
 	}
 
 	@Override
-	protected Void doInBackground(Layer... layers) {
+	protected Layer doInBackground(Layer... layers) {
 		Layer layer = layers[0];
 		String layerId = layer.getId().toString();
 
 		Log.d(LOG_NAME, "static feature layer: " + layer.getName() + " is enabled, it has " + layer.getStaticFeatures().size() + " features");
 
-		for (StaticFeature feature : layer.getStaticFeatures()) {
+		Iterator<StaticFeature> features = layer.getStaticFeatures().iterator();
+		while (features.hasNext() && !isCancelled()) {
+			StaticFeature feature = features.next();
 			Geometry geometry = feature.getGeometry();
 			Map<String, StaticFeatureProperty> properties = feature.getPropertiesMap();
 
@@ -146,14 +149,17 @@ public class StaticFeatureLoadTask extends AsyncTask<Layer, Object, Void> {
 					options.addHole(holeLatLngs);
 				}
 
-				publishProgress(new Object[] { options, layerId, content.toString() });
+				publishProgress(options, layerId, content.toString());
 			}
 		}
-		return null;
+		return layer;
 	}
 
 	@Override
 	protected void onProgressUpdate(Object... para) {
+		if (isCancelled()) {
+			return;
+		}
 		Object options = para[0];
 		String layerId = para[1].toString();
 		String content = para[2].toString();
@@ -167,5 +173,17 @@ public class StaticFeatureLoadTask extends AsyncTask<Layer, Object, Void> {
 			Polygon p = map.addPolygon((PolygonOptions) options);
 			staticGeometryCollection.addPolygon(layerId, p, content);
 		}
+	}
+
+	@Override
+	protected void onCancelled(Layer result) {
+		onPostExecute(result);
+	}
+
+	@Override
+	protected void onPostExecute(Layer result) {
+		staticGeometryCollection = null;
+		context = null;
+		map = null;
 	}
 }

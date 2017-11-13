@@ -11,4 +11,7 @@
     <color name="line_default_color">#DE000000</color>
     <color name="fill_default_color">#20000000</color>
 
+    <color name="mgrs">#417505</color>
+    <color name="mgrs_bg">#9AFFFFFF</color>
+
 </resources>

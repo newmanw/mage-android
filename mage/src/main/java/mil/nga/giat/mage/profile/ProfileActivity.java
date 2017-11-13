@@ -154,7 +154,7 @@ public class ProfileActivity extends AppCompatActivity implements OnMapReadyCall
 
 		MapsInitializer.initialize(context);
 
-		mapView = (MapView) findViewById(R.id.mapView);
+		mapView = (MapView) findViewById(R.id.map_view);
 		mapView.onCreate(savedInstanceState);
 		mapView.getMapAsync(this);
 

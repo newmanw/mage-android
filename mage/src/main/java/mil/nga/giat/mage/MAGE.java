@@ -15,9 +15,23 @@ import android.support.v4.app.NotificationCompat;
 import android.support.v4.app.TaskStackBuilder;
 import android.util.Log;
 
+import java.io.ByteArrayInputStream;
+import java.security.KeyStore;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateFactory;
+
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.TrustManagerFactory;
+
 import mil.nga.giat.mage.login.LoginActivity;
 import mil.nga.giat.mage.login.ServerUrlActivity;
 import mil.nga.giat.mage.login.SignupActivity;
+import mil.nga.giat.mage.map.cache.CacheManager;
+import mil.nga.giat.mage.map.cache.DefaultCacheLocationProvider;
+import mil.nga.giat.mage.map.cache.GeoPackageCacheProvider;
+import mil.nga.giat.mage.map.cache.XYZDirectoryCacheProvider;
 import mil.nga.giat.mage.observation.ObservationNotificationListener;
 import mil.nga.giat.mage.sdk.datastore.observation.ObservationHelper;
 import mil.nga.giat.mage.sdk.datastore.user.User;
@@ -62,10 +76,45 @@ public class MAGE extends MultiDexApplication implements ISessionEventListener, 
 
 	@Override
 	public void onCreate() {
+
 		// setup the screen unlock stuff
 		registerReceiver(ScreenChangeReceiver.getInstance(), new IntentFilter(Intent.ACTION_SCREEN_ON));
 
-		HttpClientManager.getInstance(getApplicationContext()).addListener(this);
+		HttpClientManager http = HttpClientManager.initialize(this, null, null);
+		http.addListener(this);
+		String pin = getResources().getString(R.string.serverPin);
+		if (pin.length() > 0) {
+			try {
+				ByteArrayInputStream pinBytes = new ByteArrayInputStream(pin.getBytes());
+				CertificateFactory cf = CertificateFactory.getInstance("X.509");
+				Certificate cert = cf.generateCertificate(pinBytes);
+				KeyStore store = KeyStore.getInstance(KeyStore.getDefaultType());
+				store.load(null, null);
+				store.setCertificateEntry("mage", cert);
+				String trustAlg = TrustManagerFactory.getDefaultAlgorithm();
+				TrustManagerFactory trust = TrustManagerFactory.getInstance(trustAlg);
+				trust.init(store);
+				SSLContext context = SSLContext.getInstance("TLS");
+				context.init(null, trust.getTrustManagers(), null);
+				http.httpClient().setSslSocketFactory(context.getSocketFactory());
+			}
+			catch (Exception e) {
+				throw new RuntimeException(e);
+			}
+		}
+		http.httpClient().setHostnameVerifier(new HostnameVerifier() {
+			@Override
+			public boolean verify(String hostname, SSLSession session) {
+				return true;
+			}
+		});
+
+        CacheManager.initialize(new CacheManager.Config()
+			.context(this)
+			.providers(new XYZDirectoryCacheProvider())
+			.providers(new GeoPackageCacheProvider(this))
+			.cacheLocations(new DefaultCacheLocationProvider(this))
+			.updatePermission(new CacheManager.CreateUpdatePermission(){}));
 
 		registerActivityLifecycleCallbacks(this);
 

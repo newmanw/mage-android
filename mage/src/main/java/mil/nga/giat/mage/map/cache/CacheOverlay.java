@@ -1,183 +1,115 @@
 package mil.nga.giat.mage.map.cache;
 
-import com.google.android.gms.maps.GoogleMap;
-import com.google.android.gms.maps.MapView;
-import com.google.android.gms.maps.model.LatLng;
-
-import java.util.ArrayList;
-import java.util.List;
+import android.support.annotation.Nullable;
 
 /**
- * Abstract cache overlay
+ * A <code>CacheOverlay</code> represents a cached data set which can appear on a map.
+ * A {@link CacheProvider} implementation will create instances of its associated
+ * <code>CacheOverlay</code> subclass.  Note that this class provides default
+ * {@link #equals(Object)} and {@link #hashCode()} implementations because
+ * {@link CacheManager} places <code>CacheOverlay</code> instances in sets and they
+ * may also be used as {@link java.util.HashMap} keys.  Subclasses must take care
+ * those methods work properly if overriding those or other methods on which
+ * <code>equals()</code> and <code>hashCode()</code> depend.
  *
  * @author osbornb
  */
 public abstract class CacheOverlay {
 
     /**
-     * Name
+     * Name of this cache overlay
      */
-    private final String name;
+    private final String overlayName;
 
     /**
-     * Cache name
+     * The {@link MapCache#getName() name} of the cache that contains this overlay's data
      */
     private final String cacheName;
 
     /**
-     * Cache type
+     * The {@link MapCache#getType() type} of the cache that contains this overlay's data
      */
-    private final CacheOverlayType type;
-
-    /**
-     * True when enabled
-     */
-    private boolean enabled = false;
-
-    /**
-     * True when the cache was newly added, such as a file opened with MAGE
-     */
-    private boolean added = false;
-
-    /**
-     * True if the cache type supports child caches
-     */
-    private final boolean supportsChildren;
+    private final Class<? extends CacheProvider> cacheType;
 
     /**
      * Constructor
-     *
-     * @param name             name
-     * @param type             cache type
-     * @param supportsChildren true if cache overlay with children caches
+     * @param overlayName a unique, persistent name for the overlay
      */
-    protected CacheOverlay(String name, CacheOverlayType type, boolean supportsChildren) {
-        this(name, name, type, supportsChildren);
-    }
-
-    /**
-     * Constructor
-     *
-     * @param name             name
-     * @param cacheName        cache name
-     * @param type             cache type
-     * @param supportsChildren true if cache overlay with children caches
-     */
-    protected CacheOverlay(String name, String cacheName, CacheOverlayType type, boolean supportsChildren) {
-        this.name = name;
+    protected CacheOverlay(String overlayName, String cacheName, Class<? extends CacheProvider> cacheType) {
+        this.overlayName = overlayName;
         this.cacheName = cacheName;
-        this.type = type;
-        this.supportsChildren = supportsChildren;
+        this.cacheType = cacheType;
+    }
+
+    public String getOverlayName() {
+        return overlayName;
     }
 
     /**
-     * Remove the cache overlay from the map
+     * Return the name of the {@link MapCache#getName() cache} that contains this overlay.
+     * @return a {@link MapCache} instance
      */
-    public abstract void removeFromMap();
-
-    public String getName() {
-        return name;
-    }
-
     public String getCacheName() {
         return cacheName;
     }
 
-    public CacheOverlayType getType() {
-        return type;
-    }
-
-    public boolean isEnabled() {
-        return enabled;
-    }
-
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
-    }
-
-    public boolean isAdded() {
-        return added;
-    }
-
-    public void setAdded(boolean added) {
-        this.added = added;
+    /**
+     * Return the {@link CacheProvider provider} type.  This just returns
+     * the result of this cache overlay's comprising {@link #getCacheName() cache}.
+     * @return the {@link CacheProvider} type
+     */
+    public Class<? extends CacheProvider> getCacheType() {
+        return cacheType;
     }
 
     /**
-     * Get the icon image resource id for the cache
-     *
-     * @return
+     * Get the icon image resource id for the cacheName
+     * @return a {@link android.content.res.Resources resource} ID or null
      */
+    @Nullable
     public Integer getIconImageResourceId() {
         return null;
     }
 
     /**
-     * Does the cache type support children
-     *
-     * @return
+     * Get information about the cacheName to display
+     * @return an info string or null
      */
-    public boolean isSupportsChildren() {
-        return supportsChildren;
-    }
-
-    /**
-     * Get the children cache overlays
-     *
-     * @return
-     */
-    public List<CacheOverlay> getChildren() {
-        return new ArrayList<>();
-    }
-
-    /**
-     * Return true if a child cache overlay, false if a top level with or without children
-     *
-     * @return true if a child
-     */
-    public boolean isChild(){
-        return false;
-    }
-
-    /**
-     * Get the child's parent cache overlay
-     *
-     * @return parent cache overlay
-     */
-    public CacheOverlay getParent(){
-        return null;
-    }
-
-    /**
-     * Get information about the cache to display
-     *
-     * @return
-     */
+    @Nullable
     public String getInfo() {
         return null;
     }
 
     /**
-     * On map click
-     *
-     * @param latLng  map click location
-     * @param mapView map view
-     * @param map     Google map
-     * @return map click message
-     */
-    public String onMapClick(LatLng latLng, MapView mapView, GoogleMap map) {
-        return null;
-    }
-
-    /**
-     * Build the cache name of a child
-     *
-     * @param name      cache name
-     * @param childName child cache name
+     * Two <code>CacheOverlay</code> instances are equal if they have the
+     * same {@link #getOverlayName() name} and their comprising caches' {@link #getCacheName() name}
+     * and {@link #getCacheType() type} are {@link MapCache#equals(Object) equal} as well.
+     * @param obj
      * @return
      */
-    public static String buildChildCacheName(String name, String childName) {
-        return name + "-" + childName;
+    @Override
+    public boolean equals(Object obj) {
+        if (!(obj instanceof CacheOverlay)) {
+            return false;
+        }
+        CacheOverlay other = (CacheOverlay)obj;
+        return
+            getCacheType().equals(other.getCacheType()) &&
+            getCacheName().equals(other.getCacheName()) &&
+            getOverlayName().equals(other.getOverlayName());
     }
 
+    @Override
+    public int hashCode() {
+        return getOverlayName().hashCode();
+    }
+
+    @Override
+    public String toString() {
+        return getCacheName() + ":" + getOverlayName() + "(" + getCacheType() + ")";
+    }
+
+    public boolean isTypeOf(Class<? extends CacheProvider> providerType) {
+        return providerType.isAssignableFrom(getCacheType());
+    }
 }

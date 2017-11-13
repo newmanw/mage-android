@@ -83,9 +83,7 @@ public class FeatureOverlayPreferenceActivity extends AppCompatActivity {
 
             contentView = view.findViewById(R.id.content);
             noContentView = view.findViewById(R.id.no_content);
-
             setHasOptionsMenu(true);
-
             return view;
         }
 
