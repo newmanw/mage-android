@@ -1,13 +1,22 @@
 package mil.nga.giat.mage.map.cache;
 
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+
+import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.MapView;
+import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.TileOverlay;
+import com.google.android.gms.maps.model.TileOverlayOptions;
+import com.google.android.gms.maps.model.TileProvider;
 
 import java.io.File;
 
 import mil.nga.giat.mage.R;
+import mil.nga.giat.mage.map.FileSystemTileProvider;
 
 /**
- * XYZ Directory of tiles cache overlay
+ * XYZ directory of tiles cache overlay
  *
  * @author osbornb
  */
@@ -19,27 +28,14 @@ public class XYZDirectoryCacheOverlay extends CacheOverlay {
     private File directory;
 
     /**
-     * Tile Overlay
-     */
-    private TileOverlay tileOverlay;
-
-    /**
      * Constructor
      *
-     * @param name      cache name
+     * @param cacheName cache name
      * @param directory tile directory
      */
-    public XYZDirectoryCacheOverlay(String name, File directory) {
-        super(name, CacheOverlayType.XYZ_DIRECTORY, false);
+    public XYZDirectoryCacheOverlay(String overlayName, String cacheName, File directory) {
+        super(overlayName, cacheName, XYZDirectoryCacheProvider.class);
         this.directory = directory;
-    }
-
-    @Override
-    public void removeFromMap() {
-        if (tileOverlay != null) {
-            tileOverlay.remove();
-            tileOverlay = null;
-        }
     }
 
     @Override
@@ -47,31 +43,17 @@ public class XYZDirectoryCacheOverlay extends CacheOverlay {
         return R.drawable.ic_layers_gray_24dp;
     }
 
-    /**
-     * Get the directory
-     *
-     * @return
-     */
-    public File getDirectory() {
+    File getDirectory() {
         return directory;
     }
 
-    /**
-     * Get the tile overlay
-     *
-     * @return
-     */
-    public TileOverlay getTileOverlay() {
-        return tileOverlay;
+    @Override
+    public boolean equals(Object other) {
+        return other instanceof XYZDirectoryCacheOverlay && getDirectory().equals(((XYZDirectoryCacheOverlay) other).getDirectory());
     }
 
-    /**
-     * Set the tile overlay
-     *
-     * @param tileOverlay
-     */
-    public void setTileOverlay(TileOverlay tileOverlay) {
-        this.tileOverlay = tileOverlay;
+    @Override
+    public int hashCode() {
+        return getDirectory().hashCode();
     }
-
 }

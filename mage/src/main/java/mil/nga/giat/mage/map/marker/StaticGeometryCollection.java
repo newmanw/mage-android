@@ -36,6 +36,14 @@ public class StaticGeometryCollection {
 	private Map<Polyline, String> featurePolylineDescriptions = new HashMap<Polyline, String>();
 	private Map<Polygon, String> featurePolygonDescriptions = new HashMap<Polygon, String>();
 
+	public void clear() {
+		featureMarkers.clear();
+		featurePolylines.clear();
+		featurePolygons.clear();
+		featurePolygonDescriptions.clear();
+		featurePolygonDescriptions.clear();
+	}
+
 	public Set<String> getLayers() {
 		Set<String> layerIds = new HashSet<String>();
 		layerIds.addAll(featureMarkers.keySet());

@@ -24,3 +24,4 @@
 
 -keep class mil.nga.giat.mage.glide.MageGlideModule
 -keep class com.bumptech.glide.integration.okhttp.OkHttpGlideModule
+-keep class com.woxthebox.draglistview.** { *; }

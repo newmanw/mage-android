@@ -37,16 +37,12 @@ import com.bumptech.glide.request.target.BitmapImageViewTarget;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.List;
 
-import mil.nga.geopackage.validate.GeoPackageValidate;
-import mil.nga.giat.mage.cache.GeoPackageCacheUtils;
 import mil.nga.giat.mage.event.ChangeEventActivity;
 import mil.nga.giat.mage.help.HelpActivity;
 import mil.nga.giat.mage.login.LoginActivity;
 import mil.nga.giat.mage.map.MapFragment;
-import mil.nga.giat.mage.map.cache.CacheProvider;
+import mil.nga.giat.mage.map.cache.CacheManager;
 import mil.nga.giat.mage.newsfeed.ObservationFeedFragment;
 import mil.nga.giat.mage.newsfeed.PeopleFeedFragment;
 import mil.nga.giat.mage.preferences.GeneralPreferencesActivity;
@@ -87,20 +83,14 @@ public class LandingActivity extends AppCompatActivity implements NavigationView
 
     private DrawerLayout drawerLayout;
     private BottomNavigationView bottomNavigationView;
-    private List<Fragment> bottomNavigationFragments = new ArrayList<>();
-
+    private int currentTabId = -1;
     private boolean locationPermissionGranted = false;
-    private Uri openUri;
     private String openPath;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_landing);
-
-        bottomNavigationFragments.add(new MapFragment());
-        bottomNavigationFragments.add(new ObservationFeedFragment());
-        bottomNavigationFragments.add(new PeopleFeedFragment());
 
         // TODO investigate moving this call
         // its here because this is the first activity started after login and it ensures
@@ -109,7 +99,7 @@ public class LandingActivity extends AppCompatActivity implements NavigationView
         // i.e. after TokenExpiredActivity.
         ((MAGE) getApplication()).onLogin();
 
-        CacheProvider.getInstance(getApplicationContext()).refreshTileOverlays();
+        CacheManager.getInstance().refreshAvailableCaches();
 
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
@@ -268,7 +258,7 @@ public class LandingActivity extends AppCompatActivity implements NavigationView
             }
             case PERMISSIONS_REQUEST_ACCESS_STORAGE: {
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    CacheProvider.getInstance(getApplicationContext()).refreshTileOverlays();
+                    CacheManager.getInstance().refreshAvailableCaches();
                 }
 
                 break;
@@ -374,6 +364,7 @@ public class LandingActivity extends AppCompatActivity implements NavigationView
             super.onBackPressed();
         }
     }
+
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         if (requestCode == CHANGE_EVENT_REQUEST) {
@@ -384,23 +375,29 @@ public class LandingActivity extends AppCompatActivity implements NavigationView
     }
 
     private void switchBottomNavigationFragment(MenuItem item) {
-        Fragment fragment = null;
-        switch (item.getItemId()) {
+        if (currentTabId == item.getItemId()) {
+            return;
+        }
+        currentTabId = item.getItemId();
+        Fragment targetTab;
+        switch (currentTabId) {
             case R.id.map_tab:
-                fragment = bottomNavigationFragments.get(0);
+                targetTab = new MapFragment();
                 break;
             case R.id.observations_tab:
-                fragment = bottomNavigationFragments.get(1);
+                targetTab = new ObservationFeedFragment();
                 break;
             case R.id.people_tab:
-                fragment = bottomNavigationFragments.get(2);
+                targetTab = new PeopleFeedFragment();
                 break;
+            default:
+                return;
         }
-
-        if (fragment != null) {
-            FragmentManager fragmentManager = getSupportFragmentManager();
-            fragmentManager.beginTransaction().replace(R.id.navigation_content, fragment).commit();
-        }
+        FragmentManager fragmentManager = getSupportFragmentManager();
+        // TODO: track state when switching tabs
+//        Fragment currentTab = fragmentManager.findFragmentById(R.id.navigation_content);
+//        Fragment.SavedState state = fragmentManager.saveFragmentInstanceState(currentTab);
+        fragmentManager.beginTransaction().replace(R.id.navigation_content, targetTab).commit();
     }
 
     /**
@@ -409,20 +406,12 @@ public class LandingActivity extends AppCompatActivity implements NavigationView
     private void handleOpenFilePath() {
 
         File cacheFile = new File(openPath);
-
-        // Handle GeoPackage files by linking them to their current location
-        if (GeoPackageValidate.hasGeoPackageExtension(cacheFile)) {
-
-            String cacheName = GeoPackageCacheUtils.importGeoPackage(this, cacheFile);
-            if (cacheName != null) {
-                CacheProvider.getInstance(getApplicationContext()).enableAndRefreshTileOverlays(cacheName);
-            }
-        }
+        CacheManager.getInstance().tryImportCacheFile(cacheFile);
     }
 
     public static void deleteAllData(Context context) {
         DaoStore.getInstance(context).resetDatabase();
-        PreferenceManager.getDefaultSharedPreferences(context).edit().clear().commit();
+        PreferenceManager.getDefaultSharedPreferences(context).edit().clear().apply();
         deleteDir(MediaUtility.getMediaStageDirectory(context));
         clearApplicationData(context);
     }

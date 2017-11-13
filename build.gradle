@@ -2,10 +2,6 @@
 buildscript {
     repositories {
         jcenter()
-        maven {
-            url 'https://maven.google.com/'
-            name 'Google'
-        }
     }
     dependencies {
         classpath 'com.android.tools.build:gradle:2.3.3'
@@ -19,10 +15,7 @@ task wrapper(type: Wrapper) {
 allprojects {
     repositories {
         jcenter()
-        maven {
-            url 'https://maven.google.com/'
-            name 'Google'
-        }
+        google()
         mavenLocal()
         flatDir {
             dirs 'libs'

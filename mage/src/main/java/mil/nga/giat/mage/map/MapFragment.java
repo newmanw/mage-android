@@ -3,20 +3,27 @@ package mil.nga.giat.mage.map;
 import android.Manifest;
 import android.app.Activity;
 import android.app.Dialog;
+import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.graphics.drawable.Drawable;
 import android.location.Location;
 import android.location.LocationListener;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.preference.PreferenceManager;
+import android.support.annotation.Nullable;
+import android.support.constraint.ConstraintLayout;
+import android.support.constraint.ConstraintSet;
 import android.support.design.widget.BottomSheetBehavior;
 import android.support.design.widget.FloatingActionButton;
 import android.support.v4.app.Fragment;
+import android.support.v4.app.FragmentManager;
 import android.support.v4.content.ContextCompat;
 import android.support.v4.graphics.drawable.DrawableCompat;
 import android.support.v7.app.AlertDialog;
@@ -34,6 +41,7 @@ import android.view.View.OnClickListener;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
 import android.webkit.WebView;
+import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -47,9 +55,9 @@ import com.google.android.gms.maps.GoogleMap.OnMapClickListener;
 import com.google.android.gms.maps.GoogleMap.OnMapLongClickListener;
 import com.google.android.gms.maps.GoogleMap.OnMarkerClickListener;
 import com.google.android.gms.maps.GoogleMap.OnMyLocationButtonClickListener;
+import com.google.android.gms.maps.GoogleMapOptions;
 import com.google.android.gms.maps.LocationSource;
 import com.google.android.gms.maps.MapView;
-import com.google.android.gms.maps.MapsInitializer;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
@@ -57,7 +65,6 @@ import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.TileOverlay;
 import com.google.android.gms.maps.model.TileOverlayOptions;
-import com.google.android.gms.maps.model.TileProvider;
 import com.google.common.collect.Sets;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -71,66 +78,27 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 
-import mil.nga.geopackage.BoundingBox;
-import mil.nga.geopackage.GeoPackage;
-import mil.nga.geopackage.GeoPackageCache;
-import mil.nga.geopackage.GeoPackageManager;
-import mil.nga.geopackage.core.contents.Contents;
-import mil.nga.geopackage.core.contents.ContentsDao;
-import mil.nga.geopackage.extension.link.FeatureTileTableLinker;
-import mil.nga.geopackage.factory.GeoPackageFactory;
-import mil.nga.geopackage.features.index.FeatureIndexManager;
-import mil.nga.geopackage.features.user.FeatureCursor;
-import mil.nga.geopackage.features.user.FeatureDao;
-import mil.nga.geopackage.features.user.FeatureRow;
-import mil.nga.geopackage.geom.GeoPackageGeometryData;
-import mil.nga.geopackage.map.geom.GoogleMapShape;
-import mil.nga.geopackage.map.geom.GoogleMapShapeConverter;
-import mil.nga.geopackage.map.tiles.overlay.BoundedOverlay;
-import mil.nga.geopackage.map.tiles.overlay.FeatureOverlay;
-import mil.nga.geopackage.map.tiles.overlay.FeatureOverlayQuery;
-import mil.nga.geopackage.map.tiles.overlay.GeoPackageOverlayFactory;
-import mil.nga.geopackage.projection.Projection;
-import mil.nga.geopackage.projection.ProjectionConstants;
-import mil.nga.geopackage.projection.ProjectionFactory;
-import mil.nga.geopackage.projection.ProjectionTransform;
-import mil.nga.geopackage.tiles.TileBoundingBoxUtils;
-import mil.nga.geopackage.tiles.features.DefaultFeatureTiles;
-import mil.nga.geopackage.tiles.features.FeatureTiles;
-import mil.nga.geopackage.tiles.features.custom.NumberFeaturesTile;
-import mil.nga.geopackage.tiles.user.TileDao;
 import mil.nga.giat.mage.MAGE;
 import mil.nga.giat.mage.R;
 import mil.nga.giat.mage.filter.DateTimeFilter;
 import mil.nga.giat.mage.filter.Filter;
 import mil.nga.giat.mage.filter.FilterActivity;
-import mil.nga.giat.mage.map.GoogleMapWrapper.OnMapPanListener;
+import mil.nga.giat.mage.map.cache.CacheManager;
+import mil.nga.giat.mage.map.cache.CacheManager.CacheOverlaysUpdateListener;
 import mil.nga.giat.mage.map.cache.CacheOverlay;
-import mil.nga.giat.mage.map.cache.CacheOverlayType;
-import mil.nga.giat.mage.map.cache.CacheProvider;
-import mil.nga.giat.mage.map.cache.CacheProvider.OnCacheOverlayListener;
-import mil.nga.giat.mage.map.cache.GeoPackageCacheOverlay;
-import mil.nga.giat.mage.map.cache.GeoPackageFeatureTableCacheOverlay;
-import mil.nga.giat.mage.map.cache.GeoPackageTileTableCacheOverlay;
-import mil.nga.giat.mage.map.cache.XYZDirectoryCacheOverlay;
+import mil.nga.giat.mage.map.cache.MapCache;
+import mil.nga.giat.mage.map.cache.OverlayOnMapManager;
 import mil.nga.giat.mage.map.marker.LocationMarkerCollection;
 import mil.nga.giat.mage.map.marker.MyHistoricalLocationMarkerCollection;
 import mil.nga.giat.mage.map.marker.ObservationMarkerCollection;
 import mil.nga.giat.mage.map.marker.PointCollection;
 import mil.nga.giat.mage.map.marker.StaticGeometryCollection;
-import mil.nga.giat.mage.map.preference.MapPreferencesActivity;
 import mil.nga.giat.mage.observation.ObservationEditActivity;
 import mil.nga.giat.mage.observation.ObservationFormPickerActivity;
 import mil.nga.giat.mage.observation.ObservationLocation;
@@ -157,56 +125,102 @@ import mil.nga.mgrs.gzd.MGRSTileProvider;
 import mil.nga.wkb.geom.Geometry;
 import mil.nga.wkb.geom.GeometryType;
 
-public class MapFragment extends Fragment implements OnMapReadyCallback, OnMapClickListener, OnMapLongClickListener, OnMarkerClickListener, OnInfoWindowClickListener, OnMapPanListener, GoogleMap.OnCameraIdleListener, OnMyLocationButtonClickListener, OnClickListener, LocationSource, LocationListener, OnCacheOverlayListener,
-		IObservationEventListener, ILocationEventListener, IUserEventListener, IStaticFeatureEventListener {
+public class MapFragment extends Fragment implements
+        OnMapReadyCallback,
+        OnMapClickListener,
+        OnMapLongClickListener,
+        OnMarkerClickListener,
+        GoogleMap.OnCameraMoveStartedListener,
+        GoogleMap.OnCameraIdleListener,
+        OnInfoWindowClickListener,
+        OnMyLocationButtonClickListener,
+        OnClickListener,
+        LocationSource,
+        LocationListener,
+        CacheOverlaysUpdateListener,
+        SearchView.OnQueryTextListener,
+        IObservationEventListener,
+        ILocationEventListener,
+        IStaticFeatureEventListener,
+        IUserEventListener
+{
 
 	private static final String LOG_NAME = MapFragment.class.getName();
-
-	private static final String MAP_VIEW_STATE = "MAP_VIEW_STATE";
-
 	private static final String OBSERVATION_FILTER_TYPE = "Observation";
 	private static final String LOCATION_FILTER_TYPE = "Location";
-
 	private static final int PERMISSIONS_REQUEST_ACCESS_FINE_LOCATION = 1;
+	private static final int MARKER_REFRESH_INTERVAL_SECONDS = 300;
+	private static final String STATE_OVERLAYS_EXPANDED = MapFragment.class.getSimpleName() + ".overlays_expanded";
+
+	private class RefreshMarkersRunnable implements Runnable {
+		private final PointCollection<?> points;
+
+		private RefreshMarkersRunnable(PointCollection<?> points) {
+			this.points = points;
+		}
+
+		public void run() {
+			if (points.isVisible()) {
+				points.refreshMarkerIcons();
+			}
+			scheduleMarkerRefresh(this);
+		}
+	}
+
+	private class CleanlyStaticFeatureLoadTask extends StaticFeatureLoadTask {
+
+		public CleanlyStaticFeatureLoadTask(Context context, StaticGeometryCollection staticGeometryCollection, GoogleMap map) {
+			super(context, staticGeometryCollection, map);
+		}
+
+		@Override
+		protected Layer doInBackground(Layer... layers) {
+			loadingLayers.put(layers[0], this);
+			return super.doInBackground(layers);
+		}
+
+		@Override
+		protected void onPostExecute(Layer result) {
+			super.onPostExecute(result);
+			loadingLayers.remove(result);
+		}
+	}
 
 	private MAGE mage;
+	private SharedPreferences preferences;
+	private ViewGroup container;
+	private ViewGroup mapWrapper;
 	private MapView mapView;
 	private GoogleMap map;
-	private boolean mapInitialized = false;
 	private View searchLayout;
 	private SearchView searchView;
 	private Location location;
-	private boolean followMe = false;
-	private GoogleMapWrapper mapWrapper;
-	protected User currentUser = null;
+	private User currentUser = null;
 	private OnLocationChangedListener locationChangedListener;
-
-	private static final int REFRESHMARKERINTERVALINSECONDS = 300;
-	private static final int REFRESHOBSERVATIONMARKERINTERVALINSECONDS = 60;
-	private ScheduledFuture refreshLocationsMarkersTask;
-	private ScheduledFuture refreshMyHistoricLocationsMarkersTask;
-	private ScheduledFuture refreshObservationMarkersTask;
-
-	private final BlockingQueue<Runnable> queue = new ArrayBlockingQueue<>(64);
-	private final ThreadPoolExecutor executor = new ThreadPoolExecutor(8, 8, 10, TimeUnit.SECONDS, queue);
-
-	private ScheduledExecutorService scheduledExecutorService;
 
 	private PointCollection<Observation> observations;
 	private PointCollection<Pair<mil.nga.giat.mage.sdk.datastore.location.Location, User>> locations;
 	private PointCollection<Pair<mil.nga.giat.mage.sdk.datastore.location.Location, User>> historicLocations;
 	private StaticGeometryCollection staticGeometryCollection;
 	private List<Marker> searchMarkers = new ArrayList<>();
-
-	private Map<String, CacheOverlay> cacheOverlays = new HashMap<>();
-
-	// GeoPackage cache of open GeoPackage connections
-	private GeoPackageCache geoPackageCache;
-	private BoundingBox addedCacheBoundingBox;
+	private RefreshMarkersRunnable refreshLocationsTask;
+	private RefreshMarkersRunnable refreshHistoricLocationsTask;
+	private Map<Layer, CleanlyStaticFeatureLoadTask> loadingLayers = new HashMap<>();
 
 	private FloatingActionButton searchButton;
 	private FloatingActionButton zoomToLocationButton;
+	private FloatingActionButton overlaysButton;
+	private FloatingActionButton newObservationButton;
 	private LocationService locationService;
+
+	private ConstraintLayout constraintLayout;
+	private ConstraintSet layoutOverlaysCollapsed = new ConstraintSet();
+	private ConstraintSet layoutOverlaysExpanded = new ConstraintSet();
+	private OverlayOnMapManager mapOverlayManager;
+
+	private boolean layersPanelVisible = false;
+	private boolean searchInputVisible = false;
+	private boolean followMe = false;
 
 	private boolean showMgrs;
 	private TileOverlay mgrsTileOverlay;
@@ -219,86 +233,121 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, OnMapCl
 	private TextView mgrsEastingTextView;
 	private TextView mgrsNorthingTextView;
 
-	SharedPreferences preferences;
+	@Override
+	public void onCreate(@Nullable Bundle savedInstanceState) {
+		super.onCreate(savedInstanceState);
+
+		mage = (MAGE) getContext().getApplicationContext();
+		preferences = PreferenceManager.getDefaultSharedPreferences(mage);
+		locationService = mage.getLocationService();
+
+		// creating the MapView here should preserve it across configuration/layout changes - onConfigurationChanged()
+		// and avoid redrawing map and markers and whatnot
+		setRetainInstance(true);
+		GoogleMapOptions opts = new GoogleMapOptions()
+			.rotateGesturesEnabled(false)
+			.tiltGesturesEnabled(false)
+			.compassEnabled(false);
+		mapView = new MapView(getContext(), opts);
+		mapView.onCreate(savedInstanceState);
+
+		setHasOptionsMenu(true);
+	}
 
 	@Override
 	public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-		View view = inflater.inflate(R.layout.fragment_map, container, false);
+		this.container = new FrameLayout(getContext());
+		this.container.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+		loadLayoutToContainer(inflater);
+		return this.container;
+	}
 
-		setHasOptionsMenu(true);
+	@Override
+	public void onStart() {
+		super.onStart();
+		mapView.onStart();
+	}
 
-		staticGeometryCollection = new StaticGeometryCollection();
+	@Override
+	public void onResume() {
+		super.onResume();
 
-		zoomToLocationButton = (FloatingActionButton) view.findViewById(R.id.zoom_button);
+		try {
+			currentUser = UserHelper.getInstance(mage).readCurrentUser();
+		} catch (UserException ue) {
+			Log.e(LOG_NAME, "Could not find current user.", ue);
+		}
 
-		searchButton = (FloatingActionButton) view.findViewById(R.id.map_search_button);
-		Drawable drawable = DrawableCompat.wrap(searchButton.getDrawable());
-		searchButton.setImageDrawable(drawable);
-		DrawableCompat.setTintList(drawable, AppCompatResources.getColorStateList(getContext(), R.color.toggle_button_selected));
-
-		searchButton.setOnClickListener(new OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				search();
-			}
-		});
-
-		view.findViewById(R.id.new_observation_button).setOnClickListener(new OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				onNewObservation();
-			}
-		});
-
-		mage = (MAGE) getActivity().getApplication();
-		locationService = mage.getLocationService();
-
-		preferences = PreferenceManager.getDefaultSharedPreferences(getActivity().getApplicationContext());
-
-		searchLayout = view.findViewById(R.id.search_layout);
-		searchView = (SearchView) view.findViewById(R.id.search_view);
-		searchView.setIconifiedByDefault(false);
-		searchView.setIconified(false);
-		searchView.clearFocus();
-
-		MapsInitializer.initialize(getActivity().getApplicationContext());
-
-		ImageButton mapSettings = (ImageButton) view.findViewById(R.id.map_settings);
-		mapSettings.setOnClickListener(this);
-
-		mapWrapper = new GoogleMapWrapper(getActivity().getApplicationContext());
-		mapWrapper.addView(view);
-
-		mapView = (MapView) view.findViewById(R.id.mapView);
-		Bundle mapState = (savedInstanceState != null) ? savedInstanceState.getBundle(MAP_VIEW_STATE): null;
-		mapView.onCreate(mapState);
+		mapView.onResume();
 		mapView.getMapAsync(this);
 
-		mgrsBottomSheet = view.findViewById(R.id.mgrs_bottom_sheet);
-		mgrsBottomSheetBehavior = BottomSheetBehavior.from(mgrsBottomSheet);
-		mgrsCursor = view.findViewById(R.id.mgrs_grid_cursor);
-		mgrsTextView = (TextView) mgrsBottomSheet.findViewById(R.id.mgrs_code);
-		mgrsGzdTextView = (TextView) mgrsBottomSheet.findViewById(R.id.mgrs_gzd_zone);
-		mgrs100dKmTextView = (TextView) mgrsBottomSheet.findViewById(R.id.mgrs_grid_zone);
-		mgrsEastingTextView = (TextView) mgrsBottomSheet.findViewById(R.id.mgrs_easting);
-		mgrsNorthingTextView = (TextView) mgrsBottomSheet.findViewById(R.id.mgrs_northing);
+		((AppCompatActivity) getActivity()).getSupportActionBar().setSubtitle(getFilterTitle());
 
-		// Initialize the GeoPackage cache with a GeoPackage manager
-		GeoPackageManager geoPackageManager = GeoPackageFactory.getManager(getActivity().getApplicationContext());
-		geoPackageCache = new GeoPackageCache(geoPackageManager);
+		searchView.setOnQueryTextListener(this);
 
-		return mapWrapper;
+		// Don't wait for map to show up to init these values, otherwise bottomsheet will jitter
+		showMgrs = preferences.getBoolean(getResources().getString(R.string.showMGRSKey), false);
+		mgrsBottomSheetBehavior.setHideable(showMgrs ? false : true);
+		mgrsBottomSheetBehavior.setState(showMgrs ? BottomSheetBehavior.STATE_COLLAPSED : BottomSheetBehavior.STATE_HIDDEN);
+	}
+
+	@Override
+	public void onConfigurationChanged(Configuration newConfig) {
+		super.onConfigurationChanged(newConfig);
+
+		cleanUpForLayoutChange();
+		LayoutInflater inflater = LayoutInflater.from(getContext());
+		loadLayoutToContainer(inflater);
+	}
+
+	@Override
+	public void onLowMemory() {
+		super.onLowMemory();
+		mapView.onLowMemory();
+	}
+
+	@Override
+	public void onPause() {
+		super.onPause();
+		mapView.onPause();
+
+		ObservationHelper.getInstance(mage).removeListener(this);
+		LocationHelper.getInstance(mage).removeListener(this);
+		StaticFeatureHelper.getInstance(mage).removeListener(this);
+        UserHelper.getInstance(mage).removeListener(this);
+		locationService.unregisterOnLocationListener(this);
+
+		if (map != null) {
+			saveMapPosition();
+			map.setLocationSource(null);
+		}
+
+		// TODO: put in onDestroyView() with other map clearing instead?  original commit had it here
+        if (mgrsTileOverlay != null) {
+            mgrsTileOverlay.remove();
+        }
+
+		getView().removeCallbacks(refreshLocationsTask);
+		getView().removeCallbacks(refreshHistoricLocationsTask);
+		refreshLocationsTask = null;
+		refreshHistoricLocationsTask = null;
+	}
+
+	@Override
+	public void onStop() {
+		super.onStop();
+		mapView.onStop();
 	}
 
 	@Override
 	public void onDestroyView() {
 		super.onDestroyView();
 
-		mapView.onDestroy();
-
-		ObservationHelper.getInstance(getActivity().getApplicationContext()).removeListener(this);
-		LocationHelper.getInstance(getActivity().getApplicationContext()).removeListener(this);
-		UserHelper.getInstance(getActivity().getApplicationContext()).removeListener(this);
+		Iterator<CleanlyStaticFeatureLoadTask> loadingLayerIter = loadingLayers.values().iterator();
+		while (loadingLayerIter.hasNext()) {
+			loadingLayerIter.next().cancel(false);
+			loadingLayerIter.remove();
+		}
 
 		if (observations != null) {
 			observations.clear();
@@ -316,26 +365,107 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, OnMapCl
 		}
 
 		if (searchMarkers != null) {
-			for (Marker m : searchMarkers) {
-				m.remove();
-			}
 			searchMarkers.clear();
 		}
+
+		map.setOnMapClickListener(null);
+		map.setOnMarkerClickListener(null);
+		map.setOnMapLongClickListener(null);
+		map.setOnMyLocationButtonClickListener(null);
+		map.setOnInfoWindowClickListener(null);
+		map.setOnCameraMoveStartedListener(null);
+		map.setOnCameraIdleListener(null);
+		map.clear();
 
 		if (mgrsTileOverlay != null) {
 			mgrsTileOverlay.remove();
 			mgrsTileOverlay = null;
 		}
 
-		// Close all open GeoPackages
-		geoPackageCache.closeAll();
+		mapOverlayManager.dispose();
 
-		cacheOverlays.clear();
-
+		staticGeometryCollection.clear();
 		staticGeometryCollection = null;
 		currentUser = null;
 		map = null;
-		mapInitialized = false;
+		mapView.onDestroy();
+	}
+
+	@Override
+	public void onSaveInstanceState(Bundle outState) {
+		super.onSaveInstanceState(outState);
+	}
+
+	@Override
+	public void onDestroy() {
+		super.onDestroy();
+	}
+
+	private void scheduleMarkerRefresh(RefreshMarkersRunnable task) {
+		getView().postDelayed(task, MARKER_REFRESH_INTERVAL_SECONDS * 1000);
+	}
+
+	private void cleanUpForLayoutChange() {
+	    searchInputVisible = isSearchInputVisible();
+	    layersPanelVisible = isLayersPanelVisible();
+		container.removeAllViews();
+		mapWrapper.removeAllViews();
+		zoomToLocationButton.setOnClickListener(null);
+		searchView.setOnQueryTextListener(null);
+		searchButton.setOnClickListener(null);
+		overlaysButton.setOnClickListener(null);
+		newObservationButton.setOnClickListener(null);
+	}
+
+	private View loadLayoutToContainer(LayoutInflater inflater) {
+		constraintLayout = (ConstraintLayout) inflater.inflate(R.layout.fragment_map, container, false);
+		layoutOverlaysCollapsed.clone(constraintLayout);
+		layoutOverlaysExpanded.load(getContext(), R.layout.fragment_map_expanded_layers_panel);
+
+		staticGeometryCollection = new StaticGeometryCollection();
+
+		zoomToLocationButton = (FloatingActionButton) constraintLayout.findViewById(R.id.zoom_button);
+		zoomToLocationButton.setOnClickListener(this);
+
+		searchButton = (FloatingActionButton) constraintLayout.findViewById(R.id.map_search_button);
+		Drawable drawable = DrawableCompat.wrap(searchButton.getDrawable());
+		searchButton.setImageDrawable(drawable);
+		DrawableCompat.setTintList(drawable, AppCompatResources.getColorStateList(getContext(), R.color.toggle_button_selected));
+		searchButton.setOnClickListener(this);
+
+		overlaysButton = (FloatingActionButton) constraintLayout.findViewById(R.id.map_layer_button);
+		overlaysButton.setOnClickListener(this);
+
+		newObservationButton = (FloatingActionButton) constraintLayout.findViewById(R.id.new_observation_button);
+		newObservationButton.setOnClickListener(this);
+
+		searchLayout = constraintLayout.findViewById(R.id.search_layout);
+		searchView = (SearchView) constraintLayout.findViewById(R.id.search_view);
+		searchView.setIconifiedByDefault(false);
+		searchView.setIconified(false);
+		searchView.clearFocus();
+
+        mgrsBottomSheet = constraintLayout.findViewById(R.id.mgrs_bottom_sheet);
+        mgrsBottomSheetBehavior = BottomSheetBehavior.from(mgrsBottomSheet);
+        mgrsCursor = constraintLayout.findViewById(R.id.mgrs_grid_cursor);
+        mgrsTextView = (TextView) mgrsBottomSheet.findViewById(R.id.mgrs_code);
+        mgrsGzdTextView = (TextView) mgrsBottomSheet.findViewById(R.id.mgrs_gzd_zone);
+        mgrs100dKmTextView = (TextView) mgrsBottomSheet.findViewById(R.id.mgrs_grid_zone);
+        mgrsEastingTextView = (TextView) mgrsBottomSheet.findViewById(R.id.mgrs_easting);
+        mgrsNorthingTextView = (TextView) mgrsBottomSheet.findViewById(R.id.mgrs_northing);
+
+        mapWrapper = (FrameLayout) constraintLayout.findViewById(R.id.map_wrapper);
+		mapWrapper.addView(mapView);
+
+		if (layersPanelVisible) {
+			showLayersPanel();
+		}
+		else if (searchInputVisible) {
+		    showSearchInput();
+        }
+
+		container.addView(constraintLayout);
+		return container;
 	}
 
 	@Override
@@ -358,85 +488,60 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, OnMapCl
 
 	@Override
 	public void onMapReady(GoogleMap googleMap) {
-		map = googleMap;
-		initializeMap();
-	}
-
-	private void initializeMap() {
-		if (map == null) return;
-
-		if (!mapInitialized) {
-			mapInitialized = true;
-
+		if (map == null) {
+			map = googleMap;
 			map.getUiSettings().setMyLocationButtonEnabled(false);
-
 			map.setOnMapClickListener(this);
 			map.setOnMarkerClickListener(this);
 			map.setOnMapLongClickListener(this);
 			map.setOnMyLocationButtonClickListener(this);
 			map.setOnInfoWindowClickListener(this);
+			map.setOnCameraMoveStartedListener(this);
 			map.setOnCameraIdleListener(this);
-
-			zoomToLocationButton.setOnClickListener(new OnClickListener() {
-				@Override
-				public void onClick(View v) {
-					Location location = locationService.getLocation();
-					LatLng latLng = new LatLng(location.getLatitude(), location.getLongitude());
-					CameraUpdate cameraUpdate = CameraUpdateFactory.newLatLngZoom(latLng, 18);
-					map.animateCamera(cameraUpdate);
-				}
-			});
-
-
-			ObservationHelper.getInstance(getActivity().getApplicationContext()).addListener(this);
-			LocationHelper.getInstance(getActivity().getApplicationContext()).addListener(this);
-			UserHelper.getInstance(getActivity().getApplicationContext()).addListener(this);
-			CacheProvider.getInstance(getActivity().getApplicationContext()).registerCacheOverlayListener(this);
-			StaticFeatureHelper.getInstance(getActivity().getApplicationContext()).addListener(this);
+			observations = new ObservationMarkerCollection(mage, map);
+			historicLocations = new MyHistoricalLocationMarkerCollection(mage, map);
+			locations = new LocationMarkerCollection(mage, map);
+			ObservationHelper.getInstance(mage).addListener(this);
+			LocationHelper.getInstance(mage).addListener(this);
+			StaticFeatureHelper.getInstance(mage).addListener(this);
+			UserHelper.getInstance(mage).addListener(this);
+			mapOverlayManager = CacheManager.getInstance().createMapManager(map);
 		}
 
-		if (observations != null) {
-			observations.clear();
-		}
-		observations = new ObservationMarkerCollection(getActivity(), map);
-		observations.setVisibility(preferences.getBoolean(getResources().getString(R.string.showObservationsKey), true));
-		ObservationLoadTask observationLoad = new ObservationLoadTask(getActivity(), observations);
+		ObservationLoadTask observationLoad = new ObservationLoadTask(mage, observations);
 		observationLoad.addFilter(getTemporalFilter("timestamp", getTimeFilterId(), OBSERVATION_FILTER_TYPE));
-		observationLoad.executeOnExecutor(executor);
+		observationLoad.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
 
-		if (locations != null) {
-			locations.clear();
-		}
-		locations = new LocationMarkerCollection(getActivity(), map);
-		locations.setVisibility(preferences.getBoolean(getResources().getString(R.string.showLocationsKey), true));
-		LocationLoadTask locationLoad = new LocationLoadTask(getActivity(), locations);
+		HistoricLocationLoadTask myHistoricLocationLoad = new HistoricLocationLoadTask(mage, historicLocations);
+		myHistoricLocationLoad.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+
+		LocationLoadTask locationLoad = new LocationLoadTask(mage, locations);
 		locationLoad.setFilter(getTemporalFilter("timestamp", getLocationTimeFilterId(), LOCATION_FILTER_TYPE));
-		locationLoad.executeOnExecutor(executor);
+		locationLoad.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
 
-		updateMapView();
+		loadLastMapPosition();
 		updateStaticFeatureLayers();
 
-		if (historicLocations != null) {
-			historicLocations.clear();
-		}
-		historicLocations = new MyHistoricalLocationMarkerCollection(getActivity(), map);
+		// Set visibility on map markers as preferences may have changed
+		observations.setVisibility(preferences.getBoolean(getResources().getString(R.string.showObservationsKey), true));
+		locations.setVisibility(preferences.getBoolean(getResources().getString(R.string.showLocationsKey), true));
 		historicLocations.setVisibility(preferences.getBoolean(getResources().getString(R.string.showMyLocationHistoryKey), false));
-		HistoricLocationLoadTask myHistoricLocationLoad = new HistoricLocationLoadTask(getActivity(), historicLocations);
-		myHistoricLocationLoad.executeOnExecutor(executor);
-
-		initializePeriodicTasks();
-
-		updateStaticFeatureLayers();
 
 		// Check if any map preferences changed that I care about
-		if (locationService != null && ContextCompat.checkSelfPermission(getActivity().getApplicationContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+		if (ContextCompat.checkSelfPermission(mage, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
 			map.setMyLocationEnabled(true);
 			map.setLocationSource(this);
 			locationService.registerOnLocationListener(this);
-		} else {
+		}
+		else {
 			map.setMyLocationEnabled(false);
 			map.setLocationSource(null);
 		}
+
+		refreshLocationsTask = new RefreshMarkersRunnable(locations);
+		refreshHistoricLocationsTask = new RefreshMarkersRunnable(historicLocations);
+		scheduleMarkerRefresh(refreshLocationsTask);
+		scheduleMarkerRefresh(refreshHistoricLocationsTask);
 
 		mgrsCursor.setVisibility(showMgrs ? View.VISIBLE : View.GONE);
 		if (showMgrs) {
@@ -446,146 +551,96 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, OnMapCl
 		((AppCompatActivity) getActivity()).getSupportActionBar().setSubtitle(getFilterTitle());
 	}
 
-	private void initializePeriodicTasks() {
-		scheduledExecutorService = Executors.newScheduledThreadPool(4);
-
-		// task to refresh location markers ever x seconds
-		refreshLocationsMarkersTask = scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
-			@Override
-			public void run() {
-				getActivity().runOnUiThread(new Runnable() {
-					@Override
-					public void run() {
-						locations.refreshMarkerIcons(getTemporalFilter("timestamp", getLocationTimeFilterId(), LOCATION_FILTER_TYPE));
-					}
-				});
-			}
-		}, 0, REFRESHMARKERINTERVALINSECONDS, TimeUnit.SECONDS);
-
-		// task to refresh my historic location markers every x seconds
-		refreshMyHistoricLocationsMarkersTask = scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
-			@Override
-			public void run() {
-				historicLocations.refreshMarkerIcons(getTemporalFilter("timestamp", getLocationTimeFilterId(), LOCATION_FILTER_TYPE));
-			}
-		}, 0, REFRESHMARKERINTERVALINSECONDS, TimeUnit.SECONDS);
-
-		// task to refresh observation markers every x seconds
-		refreshObservationMarkersTask = scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
-			@Override
-			public void run() {
-				observations.refreshMarkerIcons(getTemporalFilter("timestamp", getTimeFilterId(), OBSERVATION_FILTER_TYPE));
-			}
-		}, 0, REFRESHOBSERVATIONMARKERINTERVALINSECONDS, TimeUnit.SECONDS);
-	}
-
-	private void stopPeriodicTasks() {
-		if (refreshLocationsMarkersTask != null) {
-			refreshLocationsMarkersTask.cancel(true);
-			refreshLocationsMarkersTask = null;
+	@Override
+	public boolean onQueryTextSubmit(String query) {
+		if (StringUtils.isNoneBlank(query)) {
+			new GeocoderTask(getActivity(), map, searchMarkers).execute(query);
 		}
 
-		if (refreshMyHistoricLocationsMarkersTask != null) {
-			refreshMyHistoricLocationsMarkersTask.cancel(true);
-			refreshMyHistoricLocationsMarkersTask = null;
-		}
-
-		if (scheduledExecutorService != null) {
-			scheduledExecutorService.shutdown();
-			scheduledExecutorService = null;
-		}
+		searchView.clearFocus();
+		return true;
 	}
 
 	@Override
-	public void onLowMemory() {
-		super.onLowMemory();
-		mapView.onLowMemory();
-	}
-
-	@Override
-	public void onResume() {
-		super.onResume();
-
-		try {
-			currentUser = UserHelper.getInstance(getActivity().getApplicationContext()).readCurrentUser();
-		} catch (UserException ue) {
-			Log.e(LOG_NAME, "Could not find current user.", ue);
-		}
-
-		mapView.onResume();
-
-		// Don't wait for map to show up to init these values, otherwise bottomsheet will jitter
-		showMgrs = preferences.getBoolean(getResources().getString(R.string.showMGRSKey), false);
-		mgrsBottomSheetBehavior.setHideable(showMgrs ? false : true);
-		mgrsBottomSheetBehavior.setState(showMgrs ? BottomSheetBehavior.STATE_COLLAPSED : BottomSheetBehavior.STATE_HIDDEN);
-
-		initializeMap();
-
-		searchView.setOnQueryTextListener(new SearchView.OnQueryTextListener() {
-			@Override
-			public boolean onQueryTextSubmit(String query) {
-				if (StringUtils.isNoneBlank(query)) {
-					new GeocoderTask(getActivity(), map, searchMarkers).execute(query);
+	public boolean onQueryTextChange(String newText) {
+		if (StringUtils.isEmpty(newText)) {
+			if (searchMarkers != null) {
+				for (Marker m : searchMarkers) {
+					m.remove();
 				}
-
-				searchView.clearFocus();
-				return true;
+				searchMarkers.clear();
 			}
+		}
 
-			@Override
-			public boolean onQueryTextChange(String newText) {
-				if (StringUtils.isEmpty(newText)) {
-					if (searchMarkers != null) {
-						for (Marker m : searchMarkers) {
-							m.remove();
-						}
-						searchMarkers.clear();
-					}
-				}
-
-				return true;
-			}
-		});
+		return true;
 	}
 
-	@Override
-	public void onPause() {
-		super.onPause();
+	private void onZoom() {
+		if (map == null) {
+			return;
+		}
+		Location location = locationService.getLocation();
+		LatLng latLng = new LatLng(location.getLatitude(), location.getLongitude());
+		CameraUpdate cameraUpdate = CameraUpdateFactory.newLatLngZoom(latLng, 18);
+		map.animateCamera(cameraUpdate);
+	}
 
-		stopPeriodicTasks();
-		
-		mapView.onPause();
-
-		CacheProvider.getInstance(getActivity().getApplicationContext()).unregisterCacheOverlayListener(this);
-		StaticFeatureHelper.getInstance(getActivity().getApplicationContext()).removeListener(this);
-
-		if (map != null) {
-			saveMapView();
-
-			map.setLocationSource(null);
-			if (locationService != null) {
-				locationService.unregisterOnLocationListener(this);
-			}
-
-			mapInitialized = false;
-
-			if (mgrsTileOverlay != null) {
-				mgrsTileOverlay.remove();
-			}
+	private void onSearchToggled() {
+		if (isSearchInputVisible()) {
+			hideSearchInput();
+		}
+		else {
+			showSearchInput();
 		}
 	}
 
-	private void search() {
-		boolean isVisible = searchLayout.getVisibility() == View.VISIBLE;
-		searchLayout.setVisibility(isVisible ? View.GONE : View.VISIBLE);
-		searchButton.setSelected(!isVisible);
+	private void onLayersPanelToggled() {
+		if (isLayersPanelVisible()) {
+			hideLayersPanel();
+		}
+		else {
+			showLayersPanel();
+		}
+    }
 
-		if (isVisible) {
-			searchView.clearFocus();
-		} else {
-			searchView.requestFocus();
-			InputMethodManager inputMethodManager = (InputMethodManager) getActivity().getSystemService(Activity.INPUT_METHOD_SERVICE);
-			inputMethodManager.toggleSoftInput(InputMethodManager.SHOW_IMPLICIT, 0);
+    private boolean isSearchInputVisible() {
+		return searchLayout.getVisibility() == View.VISIBLE;
+	}
+
+    private boolean isLayersPanelVisible() {
+		return getChildFragmentManager().findFragmentById(R.id.map_overlays_container) != null;
+	}
+
+    private void showSearchInput() {
+		hideLayersPanel();
+		searchLayout.setVisibility(View.VISIBLE);
+		searchView.requestFocus();
+		InputMethodManager inputMethodManager = (InputMethodManager) getActivity().getSystemService(Activity.INPUT_METHOD_SERVICE);
+		inputMethodManager.toggleSoftInput(InputMethodManager.SHOW_IMPLICIT, 0);
+	}
+
+    private void hideSearchInput() {
+	    hideKeyboard();
+		searchView.clearFocus();
+		searchLayout.setVisibility(View.GONE);
+	}
+
+    private void showLayersPanel() {
+		hideSearchInput();
+		// TODO: animate layout change with ObjectAnimator on map padding
+		layoutOverlaysExpanded.applyTo(constraintLayout);
+		MapOverlaysFragment overlays = (MapOverlaysFragment) Fragment.instantiate(getActivity(), MapOverlaysFragment.class.getName());
+		overlays.setOverlayManager(mapOverlayManager);
+		FragmentManager fragmentManager = getChildFragmentManager();
+		fragmentManager.beginTransaction().replace(R.id.map_overlays_container, overlays).commit();
+	}
+
+	private void hideLayersPanel() {
+		layoutOverlaysCollapsed.applyTo(constraintLayout);
+		FragmentManager fragmentManager = getChildFragmentManager();
+		Fragment overlays = fragmentManager.findFragmentById(R.id.map_overlays_container);
+		if (overlays != null) {
+			fragmentManager.beginTransaction().remove(overlays).commit();
 		}
 	}
 
@@ -613,7 +668,7 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, OnMapCl
 			location = new ObservationLocation(locationService.getLocation());
 		}
 
-		if (!UserHelper.getInstance(getActivity().getApplicationContext()).isCurrentUserPartOfCurrentEvent()) {
+		if (!UserHelper.getInstance(mage).isCurrentUserPartOfCurrentEvent()) {
 			new AlertDialog.Builder(getActivity())
 				.setTitle(getActivity().getResources().getString(R.string.location_no_event_title))
 				.setMessage(getActivity().getResources().getString(R.string.location_no_event_message))
@@ -622,7 +677,7 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, OnMapCl
 		} else if (location != null) {
 			newObservation(location);
 		} else {
-			if (ContextCompat.checkSelfPermission(getActivity().getApplicationContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+			if (ContextCompat.checkSelfPermission(mage, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
 				new AlertDialog.Builder(getActivity())
 						.setTitle(getActivity().getResources().getString(R.string.location_missing_title))
 						.setMessage(getActivity().getResources().getString(R.string.location_missing_message))
@@ -661,23 +716,23 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, OnMapCl
 		if (observations != null) {
 			ObservationTask task = new ObservationTask(getActivity(), ObservationTask.Type.ADD, observations);
 			task.addFilter(getTemporalFilter("last_modified", getTimeFilterId(), OBSERVATION_FILTER_TYPE));
-			task.executeOnExecutor(executor, o.toArray(new Observation[o.size()]));
+			task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, o.toArray(new Observation[o.size()]));
 		}
 	}
 
 	@Override
 	public void onObservationUpdated(Observation o) {
 		if (observations != null) {
-			ObservationTask task = new ObservationTask(getActivity(), ObservationTask.Type.UPDATE, observations);
+			ObservationTask task = new ObservationTask(mage, ObservationTask.Type.UPDATE, observations);
 			task.addFilter(getTemporalFilter("last_modified", getTimeFilterId(), OBSERVATION_FILTER_TYPE));
-			task.executeOnExecutor(executor, o);
+			task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, o);
 		}
 	}
 
 	@Override
 	public void onObservationDeleted(Observation o) {
 		if (observations != null) {
-			new ObservationTask(getActivity(), ObservationTask.Type.DELETE, observations).executeOnExecutor(executor, o);
+			new ObservationTask(mage, ObservationTask.Type.DELETE, observations).executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, o);
 		}
 	}
 
@@ -686,13 +741,13 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, OnMapCl
 		for (mil.nga.giat.mage.sdk.datastore.location.Location l : ls) {
 			if (currentUser != null && !currentUser.getRemoteId().equals(l.getUser().getRemoteId())) {
 				if (locations != null) {
-					LocationTask task = new LocationTask(getActivity(), LocationTask.Type.ADD, locations);
+					LocationTask task = new LocationTask(mage, LocationTask.Type.ADD, locations);
 					task.addFilter(getTemporalFilter("timestamp", getLocationTimeFilterId(), LOCATION_FILTER_TYPE));
-					task.executeOnExecutor(executor, l);
+					task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, l);
 				}
 			} else {
 				if (historicLocations != null) {
-					new LocationTask(getActivity(), LocationTask.Type.ADD, historicLocations).executeOnExecutor(executor, l);
+					new LocationTask(mage, LocationTask.Type.ADD, historicLocations).executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, l);
 				}
 			}
 		}
@@ -702,13 +757,13 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, OnMapCl
 	public void onLocationUpdated(mil.nga.giat.mage.sdk.datastore.location.Location l) {
 		if (currentUser != null && !currentUser.getRemoteId().equals(l.getUser().getRemoteId())) {
 			if (locations != null) {
-				LocationTask task = new LocationTask(getActivity(), LocationTask.Type.UPDATE, locations);
+				LocationTask task = new LocationTask(mage, LocationTask.Type.UPDATE, locations);
 				task.addFilter(getTemporalFilter("timestamp", getLocationTimeFilterId(), LOCATION_FILTER_TYPE));
-				task.executeOnExecutor(executor, l);
+				task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, l);
 			}
 		} else {
 			if (historicLocations != null) {
-				new LocationTask(getActivity(), LocationTask.Type.UPDATE, historicLocations).executeOnExecutor(executor, l);
+				new LocationTask(mage, LocationTask.Type.UPDATE, historicLocations).executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, l);
 			}
 		}
 	}
@@ -815,30 +870,32 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, OnMapCl
 
 		staticGeometryCollection.onMapClick(map, latLng, getActivity());
 
-		if(!cacheOverlays.isEmpty()) {
-			StringBuilder clickMessage = new StringBuilder();
-			for (CacheOverlay cacheOverlay : cacheOverlays.values()) {
-				String message = cacheOverlay.onMapClick(latLng, mapView, map);
-				if(message != null){
-					if(clickMessage.length() > 0){
-						clickMessage.append("\n\n");
-					}
-					clickMessage.append(message);
-				}
-			}
-			if(clickMessage.length() > 0) {
-				new AlertDialog.Builder(getActivity())
-					.setMessage(clickMessage.toString())
-					.setPositiveButton(android.R.string.yes, null)
-					.show();
-			}
-		}
+		// TODO: handle overlay clicks
+		mapOverlayManager.onMapClick(latLng, mapView);
+//		if(!overlays.isEmpty()) {
+//			StringBuilder clickMessage = new StringBuilder();
+//			for (CacheOverlay cacheOverlay : overlays.values()) {
+//				String message = null; //cacheOverlay.onMapClick(latLng, mapView, map);
+//				if(message != null){
+//					if(clickMessage.length() > 0){
+//						clickMessage.append("\n\n");
+//					}
+//					clickMessage.append(message);
+//				}
+//			}
+//			if(clickMessage.length() > 0) {
+//				new AlertDialog.Builder(getActivity())
+//					.setMessage(clickMessage.toString())
+//					.setPositiveButton(android.R.string.yes, null)
+//					.show();
+//			}
+//		}
 	}
 
 	@Override
 	public void onMapLongClick(LatLng point) {
 		hideKeyboard();
-		if(!UserHelper.getInstance(getActivity().getApplicationContext()).isCurrentUserPartOfCurrentEvent()) {
+		if (!UserHelper.getInstance(mage).isCurrentUserPartOfCurrentEvent()) {
 			new AlertDialog.Builder(getActivity())
 				.setTitle(getActivity().getResources().getString(R.string.location_no_event_title))
 				.setMessage(getActivity().getResources().getString(R.string.location_no_event_message))
@@ -877,12 +934,21 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, OnMapCl
 	public void onClick(View view) {
 		// close keyboard
 		hideKeyboard();
-		switch (view.getId()) {
-		case R.id.map_settings: {
-			Intent intent = new Intent(getActivity(), MapPreferencesActivity.class);
-			startActivity(intent);
-			break;
-		}
+		int target = view.getId();
+
+		switch (target) {
+			case R.id.zoom_button:
+				onZoom();
+				return;
+			case R.id.map_search_button:
+				onSearchToggled();
+				return;
+			case R.id.map_layer_button:
+			    onLayersPanelToggled();
+				return;
+			case R.id.new_observation_button:
+				onNewObservation();
+				return;
 		}
 	}
 
@@ -895,18 +961,29 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, OnMapCl
 
 				@Override
 				public void onCancel() {
-					mapWrapper.setOnMapPanListener(MapFragment.this);
 					followMe = true;
 				}
 
 				@Override
 				public void onFinish() {
-					mapWrapper.setOnMapPanListener(MapFragment.this);
 					followMe = true;
 				}
 			});
 		}
 		return true;
+	}
+
+	@Override
+	public void onCameraMoveStarted(int reason) {
+		if (reason == REASON_GESTURE) {
+			followMe = false;
+		}
+	}
+
+	@Override
+	public void onCameraIdle() {
+		// TODO: anything for followMe?
+		setMgrsCode();
 	}
 
 	@Override
@@ -923,30 +1000,6 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, OnMapCl
 	public void deactivate() {
 		Log.i(LOG_NAME, "map location, deactivate");
 		locationChangedListener = null;
-	}
-
-	@Override
-	public void onMapPan() {
-		mapWrapper.setOnMapPanListener(null);
-		followMe = false;
-	}
-
-	@Override
-	public void onCameraIdle() {
-		setMgrsCode();
-	}
-
-	private void setMgrsCode() {
-		if (mgrsTileOverlay != null) {
-			LatLng center = map.getCameraPosition().target;
-
-			MGRS mgrs = MGRS.from(new mil.nga.mgrs.wgs84.LatLng(center.latitude, center.longitude));
-			mgrsTextView.setText(mgrs.format(5));
-			mgrsGzdTextView.setText(String.format(Locale.getDefault(),"%s%c", mgrs.getZone(), mgrs.getBand()));
-			mgrs100dKmTextView.setText(String.format(Locale.getDefault(),"%c%c", mgrs.getE100k(), mgrs.getN100k()));
-			mgrsEastingTextView.setText(String.format(Locale.getDefault(),"%05d", mgrs.getEasting()));
-			mgrsNorthingTextView.setText(String.format(Locale.getDefault(),"%05d", mgrs.getNorthing()));
-		}
 	}
 
 	@Override
@@ -980,382 +1033,61 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, OnMapCl
 	}
 
 	@Override
-	public void onCacheOverlay(List<CacheOverlay> cacheOverlays) {
-
-		// Add all overlays that are in the preferences
-
-		// Track enabled cache overlays
-		Map<String, CacheOverlay> enabledCacheOverlays = new HashMap<>();
-
-		// Track enabled GeoPackages
-		Set<String> enabledGeoPackages = new HashSet<>();
-
-		// Reset the bounding box for newly added caches
-		addedCacheBoundingBox = null;
-
-		for (CacheOverlay cacheOverlay : cacheOverlays) {
-
-			// If this cache overlay potentially replaced by a new version
-			if(cacheOverlay.isAdded()){
-				if(cacheOverlay.getType() == CacheOverlayType.GEOPACKAGE){
-					geoPackageCache.close(cacheOverlay.getName());
-				}
-			}
-
-			// The user has asked for this overlay
-			if (cacheOverlay.isEnabled()) {
-
-				// Handle each type of cache overlay
-				switch(cacheOverlay.getType()) {
-
-					case XYZ_DIRECTORY:
-						addXYZDirectoryCacheOverlay(enabledCacheOverlays, (XYZDirectoryCacheOverlay) cacheOverlay);
-						break;
-
-					case GEOPACKAGE:
-						addGeoPackageCacheOverlay(enabledCacheOverlays, enabledGeoPackages, (GeoPackageCacheOverlay)cacheOverlay);
-						break;
-				}
-			}
-
-			cacheOverlay.setAdded(false);
+	public void onCacheOverlaysUpdated(CacheManager.CacheOverlayUpdate update) {
+		if (update.added.size() != 1) {
+			return;
 		}
-
-		// Remove any overlays that are on the map but no longer selected in
-		// preferences, update the tile overlays to the enabled tile overlays
-		for (CacheOverlay cacheOverlay : this.cacheOverlays.values()) {
-			cacheOverlay.removeFromMap();
+		MapCache explicitlyRequestedCache = update.added.iterator().next();
+		for (CacheOverlay cacheOverlay : explicitlyRequestedCache.getCacheOverlays().values()) {
+			mapOverlayManager.showOverlay(cacheOverlay);
 		}
-		this.cacheOverlays = enabledCacheOverlays;
-
-		// Close GeoPackages no longer enabled
-		geoPackageCache.closeRetain(enabledGeoPackages);
-
-		// If a new cache was added, zoom to the bounding box area
-		if(addedCacheBoundingBox != null){
-
-			final LatLngBounds.Builder boundsBuilder = new LatLngBounds.Builder();
-			boundsBuilder.include(new LatLng(addedCacheBoundingBox.getMinLatitude(), addedCacheBoundingBox
-					.getMinLongitude()));
-			boundsBuilder.include(new LatLng(addedCacheBoundingBox.getMinLatitude(), addedCacheBoundingBox
-					.getMaxLongitude()));
-			boundsBuilder.include(new LatLng(addedCacheBoundingBox.getMaxLatitude(), addedCacheBoundingBox
-					.getMinLongitude()));
-			boundsBuilder.include(new LatLng(addedCacheBoundingBox.getMaxLatitude(), addedCacheBoundingBox
-					.getMaxLongitude()));
-
-			try {
-				map.animateCamera(CameraUpdateFactory.newLatLngBounds(
-						boundsBuilder.build(), 0));
-			} catch (Exception e) {
-				Log.e(LOG_NAME, "Unable to move camera to newly added cache location", e);
-			}
+		LatLngBounds cacheBounds = explicitlyRequestedCache.getBounds();
+		if (cacheBounds != null) {
+			CameraUpdate showCache = CameraUpdateFactory.newLatLngBounds(cacheBounds, 0);
+			map.animateCamera(showCache);
 		}
 	}
 
-	/**
-	 * Add XYZ Directory tile cache overlay
-	 * @param enabledCacheOverlays
-	 * @param xyzDirectoryCacheOverlay
-	 */
-	private void addXYZDirectoryCacheOverlay(Map<String, CacheOverlay> enabledCacheOverlays, XYZDirectoryCacheOverlay xyzDirectoryCacheOverlay){
-		// Retrieve the cache overlay if it already exists (and remove from cache overlays)
-		CacheOverlay cacheOverlay = cacheOverlays.remove(xyzDirectoryCacheOverlay.getCacheName());
-		if(cacheOverlay == null){
-			// Create a new tile provider and add to the map
-			TileProvider tileProvider = new FileSystemTileProvider(256, 256, xyzDirectoryCacheOverlay.getDirectory().getAbsolutePath());
-			TileOverlayOptions overlayOptions = createTileOverlayOptions(tileProvider);
-			// Set the tile overlay in the cache overlay
-			TileOverlay tileOverlay = map.addTileOverlay(overlayOptions);
-			xyzDirectoryCacheOverlay.setTileOverlay(tileOverlay);
-			cacheOverlay = xyzDirectoryCacheOverlay;
+	private void setMgrsCode() {
+		if (mgrsTileOverlay != null) {
+			LatLng center = map.getCameraPosition().target;
+
+			MGRS mgrs = MGRS.from(new mil.nga.mgrs.wgs84.LatLng(center.latitude, center.longitude));
+			mgrsTextView.setText(mgrs.format(5));
+			mgrsGzdTextView.setText(String.format(Locale.getDefault(),"%s%c", mgrs.getZone(), mgrs.getBand()));
+			mgrs100dKmTextView.setText(String.format(Locale.getDefault(),"%c%c", mgrs.getE100k(), mgrs.getN100k()));
+			mgrsEastingTextView.setText(String.format(Locale.getDefault(),"%05d", mgrs.getEasting()));
+			mgrsNorthingTextView.setText(String.format(Locale.getDefault(),"%05d", mgrs.getNorthing()));
 		}
-		// Add the cache overlay to the enabled cache overlays
-		enabledCacheOverlays.put(cacheOverlay.getCacheName(), cacheOverlay);
-	}
-
-	/**
-	 * Add a GeoPackage cache overlay, which contains tile and feature tables
-	 * @param enabledCacheOverlays
-	 * @param enabledGeoPackages
-	 * @param geoPackageCacheOverlay
-	 */
-	private void addGeoPackageCacheOverlay(Map<String, CacheOverlay> enabledCacheOverlays, Set<String> enabledGeoPackages, GeoPackageCacheOverlay geoPackageCacheOverlay){
-
-		// Check each GeoPackage table
-		for(CacheOverlay tableCacheOverlay: geoPackageCacheOverlay.getChildren()){
-			// Check if the table is enabled
-			if(tableCacheOverlay.isEnabled()){
-
-				// Get and open if needed the GeoPackage
-				GeoPackage geoPackage = geoPackageCache.getOrOpen(geoPackageCacheOverlay.getName());
-				enabledGeoPackages.add(geoPackage.getName());
-
-				// Handle tile and feature tables
-				try {
-					switch (tableCacheOverlay.getType()) {
-						case GEOPACKAGE_TILE_TABLE:
-							addGeoPackageTileCacheOverlay(enabledCacheOverlays, (GeoPackageTileTableCacheOverlay) tableCacheOverlay, geoPackage, false);
-							break;
-						case GEOPACKAGE_FEATURE_TABLE:
-							addGeoPackageFeatureCacheOverlay(enabledCacheOverlays, (GeoPackageFeatureTableCacheOverlay) tableCacheOverlay, geoPackage);
-							break;
-						default:
-							throw new UnsupportedOperationException("Unsupported GeoPackage type: " + tableCacheOverlay.getType());
-					}
-				}catch(Exception e){
-					Log.e(LOG_NAME, "Failed to add GeoPackage overlay. GeoPackage: " + geoPackage.getName() + ", Name: " + tableCacheOverlay.getName(), e);
-				}
-
-				// If a newly added cache, update the bounding box for zooming
-				if(geoPackageCacheOverlay.isAdded()){
-
-					try {
-						ContentsDao contentsDao = geoPackage.getContentsDao();
-						Contents contents = contentsDao.queryForId(tableCacheOverlay.getName());
-						BoundingBox contentsBoundingBox = contents.getBoundingBox();
-						Projection projection = ProjectionFactory
-								.getProjection(contents.getSrs().getOrganizationCoordsysId());
-
-						ProjectionTransform transform = projection.getTransformation(ProjectionConstants.EPSG_WORLD_GEODETIC_SYSTEM);
-						BoundingBox boundingBox = transform.transform(contentsBoundingBox);
-						boundingBox = TileBoundingBoxUtils.boundWgs84BoundingBoxWithWebMercatorLimits(boundingBox);
-
-						if (addedCacheBoundingBox == null) {
-							addedCacheBoundingBox = boundingBox;
-						} else {
-							addedCacheBoundingBox = TileBoundingBoxUtils.union(addedCacheBoundingBox, boundingBox);
-						}
-					}catch(Exception e){
-						Log.e(LOG_NAME, "Failed to retrieve GeoPackage Table bounding box. GeoPackage: "
-								+ geoPackage.getName() + ", Table: " + tableCacheOverlay.getName(), e);
-					}
-				}
-			}
-		}
-	}
-
-	/**
-	 * Add the GeoPackage Tile Table Cache Overlay
-	 * @param enabledCacheOverlays
-	 * @param tileTableCacheOverlay
-	 * @param geoPackage
-	 * @param linkedToFeatures
-	 */
-	private void addGeoPackageTileCacheOverlay(Map<String, CacheOverlay> enabledCacheOverlays, GeoPackageTileTableCacheOverlay tileTableCacheOverlay, GeoPackage geoPackage, boolean linkedToFeatures){
-		// Retrieve the cache overlay if it already exists (and remove from cache overlays)
-		CacheOverlay cacheOverlay = cacheOverlays.remove(tileTableCacheOverlay.getCacheName());
-		if(cacheOverlay != null){
-			// If the existing cache overlay is being replaced, create a new cache overlay
-			if(tileTableCacheOverlay.getParent().isAdded()){
-				cacheOverlay = null;
-			}
-		}
-		if(cacheOverlay == null){
-			// Create a new GeoPackage tile provider and add to the map
-			TileDao tileDao = geoPackage.getTileDao(tileTableCacheOverlay.getName());
-			BoundedOverlay geoPackageTileProvider = GeoPackageOverlayFactory.getBoundedOverlay(tileDao);
-			TileOverlayOptions overlayOptions = null;
-			if(linkedToFeatures){
-				overlayOptions = createFeatureTileOverlayOptions(geoPackageTileProvider);
-			}else {
-				overlayOptions = createTileOverlayOptions(geoPackageTileProvider);
-			}
-			TileOverlay tileOverlay = map.addTileOverlay(overlayOptions);
-			tileTableCacheOverlay.setTileOverlay(tileOverlay);
-
-			// Check for linked feature tables
-			tileTableCacheOverlay.clearFeatureOverlayQueries();
-			FeatureTileTableLinker linker = new FeatureTileTableLinker(geoPackage);
-			List<FeatureDao> featureDaos = linker.getFeatureDaosForTileTable(tileDao.getTableName());
-			for(FeatureDao featureDao: featureDaos){
-
-				// Create the feature tiles
-				FeatureTiles featureTiles = new DefaultFeatureTiles(getActivity(), featureDao);
-
-				// Create an index manager
-				FeatureIndexManager indexer = new FeatureIndexManager(getActivity(), geoPackage, featureDao);
-				featureTiles.setIndexManager(indexer);
-
-				// Add the feature overlay query
-				FeatureOverlayQuery featureOverlayQuery = new FeatureOverlayQuery(getActivity(), geoPackageTileProvider, featureTiles);
-				tileTableCacheOverlay.addFeatureOverlayQuery(featureOverlayQuery);
-			}
-
-			cacheOverlay = tileTableCacheOverlay;
-		}
-		// Add the cache overlay to the enabled cache overlays
-		enabledCacheOverlays.put(cacheOverlay.getCacheName(), cacheOverlay);
-	}
-
-	/**
-	 * Add the GeoPackage Feature Table Cache Overlay
-	 * @param enabledCacheOverlays
-	 * @param featureTableCacheOverlay
-	 * @param geoPackage
-	 */
-	private void addGeoPackageFeatureCacheOverlay(Map<String, CacheOverlay> enabledCacheOverlays, GeoPackageFeatureTableCacheOverlay featureTableCacheOverlay, GeoPackage geoPackage){
-		// Retrieve the cache overlay if it already exists (and remove from cache overlays)
-		CacheOverlay cacheOverlay = cacheOverlays.remove(featureTableCacheOverlay.getCacheName());
-		if(cacheOverlay != null){
-			// If the existing cache overlay is being replaced, create a new cache overlay
-			if(featureTableCacheOverlay.getParent().isAdded()){
-				cacheOverlay = null;
-			}
-			for(GeoPackageTileTableCacheOverlay linkedTileTable: featureTableCacheOverlay.getLinkedTileTables()){
-				if(cacheOverlay != null){
-					// Add the existing linked tile cache overlays
-					addGeoPackageTileCacheOverlay(enabledCacheOverlays, linkedTileTable, geoPackage, true);
-				}
-				cacheOverlays.remove(linkedTileTable.getCacheName());
-			}
-		}
-		if(cacheOverlay == null) {
-			// Add the features to the map
-			FeatureDao featureDao = geoPackage.getFeatureDao(featureTableCacheOverlay.getName());
-
-			// If indexed, add as a tile overlay
-			if(featureTableCacheOverlay.isIndexed()){
-				FeatureTiles featureTiles = new DefaultFeatureTiles(getActivity(), featureDao);
-				Integer maxFeaturesPerTile = null;
-				if(featureDao.getGeometryType() == GeometryType.POINT){
-					maxFeaturesPerTile = getResources().getInteger(R.integer.geopackage_feature_tiles_max_points_per_tile);
-				}else{
-					maxFeaturesPerTile = getResources().getInteger(R.integer.geopackage_feature_tiles_max_features_per_tile);
-				}
-				featureTiles.setMaxFeaturesPerTile(maxFeaturesPerTile);
-				NumberFeaturesTile numberFeaturesTile = new NumberFeaturesTile(getActivity());
-				// Adjust the max features number tile draw paint attributes here as needed to
-				// change how tiles are drawn when more than the max features exist in a tile
-				featureTiles.setMaxFeaturesTileDraw(numberFeaturesTile);
-				featureTiles.setIndexManager(new FeatureIndexManager(getActivity(), geoPackage, featureDao));
-				// Adjust the feature tiles draw paint attributes here as needed to change how
-				// features are drawn on tiles
-				FeatureOverlay featureOverlay = new FeatureOverlay(featureTiles);
-				featureOverlay.setMinZoom(featureTableCacheOverlay.getMinZoom());
-
-				FeatureTileTableLinker linker = new FeatureTileTableLinker(geoPackage);
-				List<TileDao> tileDaos = linker.getTileDaosForFeatureTable(featureDao.getTableName());
-				featureOverlay.ignoreTileDaos(tileDaos);
-
-				FeatureOverlayQuery featureOverlayQuery = new FeatureOverlayQuery(getActivity(), featureOverlay);
-				featureTableCacheOverlay.setFeatureOverlayQuery(featureOverlayQuery);
-				TileOverlayOptions overlayOptions = createFeatureTileOverlayOptions(featureOverlay);
-				TileOverlay tileOverlay = map.addTileOverlay(overlayOptions);
-				featureTableCacheOverlay.setTileOverlay(tileOverlay);
-			}
-			// Not indexed, add the features to the map
-			else {
-				int maxFeaturesPerTable = 0;
-				if(featureDao.getGeometryType() == GeometryType.POINT){
-					maxFeaturesPerTable = getResources().getInteger(R.integer.geopackage_features_max_points_per_table);
-				}else{
-					maxFeaturesPerTable = getResources().getInteger(R.integer.geopackage_features_max_features_per_table);
-				}
-				Projection projection = featureDao.getProjection();
-				GoogleMapShapeConverter shapeConverter = new GoogleMapShapeConverter(projection);
-				FeatureCursor featureCursor = featureDao.queryForAll();
-				try {
-					final int totalCount = featureCursor.getCount();
-					int count = 0;
-					while (featureCursor.moveToNext()) {
-						try {
-							FeatureRow featureRow = featureCursor.getRow();
-							GeoPackageGeometryData geometryData = featureRow.getGeometry();
-							if (geometryData != null && !geometryData.isEmpty()) {
-								mil.nga.wkb.geom.Geometry geometry = geometryData.getGeometry();
-								if (geometry != null) {
-									GoogleMapShape shape = shapeConverter.toShape(geometry);
-									// Set the Shape Marker, PolylineOptions, and PolygonOptions here if needed to change color and style
-									featureTableCacheOverlay.addShapeToMap(featureRow.getId(), shape, map);
-
-									if (++count >= maxFeaturesPerTable) {
-										if (count < totalCount) {
-											Toast.makeText(getActivity().getApplicationContext(), featureTableCacheOverlay.getCacheName()
-													+ "- added " + count + " of " + totalCount, Toast.LENGTH_LONG).show();
-										}
-										break;
-									}
-								}
-							}
-						}catch(Exception e){
-							Log.e(LOG_NAME, "Failed to display feature. GeoPackage: " + geoPackage.getName()
-									+ ", Table: " + featureDao.getTableName() + ", Row: " + featureCursor.getPosition(), e);
-						}
-					}
-				} finally {
-					featureCursor.close();
-				}
-			}
-
-			// Add linked tile tables
-			for(GeoPackageTileTableCacheOverlay linkedTileTable: featureTableCacheOverlay.getLinkedTileTables()){
-				addGeoPackageTileCacheOverlay(enabledCacheOverlays, linkedTileTable, geoPackage, true);
-			}
-
-			cacheOverlay = featureTableCacheOverlay;
-		}
-
-		// Add the cache overlay to the enabled cache overlays
-		enabledCacheOverlays.put(cacheOverlay.getCacheName(), cacheOverlay);
-	}
-
-	/**
-	 * Create Feature Tile Overlay Options with the default z index for tile layers drawn from features
-	 * @param tileProvider
-	 * @return
-	 */
-	private TileOverlayOptions createFeatureTileOverlayOptions(TileProvider tileProvider){
-		return createTileOverlayOptions(tileProvider, -1);
-	}
-
-	/**
-	 * Create Tile Overlay Options with the default z index for tile layers
-	 * @param tileProvider
-	 * @return
-	 */
-	private TileOverlayOptions createTileOverlayOptions(TileProvider tileProvider){
-		return createTileOverlayOptions(tileProvider, -2);
-	}
-
-	/**
-	 * Create Tile Overlay Options for the Tile Provider using the z index
-	 * @param tileProvider
-	 * @param zIndex
-	 * @return
-	 */
-	private TileOverlayOptions createTileOverlayOptions(TileProvider tileProvider, int zIndex){
-		TileOverlayOptions overlayOptions = new TileOverlayOptions();
-		overlayOptions.tileProvider(tileProvider);
-		overlayOptions.zIndex(zIndex);
-		return overlayOptions;
 	}
 
 	private void updateStaticFeatureLayers() {
 		removeStaticFeatureLayers();
-
 		try {
-			for (Layer l : LayerHelper.getInstance(getActivity().getApplicationContext()).readByEvent(EventHelper.getInstance(getActivity().getApplicationContext()).getCurrentEvent())) {
+			for (Layer l : LayerHelper.getInstance(mage).readByEvent(EventHelper.getInstance(mage).getCurrentEvent())) {
 				onStaticFeatureLayer(l);
 			}
-		} catch (LayerException e) {
-			Log.e(LOG_NAME, "Problem updating static features.", e);
+		}
+		catch (LayerException e) {
+			Log.e(LOG_NAME, "error updating static features.", e);
 		}
 	}
 
 	private void removeStaticFeatureLayers() {
+		// TODO: clean up loading layers as well
 		Set<String> selectedLayerIds = preferences.getStringSet(getResources().getString(R.string.staticFeatureLayersKey), Collections.<String> emptySet());
 
 		Set<String> eventLayerIds = new HashSet<>();
 		try {
-			for (Layer layer : LayerHelper.getInstance(getActivity()).readByEvent(EventHelper.getInstance(getActivity().getApplicationContext()).getCurrentEvent())) {
+			for (Layer layer : LayerHelper.getInstance(mage).readByEvent(EventHelper.getInstance(mage).getCurrentEvent())) {
 				eventLayerIds.add(layer.getRemoteId());
 			}
-		} catch (LayerException e) {
-			Log.e(LOG_NAME, "Problem reading static layers", e);
 		}
-		Set<String> layersNotInEvent = Sets.difference(selectedLayerIds, eventLayerIds);
+		catch (LayerException e) {
+			Log.e(LOG_NAME, "error reading static layers", e);
+		}
 
+		Set<String> layersNotInEvent = Sets.difference(selectedLayerIds, eventLayerIds);
 		for (String layerId : staticGeometryCollection.getLayers()) {
 			if (!selectedLayerIds.contains(layerId) || layersNotInEvent.contains(layerId)) {
 				staticGeometryCollection.removeLayer(layerId);
@@ -1378,44 +1110,46 @@ public class MapFragment extends Fragment implements OnMapReadyCallback, OnMapCl
 
 		// The user has asked for this feature layer
 		String layerId = layer.getId().toString();
-		if (layers.contains(layerId) && layer.isLoaded()) {
-			new StaticFeatureLoadTask(getActivity().getApplicationContext(), staticGeometryCollection, map).executeOnExecutor(executor, layer);
+		if (layers.contains(layerId) && layer.isLoaded() && !loadingLayers.containsKey(layer)) {
+			CleanlyStaticFeatureLoadTask loadLayer = new CleanlyStaticFeatureLoadTask(mage, staticGeometryCollection, map);
+			loadLayer.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, layer);
 		}
 	}
 
-	private void updateMapView() {
+	private void loadLastMapPosition() {
 		// Check the map type
 		map.setMapType(preferences.getInt(getString(R.string.baseLayerKey), getResources().getInteger(R.integer.baseLayerDefaultValue)));
 
 		// Check the map location and zoom
 		String xyz = preferences.getString(getString(R.string.recentMapXYZKey), getString(R.string.recentMapXYZDefaultValue));
-		if (xyz != null) {
-			String[] values = StringUtils.split(xyz, ",");
-			LatLng latLng = new LatLng(0.0, 0.0);
-			if(values.length > 1) {
-				try {
-					latLng = new LatLng(Double.valueOf(values[1]), Double.valueOf(values[0]));
-				} catch (NumberFormatException nfe) {
-					Log.e(LOG_NAME, "Could not parse lon,lat: " + String.valueOf(values[1]) + ", " + String.valueOf(values[0]));
-				}
-			}
-			float zoom = 1.0f;
-			if(values.length > 2) {
-				try {
-					zoom = Float.valueOf(values[2]);
-				} catch (NumberFormatException nfe) {
-					Log.e(LOG_NAME, "Could not parse zoom level: " + String.valueOf(values[2]));
-				}
-			}
-			map.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, zoom));
+		if (xyz == null) {
+			return;
 		}
+
+		String[] values = xyz.split(",");
+		LatLng latLng = new LatLng(0.0, 0.0);
+		if(values.length > 1) {
+			try {
+				latLng = new LatLng(Double.valueOf(values[1]), Double.valueOf(values[0]));
+			} catch (NumberFormatException nfe) {
+				Log.e(LOG_NAME, "Could not parse lon,lat: " + String.valueOf(values[1]) + ", " + String.valueOf(values[0]));
+			}
+		}
+		float zoom = 1.0f;
+		if(values.length > 2) {
+			try {
+				zoom = Float.valueOf(values[2]);
+			} catch (NumberFormatException nfe) {
+				Log.e(LOG_NAME, "Could not parse zoom level: " + String.valueOf(values[2]));
+			}
+		}
+		map.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, zoom));
 	}
 
-	private void saveMapView() {
+	private void saveMapPosition() {
 		CameraPosition position = map.getCameraPosition();
-
-		String xyz = new StringBuilder().append(Double.valueOf(position.target.longitude).toString()).append(",").append(Double.valueOf(position.target.latitude).toString()).append(",").append(Float.valueOf(position.zoom).toString()).toString();
-		preferences.edit().putString(getResources().getString(R.string.recentMapXYZKey), xyz).commit();
+		String xyz = String.format(Locale.US, "%f,%f,%f", position.target.longitude, position.target.latitude, position.zoom);
+		preferences.edit().putString(getResources().getString(R.string.recentMapXYZKey), xyz).apply();
 	}
 
 	@Override

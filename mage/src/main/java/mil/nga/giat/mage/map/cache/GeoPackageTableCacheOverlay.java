@@ -1,16 +1,12 @@
 package mil.nga.giat.mage.map.cache;
 
 /**
- * GeoPackage Table cache overlay
+ * This class is a {@link CacheOverlay} subclass corresponding to the data
+ * in a single table within a GeoPackage.
  *
  * @author osbornb
  */
 public abstract class GeoPackageTableCacheOverlay extends CacheOverlay {
-
-    /**
-     * GeoPackage name
-     */
-    private final String geoPackage;
 
     /**
      * Count of data in the table
@@ -28,55 +24,36 @@ public abstract class GeoPackageTableCacheOverlay extends CacheOverlay {
     private final int maxZoom;
 
     /**
-     * Cache overlay parent
-     */
-    private CacheOverlay parent;
-
-    /**
      * Constructor
      *
-     * @param name       GeoPackage table name
      * @param geoPackage GeoPackage name
-     * @param cacheName  Cache name
-     * @param type       cache type
+     * @param tableName  GeoPackage table name
      * @param count      count
      * @param minZoom    min zoom level
      * @param maxZoom    max zoom level
      */
-    protected GeoPackageTableCacheOverlay(String name, String geoPackage, String cacheName, CacheOverlayType type, int count, int minZoom, Integer maxZoom) {
-        super(name, cacheName, type, false);
-        this.geoPackage = geoPackage;
+    GeoPackageTableCacheOverlay(String geoPackage, String tableName, int count, int minZoom, Integer maxZoom) {
+        super(tableName, geoPackage, GeoPackageCacheProvider.class);
         this.count = count;
         this.minZoom = minZoom;
         this.maxZoom = maxZoom;
     }
 
-    @Override
-    public boolean isChild(){
-        return true;
-    }
-
-    @Override
-    public CacheOverlay getParent(){
-        return parent;
-    }
-
     /**
-     * Set the parent cache overlay
-     *
-     * @param parent
-     */
-    public void setParent(CacheOverlay parent) {
-        this.parent = parent;
-    }
-
-    /**
-     * Get the GeoPackage name
+     * Get the GeoPackage name, which is also the {@link #getCacheName() cache name}.
      *
      * @return
      */
-    public String getGeoPackage() {
-        return geoPackage;
+    String getGeoPackage() {
+        return getCacheName();
+    }
+
+    /**
+     * Get the name of the table that contains this overlay's data, which is also the {@link #getOverlayName() overlay name}.
+     * @return
+     */
+    String getTableName() {
+        return getOverlayName();
     }
 
     /**
@@ -84,7 +61,7 @@ public abstract class GeoPackageTableCacheOverlay extends CacheOverlay {
      *
      * @return
      */
-    public int getCount() {
+    int getCount() {
         return count;
     }
 
@@ -93,7 +70,7 @@ public abstract class GeoPackageTableCacheOverlay extends CacheOverlay {
      *
      * @return
      */
-    public int getMinZoom() {
+    int getMinZoom() {
         return minZoom;
     }
 
@@ -102,8 +79,7 @@ public abstract class GeoPackageTableCacheOverlay extends CacheOverlay {
      *
      * @return
      */
-    public int getMaxZoom() {
+    int getMaxZoom() {
         return maxZoom;
     }
-
 }

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <string name="app_name">MAGE</string>
+    <string name="app_name">MAGE Woolly Monkey</string>
     <string name="aboutText">The Mobile Awareness GEOINT Environment, or MAGE, provides mobile situational awareness capabilities. The MAGE app on your mobile device allows you to create geotagged field reports that contain media such as photos, videos, and voice recordings and share them instantly with who you want. Using the GPS in your mobile device, MAGE can also track users locations in real time. Your locations can be automatically shared with the other members of your team.\n\nThe app remains functional if your mobile device loses its network connection, and will upload its local content when a connection is re-established. When disconnected from the network, MAGE will use local data layers to continue to provide relevant GEOINT. Data layers, including map tiles and vector data, can be stored on your mobile device and are available at all times.</string>
     <string name="map_settings">Map Settings</string>
     <string name="location_settings">Location Services</string>
@@ -108,12 +108,15 @@
     <string name="feature_overlay_no_content_text">No feature overlays, click the refresh button above to pull all feature overlays from the server.</string>
     <string name="feature_overlay_refresh">You are about to refresh all feature overlays, this could take a while.</string>
     <string name="clear_data_message">You are about to delete the selected data and logout.\n\n Are you sure you want to do this?</string>
+    <string name="overlay_tab_tiles">Map Tiles</string>
+    <string name="overlay_tab_features">Features</string>
 
     <string name="overlay_cache_directory">MapCache</string>
 
     <string name="gpsPreferencesCategoryKey">gpsPreferencesCategory</string>
     <string name="locationsPushPreferencesCategoryKey">locationsPushPreferencesCategory</string>
     <string name="locationServiceDisabledKey">locationServiceDisabled</string>
+    <string name="overlay_item_image_default_content_description">Map overlay icon</string>
 
     <string name="location_edit_delete_point_title">Delete Point</string>
     <string name="location_edit_delete_point_message">Do you want to delete this point?\n%1$s, %2$s</string>

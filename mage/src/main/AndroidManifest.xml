@@ -132,7 +132,8 @@
             android:name=".LandingActivity"
             android:configChanges="keyboardHidden|orientation|screenSize"
             android:theme="@style/AppTheme.Toolbar"
-            android:launchMode="singleTop" />
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustNothing" />
         <activity
             android:name=".event.ChangeEventActivity"
             android:parentActivityName=".LandingActivity" />

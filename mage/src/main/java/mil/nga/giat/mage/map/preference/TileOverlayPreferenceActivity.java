@@ -26,21 +26,16 @@ import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
-import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 
-import mil.nga.geopackage.GeoPackageManager;
-import mil.nga.geopackage.factory.GeoPackageFactory;
 import mil.nga.giat.mage.R;
-import mil.nga.giat.mage.cache.CacheUtils;
+import mil.nga.giat.mage.map.cache.CacheManager;
+import mil.nga.giat.mage.map.cache.CacheManager.CacheOverlaysUpdateListener;
 import mil.nga.giat.mage.map.cache.CacheOverlay;
-import mil.nga.giat.mage.map.cache.CacheProvider;
-import mil.nga.giat.mage.map.cache.CacheProvider.OnCacheOverlayListener;
-import mil.nga.giat.mage.map.cache.GeoPackageCacheOverlay;
-import mil.nga.giat.mage.map.cache.XYZDirectoryCacheOverlay;
-import mil.nga.giat.mage.sdk.utils.StorageUtility;
+import mil.nga.giat.mage.map.cache.GeoPackageCacheProvider;
+import mil.nga.giat.mage.map.cache.XYZDirectoryCacheProvider;
 
 public class TileOverlayPreferenceActivity extends AppCompatActivity  {
 
@@ -75,7 +70,7 @@ public class TileOverlayPreferenceActivity extends AppCompatActivity  {
         }
     }
 
-    public static class OverlayListFragment extends ListFragment implements OnCacheOverlayListener {
+    public static class OverlayListFragment extends ListFragment implements CacheOverlaysUpdateListener {
 
         private OverlayAdapter overlayAdapter;
         private ExpandableListView listView;
@@ -131,7 +126,7 @@ public class TileOverlayPreferenceActivity extends AppCompatActivity  {
             // before I register as the call back will set it to enabled
             // the problem is that onResume gets called before this so my menu is
             // not yet setup and I will not have a handle on this button
-            CacheProvider.getInstance(getActivity()).registerCacheOverlayListener(this);
+            CacheManager.getInstance().addUpdateListener(this);
         }
 
         @Override
@@ -141,7 +136,7 @@ public class TileOverlayPreferenceActivity extends AppCompatActivity  {
                     item.setEnabled(false);
                     progressBar.setVisibility(View.VISIBLE);
                     listView.setEnabled(false);
-                    CacheProvider.getInstance(getActivity()).refreshTileOverlays();
+                    CacheManager.getInstance().refreshAvailableCaches();
                     return true;
                 default:
                     return super.onOptionsItemSelected(item);
@@ -152,14 +147,14 @@ public class TileOverlayPreferenceActivity extends AppCompatActivity  {
         public void onDestroy() {
             super.onDestroy();
 
-            CacheProvider.getInstance(getActivity()).unregisterCacheOverlayListener(this);
+            CacheManager.getInstance().removeUpdateListener(this);
         }
 
         @Override
-        public void onCacheOverlay(List<CacheOverlay> cacheOverlays) {
-
+        public void onCacheOverlaysUpdated(CacheManager.CacheOverlayUpdate update) {
+//            List<CacheOverlay> cacheOverlays = new ArrayList<>(update.allAvailable);
+            List<CacheOverlay> cacheOverlays = Collections.emptyList();
             overlayAdapter = new OverlayAdapter(getActivity(), cacheOverlays);
-
             listView.setAdapter(overlayAdapter);
             listView.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
                 @Override
@@ -192,7 +187,7 @@ public class TileOverlayPreferenceActivity extends AppCompatActivity  {
             switch (requestCode) {
                 case PERMISSIONS_REQUEST_READ_EXTERNAL_STORAGE: {
                     if(grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                        CacheProvider.getInstance(getActivity()).refreshTileOverlays();
+                        CacheManager.getInstance().refreshAvailableCaches();
                     };
 
                     break;
@@ -210,17 +205,17 @@ public class TileOverlayPreferenceActivity extends AppCompatActivity  {
             if (overlayAdapter != null) {
                 for (CacheOverlay cacheOverlay : overlayAdapter.getOverlays()) {
 
-                    boolean childAdded = false;
-                    for (CacheOverlay childCache : cacheOverlay.getChildren()) {
-                        if (childCache.isEnabled()) {
-                            overlays.add(childCache.getCacheName());
-                            childAdded = true;
-                        }
-                    }
-
-                    if (!childAdded && cacheOverlay.isEnabled()) {
-                        overlays.add(cacheOverlay.getCacheName());
-                    }
+//                    boolean childAdded = false;
+//                    for (CacheOverlay childCache : cacheOverlay.getChildren()) {
+//                        if (childCache.isEnabled()) {
+//                            overlays.add(childCache.getOverlayName());
+//                            childAdded = true;
+//                        }
+//                    }
+//
+//                    if (!childAdded && cacheOverlay.isEnabled()) {
+//                        overlays.add(cacheOverlay.getOverlayName());
+//                    }
                 }
             }
             return overlays;
@@ -232,8 +227,8 @@ public class TileOverlayPreferenceActivity extends AppCompatActivity  {
          */
         private void deleteCacheOverlayConfirm(final CacheOverlay cacheOverlay) {
             AlertDialog deleteDialog = new AlertDialog.Builder(getActivity())
-                    .setTitle("Delete Cache")
-                    .setMessage("Delete " + cacheOverlay.getName() + " Cache?")
+                    .setTitle("Delete MapCache")
+                    .setMessage("Delete " + cacheOverlay.getOverlayName() + " MapCache?")
                     .setPositiveButton("Delete",
 
                             new DialogInterface.OnClickListener() {
@@ -255,32 +250,6 @@ public class TileOverlayPreferenceActivity extends AppCompatActivity  {
             deleteDialog.show();
         }
 
-        /**
-         * Delete the XYZ cache overlay
-         * @param xyzCacheOverlay
-         */
-        private void deleteXYZCacheOverlay(XYZDirectoryCacheOverlay xyzCacheOverlay){
-
-            File directory = xyzCacheOverlay.getDirectory();
-
-            if(directory.canWrite()){
-                deleteFile(directory);
-            }
-
-        }
-
-        /**
-         * Delete the base directory file
-         * @param base directory
-         */
-        private void deleteFile(File base) {
-            if (base.isDirectory()) {
-                for (File file : base.listFiles()) {
-                    deleteFile(file);
-                }
-            }
-            base.delete();
-        }
 
         /**
          * Delete the cache overlay
@@ -291,65 +260,24 @@ public class TileOverlayPreferenceActivity extends AppCompatActivity  {
             progressBar.setVisibility(View.VISIBLE);
             listView.setEnabled(false);
 
-            switch(cacheOverlay.getType()) {
-
-                case XYZ_DIRECTORY:
-                    deleteXYZCacheOverlay((XYZDirectoryCacheOverlay)cacheOverlay);
-                    break;
-
-                case GEOPACKAGE:
-                    deleteGeoPackageCacheOverlay((GeoPackageCacheOverlay)cacheOverlay);
-                    break;
+            if (cacheOverlay.isTypeOf(XYZDirectoryCacheProvider.class)) {
+                // TODO: moved to XYZDirectoryCacheProvider
+//                    deleteXYZCacheOverlay((XYZDirectoryCacheOverlay)cacheOverlay);
+            }
+            else if (cacheOverlay.isTypeOf(GeoPackageCacheProvider.class)) {
+                    // TODO: moved to GeoPackageCacheProvider
+//                    deleteGeoPackageCacheOverlay((GeoPackageCacheOverlay)cacheOverlay);
 
             }
 
-            CacheProvider.getInstance(getActivity()).refreshTileOverlays();
+            CacheManager.getInstance().refreshAvailableCaches();
         }
 
-        /**
-         * Delete the GeoPackage cache overlay
-         * @param geoPackageCacheOverlay
-         */
-        private void deleteGeoPackageCacheOverlay(GeoPackageCacheOverlay geoPackageCacheOverlay){
-
-            String database = geoPackageCacheOverlay.getName();
-
-            // Get the GeoPackage file
-            GeoPackageManager manager = GeoPackageFactory.getManager(getActivity());
-            File path = manager.getFile(database);
-
-            // Delete the cache from the GeoPackage manager
-            manager.delete(database);
-
-            // Attempt to delete the cache file if it is in the cache directory
-            File pathDirectory = path.getParentFile();
-            if(path.canWrite() && pathDirectory != null) {
-                Map<StorageUtility.StorageType, File> storageLocations = StorageUtility.getWritableStorageLocations();
-                for (File storageLocation : storageLocations.values()) {
-                    File root = new File(storageLocation, getString(R.string.overlay_cache_directory));
-                    if (root.equals(pathDirectory)) {
-                        path.delete();
-                        break;
-                    }
-                }
-            }
-
-            // Check internal/external application storage
-            File applicationCacheDirectory = CacheUtils.getApplicationCacheDirectory(getActivity());
-            if (applicationCacheDirectory != null && applicationCacheDirectory.exists()) {
-                for (File cache : applicationCacheDirectory.listFiles()) {
-                    if (cache.equals(path)) {
-                        path.delete();
-                        break;
-                    }
-                }
-            }
-        }
 
     }
 
     /**
-     * Cache Overlay Expandable list adapter
+     * MapCache Overlay Expandable list adapter
      */
     public static class OverlayAdapter extends BaseExpandableListAdapter {
 
@@ -390,7 +318,8 @@ public class TileOverlayPreferenceActivity extends AppCompatActivity  {
 
         @Override
         public int getChildrenCount(int i) {
-            return overlays.get(i).getChildren().size();
+//            return overlays.get(i).getChildren().size();
+            return 0;
         }
 
         @Override
@@ -400,7 +329,8 @@ public class TileOverlayPreferenceActivity extends AppCompatActivity  {
 
         @Override
         public Object getChild(int i, int j) {
-            return overlays.get(i).getChildren().get(j);
+//            return overlays.get(i).getChildren().get(j);
+            return null;
         }
 
         @Override
@@ -438,15 +368,15 @@ public class TileOverlayPreferenceActivity extends AppCompatActivity  {
                 public void onClick(View v) {
                     boolean checked = ((CheckBox) v).isChecked();
 
-                    overlay.setEnabled(checked);
+//                    overlay.setEnabled(checked);
 
                     boolean modified = false;
-                    for (CacheOverlay childCache : overlay.getChildren()) {
-                        if (childCache.isEnabled() != checked) {
-                            childCache.setEnabled(checked);
-                            modified = true;
-                        }
-                    }
+//                    for (CacheOverlay childCache : overlay.getChildren()) {
+//                        if (childCache.isEnabled() != checked) {
+//                            childCache.setEnabled(checked);
+//                            modified = true;
+//                        }
+//                    }
 
                     if (modified) {
                         notifyDataSetChanged();
@@ -460,13 +390,13 @@ public class TileOverlayPreferenceActivity extends AppCompatActivity  {
             }else{
                 imageView.setImageResource(-1);
             }
-            cacheName.setText(overlay.getName());
-            if (overlay.isSupportsChildren()) {
-                childCount.setText("(" + getChildrenCount(i) + ")");
-            }else{
+            cacheName.setText(overlay.getOverlayName());
+//            if (overlay.isSupportsChildren()) {
+//                childCount.setText("(" + getChildrenCount(i) + ")");
+//            }else{
                 childCount.setText("");
-            }
-            checkBox.setChecked(overlay.isEnabled());
+//            }
+//            checkBox.setChecked(overlay.isEnabled());
 
             return view;
         }
@@ -479,8 +409,8 @@ public class TileOverlayPreferenceActivity extends AppCompatActivity  {
                 convertView = inflater.inflate(R.layout.cache_overlay_child, parent, false);
             }
 
-            final CacheOverlay overlay = overlays.get(groupPosition);
-            final CacheOverlay childCache = overlay.getChildren().get(childPosition);
+//            final CacheOverlay overlay = overlays.get(groupPosition);
+//            final CacheOverlay childCache = overlay.getChildren().get(childPosition);
 
             ImageView imageView = (ImageView) convertView.findViewById(R.id.cache_overlay_child_image);
             TextView tableName = (TextView) convertView.findViewById(R.id.cache_overlay_child_name);
@@ -492,45 +422,45 @@ public class TileOverlayPreferenceActivity extends AppCompatActivity  {
             checkBox.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) {
-                    boolean checked = ((CheckBox) v).isChecked();
-
-                    childCache.setEnabled(checked);
-
-                    boolean modified = false;
-                    if (checked) {
-                        if (!overlay.isEnabled()) {
-                            overlay.setEnabled(true);
-                            modified = true;
-                        }
-                    } else if (overlay.isEnabled()) {
-                        modified = true;
-                        for (CacheOverlay childCache : overlay.getChildren()) {
-                            if (childCache.isEnabled()) {
-                                modified = false;
-                                break;
-                            }
-                        }
-                        if (modified) {
-                            overlay.setEnabled(false);
-                        }
-                    }
-
-                    if (modified) {
-                        notifyDataSetChanged();
-                    }
+//                    boolean checked = ((CheckBox) v).isChecked();
+//
+//                    childCache.setEnabled(checked);
+//
+//                    boolean modified = false;
+//                    if (checked) {
+//                        if (!overlay.isEnabled()) {
+//                            overlay.setEnabled(true);
+//                            modified = true;
+//                        }
+//                    } else if (overlay.isEnabled()) {
+//                        modified = true;
+//                        for (CacheOverlay childCache : overlay.getChildren()) {
+//                            if (childCache.isEnabled()) {
+//                                modified = false;
+//                                break;
+//                            }
+//                        }
+//                        if (modified) {
+//                            overlay.setEnabled(false);
+//                        }
+//                    }
+//
+//                    if (modified) {
+//                        notifyDataSetChanged();
+//                    }
                 }
             });
 
-            tableName.setText(childCache.getName());
-            info.setText(childCache.getInfo());
-            checkBox.setChecked(childCache.isEnabled());
-
-            Integer imageResource = childCache.getIconImageResourceId();
-            if (imageResource != null){
-                imageView.setImageResource(imageResource);
-            } else {
-                imageView.setImageResource(-1);
-            }
+//            tableName.setText(childCache.getOverlayName());
+//            info.setText(childCache.getInfo());
+//            checkBox.setChecked(childCache.isEnabled());
+//
+//            Integer imageResource = childCache.getIconImageResourceId();
+//            if (imageResource != null){
+//                imageView.setImageResource(imageResource);
+//            } else {
+//                imageView.setImageResource(-1);
+//            }
 
             return convertView;
         }
