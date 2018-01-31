@@ -9,9 +9,6 @@ import android.widget.Toast;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapView;
 import com.google.android.gms.maps.model.LatLng;
-import com.google.android.gms.maps.model.Marker;
-import com.google.android.gms.maps.model.Polygon;
-import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.TileOverlay;
 import com.google.android.gms.maps.model.TileOverlayOptions;
 
@@ -34,23 +31,16 @@ import mil.nga.geopackage.features.user.FeatureCursor;
 import mil.nga.geopackage.features.user.FeatureDao;
 import mil.nga.geopackage.features.user.FeatureRow;
 import mil.nga.geopackage.geom.GeoPackageGeometryData;
-import mil.nga.geopackage.geom.map.GoogleMapShape;
-import mil.nga.geopackage.geom.map.GoogleMapShapeConverter;
-import mil.nga.geopackage.geom.map.MultiMarker;
-import mil.nga.geopackage.geom.map.MultiPolygon;
-import mil.nga.geopackage.geom.map.MultiPolygonMarkers;
-import mil.nga.geopackage.geom.map.MultiPolyline;
-import mil.nga.geopackage.geom.map.MultiPolylineMarkers;
-import mil.nga.geopackage.geom.map.PolygonMarkers;
-import mil.nga.geopackage.geom.map.PolylineMarkers;
+import mil.nga.geopackage.map.geom.GoogleMapShape;
+import mil.nga.geopackage.map.geom.GoogleMapShapeConverter;
+import mil.nga.geopackage.map.tiles.overlay.BoundedOverlay;
+import mil.nga.geopackage.map.tiles.overlay.FeatureOverlay;
+import mil.nga.geopackage.map.tiles.overlay.FeatureOverlayQuery;
+import mil.nga.geopackage.map.tiles.overlay.GeoPackageOverlayFactory;
 import mil.nga.geopackage.projection.Projection;
+import mil.nga.geopackage.tiles.features.DefaultFeatureTiles;
 import mil.nga.geopackage.tiles.features.FeatureTiles;
-import mil.nga.geopackage.tiles.features.MapFeatureTiles;
 import mil.nga.geopackage.tiles.features.custom.NumberFeaturesTile;
-import mil.nga.geopackage.tiles.overlay.BoundedOverlay;
-import mil.nga.geopackage.tiles.overlay.FeatureOverlay;
-import mil.nga.geopackage.tiles.overlay.FeatureOverlayQuery;
-import mil.nga.geopackage.tiles.overlay.GeoPackageOverlayFactory;
 import mil.nga.geopackage.tiles.user.TileDao;
 import mil.nga.geopackage.validate.GeoPackageValidate;
 import mil.nga.giat.mage.R;
@@ -594,7 +584,7 @@ public class GeoPackageCacheProvider implements CacheProvider {
         FeatureDao featureDao = geoPackage.getFeatureDao(featureTableCache.getTableName());
         // If indexed, add as a tile overlay
         if (featureTableCache.isIndexed()) {
-            FeatureTiles featureTiles = new MapFeatureTiles(context, featureDao);
+            FeatureTiles featureTiles = new DefaultFeatureTiles(context, featureDao);
             Integer maxFeaturesPerTile = null;
             if (featureDao.getGeometryType() == GeometryType.POINT) {
                 maxFeaturesPerTile = context.getResources().getInteger(R.integer.geopackage_feature_tiles_max_points_per_tile);
