@@ -337,6 +337,7 @@ public class MapFragment extends Fragment implements
 		getView().removeCallbacks(refreshObservationsTask);
 		getView().removeCallbacks(refreshLocationsTask);
 		getView().removeCallbacks(refreshHistoricLocationsTask);
+		refreshObservationsTask = null;
 		refreshLocationsTask = null;
 		refreshHistoricLocationsTask = null;
 	}
