@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.location.Location;
 import android.location.LocationListener;
@@ -42,9 +43,7 @@ import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
 import android.webkit.WebView;
 import android.widget.FrameLayout;
-import android.widget.ImageButton;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.google.android.gms.maps.CameraUpdate;
 import com.google.android.gms.maps.CameraUpdateFactory;
@@ -123,7 +122,6 @@ import mil.nga.giat.mage.sdk.location.LocationService;
 import mil.nga.mgrs.MGRS;
 import mil.nga.mgrs.gzd.MGRSTileProvider;
 import mil.nga.wkb.geom.Geometry;
-import mil.nga.wkb.geom.GeometryType;
 
 public class MapFragment extends Fragment implements
         OnMapReadyCallback,
@@ -150,18 +148,26 @@ public class MapFragment extends Fragment implements
 	private static final String LOCATION_FILTER_TYPE = "Location";
 	private static final int PERMISSIONS_REQUEST_ACCESS_FINE_LOCATION = 1;
 	private static final int MARKER_REFRESH_INTERVAL_SECONDS = 300;
-	private static final String STATE_OVERLAYS_EXPANDED = MapFragment.class.getSimpleName() + ".overlays_expanded";
+	private static final int OBSERVATION_REFRESH_INTERVAL_SECONDS = 60;
 
 	private class RefreshMarkersRunnable implements Runnable {
 		private final PointCollection<?> points;
+		private final String filterColumnName;
+		private final String filterType;
+		private final int timePeriodFilterPreferenceKeyResId;
+		private final int intervalSeconds;
 
-		private RefreshMarkersRunnable(PointCollection<?> points) {
+		private RefreshMarkersRunnable(PointCollection<?> points, String filterColumnName, String filterType, int timePeriodFilterPreferenceKeyResId, int intervalSeconds) {
 			this.points = points;
+			this.filterColumnName = filterColumnName;
+			this.filterType = filterType;
+			this.timePeriodFilterPreferenceKeyResId = timePeriodFilterPreferenceKeyResId;
+			this.intervalSeconds = intervalSeconds;
 		}
 
 		public void run() {
 			if (points.isVisible()) {
-				points.refreshMarkerIcons();
+				points.refreshMarkerIcons(getTemporalFilter(filterColumnName, timePeriodFilterPreferenceKeyResId, filterType));
 			}
 			scheduleMarkerRefresh(this);
 		}
@@ -203,6 +209,7 @@ public class MapFragment extends Fragment implements
 	private PointCollection<Pair<mil.nga.giat.mage.sdk.datastore.location.Location, User>> historicLocations;
 	private StaticGeometryCollection staticGeometryCollection;
 	private List<Marker> searchMarkers = new ArrayList<>();
+	private RefreshMarkersRunnable refreshObservationsTask;
 	private RefreshMarkersRunnable refreshLocationsTask;
 	private RefreshMarkersRunnable refreshHistoricLocationsTask;
 	private Map<Layer, CleanlyStaticFeatureLoadTask> loadingLayers = new HashMap<>();
@@ -327,6 +334,7 @@ public class MapFragment extends Fragment implements
             mgrsTileOverlay.remove();
         }
 
+		getView().removeCallbacks(refreshObservationsTask);
 		getView().removeCallbacks(refreshLocationsTask);
 		getView().removeCallbacks(refreshHistoricLocationsTask);
 		refreshLocationsTask = null;
@@ -402,7 +410,7 @@ public class MapFragment extends Fragment implements
 	}
 
 	private void scheduleMarkerRefresh(RefreshMarkersRunnable task) {
-		getView().postDelayed(task, MARKER_REFRESH_INTERVAL_SECONDS * 1000);
+		getView().postDelayed(task, task.intervalSeconds * 1000);
 	}
 
 	private void cleanUpForLayoutChange() {
@@ -509,14 +517,14 @@ public class MapFragment extends Fragment implements
 		}
 
 		ObservationLoadTask observationLoad = new ObservationLoadTask(mage, observations);
-		observationLoad.addFilter(getTemporalFilter("timestamp", getTimeFilterId(), OBSERVATION_FILTER_TYPE));
+		observationLoad.addFilter(getTemporalFilter("timestamp", R.string.activeTimeFilterKey, OBSERVATION_FILTER_TYPE));
 		observationLoad.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
 
 		HistoricLocationLoadTask myHistoricLocationLoad = new HistoricLocationLoadTask(mage, historicLocations);
 		myHistoricLocationLoad.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
 
 		LocationLoadTask locationLoad = new LocationLoadTask(mage, locations);
-		locationLoad.setFilter(getTemporalFilter("timestamp", getLocationTimeFilterId(), LOCATION_FILTER_TYPE));
+		locationLoad.setFilter(getTemporalFilter("timestamp", R.string.activeLocationTimeFilterKey, LOCATION_FILTER_TYPE));
 		locationLoad.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
 
 		loadLastMapPosition();
@@ -538,8 +546,10 @@ public class MapFragment extends Fragment implements
 			map.setLocationSource(null);
 		}
 
-		refreshLocationsTask = new RefreshMarkersRunnable(locations);
-		refreshHistoricLocationsTask = new RefreshMarkersRunnable(historicLocations);
+		refreshObservationsTask = new RefreshMarkersRunnable(observations, "timestamp", OBSERVATION_FILTER_TYPE, R.string.activeTimeFilterKey, OBSERVATION_REFRESH_INTERVAL_SECONDS);
+		refreshLocationsTask = new RefreshMarkersRunnable(locations, "timestamp", LOCATION_FILTER_TYPE, R.string.activeLocationTimeFilterKey, MARKER_REFRESH_INTERVAL_SECONDS);
+		refreshHistoricLocationsTask = new RefreshMarkersRunnable(historicLocations, "timestamp", LOCATION_FILTER_TYPE, R.string.activeLocationTimeFilterKey, MARKER_REFRESH_INTERVAL_SECONDS);
+		scheduleMarkerRefresh(refreshObservationsTask);
 		scheduleMarkerRefresh(refreshLocationsTask);
 		scheduleMarkerRefresh(refreshHistoricLocationsTask);
 
@@ -715,7 +725,7 @@ public class MapFragment extends Fragment implements
 	public void onObservationCreated(Collection<Observation> o, Boolean sendUserNotifcations) {
 		if (observations != null) {
 			ObservationTask task = new ObservationTask(getActivity(), ObservationTask.Type.ADD, observations);
-			task.addFilter(getTemporalFilter("last_modified", getTimeFilterId(), OBSERVATION_FILTER_TYPE));
+			task.addFilter(getTemporalFilter("last_modified", R.string.activeTimeFilterKey, OBSERVATION_FILTER_TYPE));
 			task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, o.toArray(new Observation[o.size()]));
 		}
 	}
@@ -724,7 +734,7 @@ public class MapFragment extends Fragment implements
 	public void onObservationUpdated(Observation o) {
 		if (observations != null) {
 			ObservationTask task = new ObservationTask(mage, ObservationTask.Type.UPDATE, observations);
-			task.addFilter(getTemporalFilter("last_modified", getTimeFilterId(), OBSERVATION_FILTER_TYPE));
+			task.addFilter(getTemporalFilter("last_modified", R.string.activeTimeFilterKey, OBSERVATION_FILTER_TYPE));
 			task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, o);
 		}
 	}
@@ -742,7 +752,7 @@ public class MapFragment extends Fragment implements
 			if (currentUser != null && !currentUser.getRemoteId().equals(l.getUser().getRemoteId())) {
 				if (locations != null) {
 					LocationTask task = new LocationTask(mage, LocationTask.Type.ADD, locations);
-					task.addFilter(getTemporalFilter("timestamp", getLocationTimeFilterId(), LOCATION_FILTER_TYPE));
+					task.addFilter(getTemporalFilter("timestamp", R.string.activeLocationTimeFilterKey, LOCATION_FILTER_TYPE));
 					task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, l);
 				}
 			} else {
@@ -758,7 +768,7 @@ public class MapFragment extends Fragment implements
 		if (currentUser != null && !currentUser.getRemoteId().equals(l.getUser().getRemoteId())) {
 			if (locations != null) {
 				LocationTask task = new LocationTask(mage, LocationTask.Type.UPDATE, locations);
-				task.addFilter(getTemporalFilter("timestamp", getLocationTimeFilterId(), LOCATION_FILTER_TYPE));
+				task.addFilter(getTemporalFilter("timestamp", R.string.activeLocationTimeFilterKey, LOCATION_FILTER_TYPE));
 				task.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, l);
 			}
 		} else {
@@ -1156,12 +1166,10 @@ public class MapFragment extends Fragment implements
 	public void onError(Throwable error) {
 	}
 
-	private int getTimeFilterId() {
-		return preferences.getInt(getResources().getString(R.string.activeTimeFilterKey), getResources().getInteger(R.integer.time_filter_none));
-	}
-
-	private int getLocationTimeFilterId() {
-		return preferences.getInt(getResources().getString(R.string.activeLocationTimeFilterKey), getResources().getInteger(R.integer.time_filter_none));
+	private int getTimePeriodFilterPreferenceValue(int timeFilterPrefKeyResId) {
+		Resources res = getResources();
+		String prefKey = res.getString(timeFilterPrefKeyResId);
+		return preferences.getInt(prefKey, res.getInteger(R.integer.time_filter_none));
 	}
 
 	private int getCustomTimeNumber(String filterType) {
@@ -1180,22 +1188,27 @@ public class MapFragment extends Fragment implements
 		}
 	}
 
-	private Filter<Temporal> getTemporalFilter(String columnName, int filterId, String filterType) {
-		Filter<Temporal> filter = null;
+	private Filter<Temporal> getTemporalFilter(String columnName, int timeFilterPreferenceKeyResId, String filterType) {
+
+		int timePeriod = getTimePeriodFilterPreferenceValue(timeFilterPreferenceKeyResId);
 		Calendar c = Calendar.getInstance();
 
-		if (filterId == getResources().getInteger(R.integer.time_filter_last_month)) {
+		if (timePeriod == getResources().getInteger(R.integer.time_filter_last_month)) {
 			c.add(Calendar.MONTH, -1);
-		} else if (filterId == getResources().getInteger(R.integer.time_filter_last_week)) {
+		}
+		else if (timePeriod == getResources().getInteger(R.integer.time_filter_last_week)) {
 			c.add(Calendar.DAY_OF_MONTH, -7);
-		} else if (filterId == getResources().getInteger(R.integer.time_filter_last_24_hours)) {
+		}
+		else if (timePeriod == getResources().getInteger(R.integer.time_filter_last_24_hours)) {
 			c.add(Calendar.HOUR, -24);
-		} else if (filterId == getResources().getInteger(R.integer.time_filter_today)) {
+		}
+		else if (timePeriod == getResources().getInteger(R.integer.time_filter_today)) {
 			c.set(Calendar.HOUR_OF_DAY, 0);
 			c.set(Calendar.MINUTE, 0);
 			c.set(Calendar.SECOND, 0);
 			c.set(Calendar.MILLISECOND, 0);
-		} else if (filterId == getResources().getInteger(R.integer.time_filter_custom)) {
+		}
+		else if (timePeriod == getResources().getInteger(R.integer.time_filter_custom)) {
 			String customFilterTimeUnit = getCustomTimeUnit(filterType);
 			int customTimeNumber = getCustomTimeNumber(filterType);
 			switch (customFilterTimeUnit) {
@@ -1212,23 +1225,19 @@ public class MapFragment extends Fragment implements
 					c.add(Calendar.MINUTE, -1 * customTimeNumber);
 					break;
 			}
-
-		} else {
-			// no filter
-			c = null;
+		}
+		else {
+			return null;
 		}
 
-		if (c != null) {
-			filter = new DateTimeFilter(c.getTime(), null, columnName);
-		}
-
-		return filter;
+		return new DateTimeFilter(c.getTime(), null, columnName);
 	}
 
 	private String getFilterTitle() {
 
-		if (getTimeFilterId() != getResources().getInteger(R.integer.time_filter_none)
-				|| getLocationTimeFilterId() != getResources().getInteger(R.integer.time_filter_none)
+
+		if (getTimePeriodFilterPreferenceValue(R.string.activeTimeFilterKey) != getResources().getInteger(R.integer.time_filter_none)
+				|| getTimePeriodFilterPreferenceValue(R.string.activeLocationTimeFilterKey) != getResources().getInteger(R.integer.time_filter_none)
 				|| preferences.getBoolean(getResources().getString(R.string.activeImportantFilterKey), false)
 				|| preferences.getBoolean(getResources().getString(R.string.activeFavoritesFilterKey), false)) {
 			return "Showing filtered results.";
