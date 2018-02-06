@@ -147,6 +147,17 @@
         <item name="android:textColor">#BEBEBE</item>
     </style>
 
+    <style name="MGRSPrimary">
+        <item name="android:textColor">@color/mgrs</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textStyle">normal</item>
+    </style>
+
+    <style name="MGRSDetail" parent="MGRSPrimary">
+        <item name="android:textSize">12sp</item>
+        <item name="android:textStyle">normal</item>
+    </style>
+
     <style name="horizontal_divider">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">1dp</item>

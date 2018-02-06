@@ -458,8 +458,8 @@ public class MapFragment extends Fragment implements
         mgrsBottomSheetBehavior = BottomSheetBehavior.from(mgrsBottomSheet);
         mgrsCursor = constraintLayout.findViewById(R.id.mgrs_grid_cursor);
         mgrsTextView = (TextView) mgrsBottomSheet.findViewById(R.id.mgrs_code);
-        mgrsGzdTextView = (TextView) mgrsBottomSheet.findViewById(R.id.mgrs_gzd_zone);
-        mgrs100dKmTextView = (TextView) mgrsBottomSheet.findViewById(R.id.mgrs_grid_zone);
+        mgrsGzdTextView = (TextView) mgrsBottomSheet.findViewById(R.id.mgrs_gzd);
+        mgrs100dKmTextView = (TextView) mgrsBottomSheet.findViewById(R.id.mgrs_100km);
         mgrsEastingTextView = (TextView) mgrsBottomSheet.findViewById(R.id.mgrs_easting);
         mgrsNorthingTextView = (TextView) mgrsBottomSheet.findViewById(R.id.mgrs_northing);
 

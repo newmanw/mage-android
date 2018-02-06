@@ -7,7 +7,7 @@
     >
 
     <android.support.constraint.Guideline
-        android:id="@+id/map_overlays_anchor"
+        android:id="@+id/map_bottom_anchor"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
