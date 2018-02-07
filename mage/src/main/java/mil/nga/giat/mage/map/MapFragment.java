@@ -454,7 +454,7 @@ public class MapFragment extends Fragment implements
 		searchView.setIconified(false);
 		searchView.clearFocus();
 
-        mgrsBottomSheet = constraintLayout.findViewById(R.id.mgrs_bottom_sheet);
+        mgrsBottomSheet = constraintLayout.findViewById(R.id.mgrs_panel);
         mgrsBottomSheetBehavior = BottomSheetBehavior.from(mgrsBottomSheet);
         mgrsCursor = constraintLayout.findViewById(R.id.mgrs_grid_cursor);
         mgrsTextView = (TextView) mgrsBottomSheet.findViewById(R.id.mgrs_code);

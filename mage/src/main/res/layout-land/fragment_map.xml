@@ -19,7 +19,6 @@
         android:id="@+id/map_wrapper"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:background="@color/cast_expanded_controller_ad_label_background_color"
         app:layout_constraintLeft_toRightOf="@+id/map_bottom_anchor"
         app:layout_constraintRight_toRightOf="parent"
         app:layout_constraintTop_toTopOf="parent"
@@ -62,7 +61,7 @@
         app:backgroundTint="@color/toggle_button"
         app:theme="@style/AppTheme.AlternateFAB"
         app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintRight_toLeftOf="@+id/zoom_button"
+        app:layout_constraintRight_toRightOf="parent"
         app:fabSize="mini"
         />
 
@@ -73,8 +72,8 @@
         android:layout_height="wrap_content"
         android:layout_margin="12dp"
         app:theme="@style/AppTheme.AlternateFAB"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintRight_toLeftOf="@+id/map_layer_button"
+        app:layout_constraintTop_toBottomOf="@id/map_search_button"
+        app:layout_constraintRight_toRightOf="parent"
         app:fabSize="mini"
         />
 
@@ -85,7 +84,7 @@
         android:layout_margin="12dp"
         android:src="@drawable/ic_layers_black_24dp"
         app:theme="@style/AppTheme.AlternateFAB"
-        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/zoom_button"
         app:layout_constraintRight_toRightOf="parent"
         app:fabSize="mini"
         />
@@ -99,6 +98,26 @@
         app:theme="@style/AppTheme.PrimaryFAB"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintRight_toRightOf="parent"
+        app:fabSize="normal"
+        />
+
+    <ImageView
+        android:id="@+id/mgrs_grid_cursor"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:src="@drawable/mgrs_cursor"
+        app:layout_constraintLeft_toLeftOf="@id/map_wrapper"
+        app:layout_constraintRight_toRightOf="@id/map_wrapper"
+        app:layout_constraintTop_toTopOf="@id/map_wrapper"
+        app:layout_constraintBottom_toBottomOf="@id/map_wrapper"
+        />
+
+    <include layout="@layout/mgrs_info_panel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="8dp"
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
         />
 
     <FrameLayout
