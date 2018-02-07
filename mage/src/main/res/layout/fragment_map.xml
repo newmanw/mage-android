@@ -160,7 +160,7 @@
 
         <GridLayout
             android:id="@+id/mgrs_panel_expanded"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:rowCount="2"
             android:columnCount="4"
@@ -170,7 +170,7 @@
                 android:id="@+id/mgrs_gzd_label"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="4dp"
+                android:layout_marginEnd="8dp"
                 android:text="GZD"
                 style="@style/MGRSDetail"
                 />
@@ -180,6 +180,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="12dp"
+                android:layout_gravity="end"
                 style="@style/MGRSDetail"
                 tools:text="AA"
                 />
@@ -188,7 +189,7 @@
                 android:id="@+id/mgrs_easting_label"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="4dp"
+                android:layout_marginEnd="8dp"
                 android:text="Easting"
                 style="@style/MGRSDetail"
                 />
@@ -197,6 +198,7 @@
                 android:id="@+id/mgrs_easting"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_gravity="end"
                 style="@style/MGRSDetail"
                 tools:text="12345"
                 />
@@ -205,7 +207,7 @@
                 android:id="@+id/mgrs_100km_label"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="4dp"
+                android:layout_marginEnd="8dp"
                 android:text="100km"
                 style="@style/MGRSDetail"
                 />
@@ -215,6 +217,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginEnd="12dp"
+                android:layout_gravity="end"
                 style="@style/MGRSDetail"
                 tools:text="AA"
                 />
@@ -223,7 +226,7 @@
                 android:id="@+id/mgrs_northing_label"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="4dp"
+                android:layout_marginEnd="8dp"
                 android:text="Northing"
                 style="@style/MGRSDetail"
                 />
@@ -232,6 +235,7 @@
                 android:id="@+id/mgrs_northing"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:layout_gravity="end"
                 style="@style/MGRSDetail"
                 tools:text="67890"
                 />
