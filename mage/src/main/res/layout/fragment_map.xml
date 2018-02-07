@@ -15,7 +15,8 @@
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent"
         app:layout_constraintBottom_toTopOf="@+id/map_bottom_anchor"
-        />
+        app:layout_constraintHorizontal_bias="1.0"
+        app:layout_constraintVertical_bias="0.0"/>
 
     <android.support.design.widget.FloatingActionButton
         android:id="@+id/map_search_button"
@@ -98,18 +99,13 @@
 
     <ImageView
         android:id="@+id/mgrs_grid_cursor"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:src="@drawable/mgrs_cursor"
         app:layout_constraintLeft_toLeftOf="@id/map_wrapper"
         app:layout_constraintRight_toRightOf="@id/map_wrapper"
         app:layout_constraintTop_toTopOf="@id/map_wrapper"
         app:layout_constraintBottom_toBottomOf="@id/map_bottom_anchor"
-        android:src="@drawable/ic_add_black_24dp"
-        android:alpha="0.35"
-        android:tint="@color/md_grey_600"
-        android:visibility="gone"
-        tools:layout_editor_absoluteY="0dp"
-        tools:layout_editor_absoluteX="0dp"
         />
 
     <android.support.constraint.Guideline
@@ -253,5 +249,20 @@
         app:layout_constraintRight_toRightOf="parent"
         app:layout_constraintBottom_toBottomOf="parent"
         />
+
+    <android.support.constraint.Guideline
+        android:id="@+id/horizontal_center"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        app:layout_constraintGuide_percent="0.5"/>
+
+    <android.support.constraint.Guideline
+        android:id="@+id/vertical_center"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        app:layout_constraintGuide_begin="20dp"
+        app:layout_constraintGuide_percent="0.5"/>
 
 </android.support.constraint.ConstraintLayout>
