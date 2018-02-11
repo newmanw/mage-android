@@ -53,12 +53,12 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
 
         @Override
         protected void removeFromMap() {
-            onMap = visible = false;
+            onMap = false;
         }
 
         @Override
         protected void show() {
-            onMap = visible = true;
+            visible = true;
         }
 
         @Override
@@ -483,6 +483,28 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
         overlayManager.onCacheOverlaysUpdated(update);
 
         verify(onMap).removeFromMap();
+    }
+
+    @Test
+    public void showsOverlayTheFirstTimeOverlayIsAdded() {
+
+        CacheOverlay overlay1 = new CacheOverlayTest.TestCacheOverlay1("overlay 1", "test cache", provider1.getClass());
+        MapCache cache = new MapCache("test cache", provider1.getClass(), new File("test"), setOf(overlay1));
+
+        when(cacheManager.getCaches()).thenReturn(setOf(cache));
+
+        OverlayOnMapManager overlayManager = new OverlayOnMapManager(cacheManager, providers, null);
+
+        assertFalse(overlayManager.isOverlayVisible(overlay1));
+
+        TestOverlayOnMap onMap =  new TestOverlayOnMap(overlayManager);
+        when(provider1.createOverlayOnMapFromCache(overlay1, overlayManager)).thenReturn(onMap);
+
+        overlayManager.showOverlay(overlay1);
+
+        assertTrue(overlayManager.isOverlayVisible(overlay1));
+        assertTrue(onMap.isOnMap());
+        assertTrue(onMap.isVisible());
     }
 
     @Test

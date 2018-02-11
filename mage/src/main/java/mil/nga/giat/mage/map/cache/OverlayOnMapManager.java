@@ -247,11 +247,11 @@ public class OverlayOnMapManager implements CacheManager.CacheOverlaysUpdateList
         }
         overlaysOnMap.put(cacheOverlay, onMap);
 
-        if (onMap.isOnMap()) {
-            onMap.show();
-        }
-        else {
+        if (!onMap.isOnMap()) {
             onMap.addToMap();
+        }
+        if (visible) {
+            onMap.show();
         }
     }
 }
