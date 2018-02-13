@@ -109,6 +109,7 @@ import mil.nga.giat.mage.sdk.datastore.location.LocationProperty;
 import mil.nga.giat.mage.sdk.datastore.observation.Observation;
 import mil.nga.giat.mage.sdk.datastore.observation.ObservationHelper;
 import mil.nga.giat.mage.sdk.datastore.staticfeature.StaticFeatureHelper;
+import mil.nga.giat.mage.sdk.datastore.user.Event;
 import mil.nga.giat.mage.sdk.datastore.user.EventHelper;
 import mil.nga.giat.mage.sdk.datastore.user.User;
 import mil.nga.giat.mage.sdk.datastore.user.UserHelper;
@@ -201,7 +202,8 @@ public class MapFragment extends Fragment implements
 	private View searchLayout;
 	private SearchView searchView;
 	private Location location;
-	private User currentUser = null;
+	private User currentUser;
+	private long currentEventId = -1;
 	private OnLocationChangedListener locationChangedListener;
 
 	private PointCollection<Observation> observations;
@@ -286,7 +288,17 @@ public class MapFragment extends Fragment implements
 		}
 
 		mapView.onResume();
-		mapView.getMapAsync(this);
+		if (map == null) {
+			mapView.getMapAsync(this);
+		}
+		else {
+			getView().post(new Runnable() {
+				@Override
+				public void run() {
+					onMapReady(map);
+				}
+			});
+		}
 
 		((AppCompatActivity) getActivity()).getSupportActionBar().setSubtitle(getFilterTitle());
 
@@ -507,15 +519,30 @@ public class MapFragment extends Fragment implements
 			map.setOnInfoWindowClickListener(this);
 			map.setOnCameraMoveStartedListener(this);
 			map.setOnCameraIdleListener(this);
-			observations = new ObservationMarkerCollection(mage, map);
-			historicLocations = new MyHistoricalLocationMarkerCollection(mage, map);
-			locations = new LocationMarkerCollection(mage, map);
-			ObservationHelper.getInstance(mage).addListener(this);
-			LocationHelper.getInstance(mage).addListener(this);
-			StaticFeatureHelper.getInstance(mage).addListener(this);
-			UserHelper.getInstance(mage).addListener(this);
+
 			mapOverlayManager = CacheManager.getInstance().createMapManager(map);
+
+			observations = new ObservationMarkerCollection(mage, map);
+			locations = new LocationMarkerCollection(mage, map);
+			historicLocations = new MyHistoricalLocationMarkerCollection(mage, map);
 		}
+
+		Event currentEvent = EventHelper.getInstance(getActivity()).getCurrentEvent();
+		long currentEventId = this.currentEventId;
+		if (currentEvent != null) {
+			currentEventId = currentEvent.getId();
+		}
+		if (this.currentEventId != currentEventId) {
+			this.currentEventId = currentEventId;
+			observations.clear();
+			locations.clear();
+			historicLocations.clear();
+		}
+
+		ObservationHelper.getInstance(mage).addListener(this);
+		LocationHelper.getInstance(mage).addListener(this);
+		StaticFeatureHelper.getInstance(mage).addListener(this);
+		UserHelper.getInstance(mage).addListener(this);
 
 		ObservationLoadTask observationLoad = new ObservationLoadTask(mage, observations);
 		observationLoad.addFilter(getTemporalFilter("timestamp", R.string.activeTimeFilterKey, OBSERVATION_FILTER_TYPE));
