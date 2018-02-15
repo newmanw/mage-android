@@ -15,7 +15,6 @@ import android.widget.ImageView;
 import android.widget.Spinner;
 import android.widget.TextView;
 
-import com.google.android.gms.maps.GoogleMap;
 import com.woxthebox.draglistview.DragItemAdapter;
 import com.woxthebox.draglistview.DragListView;
 
@@ -214,7 +213,7 @@ public class MapDataFragment extends Fragment implements OverlayOnMapManager.Ove
 
         @Override
         public MapDataControlViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
-            View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.cache_overlay_list_item, parent, false);
+            View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.map_data_control_item, parent, false);
             return new MapDataControlViewHolder(view);
         }
 
