@@ -10,6 +10,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.content.res.Resources;
+import android.graphics.Point;
 import android.graphics.drawable.Drawable;
 import android.location.Location;
 import android.location.LocationListener;
@@ -141,7 +142,8 @@ public class MapFragment extends Fragment implements
         IObservationEventListener,
         ILocationEventListener,
         IStaticFeatureEventListener,
-        IUserEventListener
+        IUserEventListener,
+		MapDataFragment.MapDataListener
 {
 
 	private static final String LOG_NAME = MapFragment.class.getName();
@@ -229,16 +231,19 @@ public class MapFragment extends Fragment implements
 
 	private boolean layersPanelVisible = false;
 	private boolean searchInputVisible = false;
+	private boolean mgrsVisible = false;
+	private boolean mgrsDetailsVisible = false;
 	private boolean followMe = false;
 
-	private boolean showMgrs;
 	private TileOverlay mgrsTileOverlay;
 	private BottomSheetBehavior mgrsBottomSheetBehavior;
-	private View mgrsBottomSheet;
+	private View mgrsPanel;
+	private View mgrsMinimal;
+	private View mgrsDetails;
 	private View mgrsCursor;
 	private TextView mgrsTextView;
 	private TextView mgrsGzdTextView;
-	private TextView mgrs100dKmTextView;
+	private TextView mgrs100KmTextView;
 	private TextView mgrsEastingTextView;
 	private TextView mgrsNorthingTextView;
 
@@ -259,6 +264,9 @@ public class MapFragment extends Fragment implements
 			.compassEnabled(false);
 		mapView = new MapView(getContext(), opts);
 		mapView.onCreate(savedInstanceState);
+
+		mgrsVisible = preferences.getBoolean(getResources().getString(R.string.showMGRSKey), false);
+		mgrsDetailsVisible = preferences.getBoolean(getResources().getString(R.string.showMGRSDetailsKey), false);
 
 		setHasOptionsMenu(true);
 	}
@@ -303,11 +311,6 @@ public class MapFragment extends Fragment implements
 		((AppCompatActivity) getActivity()).getSupportActionBar().setSubtitle(getFilterTitle());
 
 		searchView.setOnQueryTextListener(this);
-
-		// Don't wait for map to show up to init these values, otherwise bottomsheet will jitter
-		showMgrs = preferences.getBoolean(getResources().getString(R.string.showMGRSKey), false);
-		mgrsBottomSheetBehavior.setHideable(showMgrs ? false : true);
-		mgrsBottomSheetBehavior.setState(showMgrs ? BottomSheetBehavior.STATE_COLLAPSED : BottomSheetBehavior.STATE_HIDDEN);
 	}
 
 	@Override
@@ -341,10 +344,10 @@ public class MapFragment extends Fragment implements
 			map.setLocationSource(null);
 		}
 
-		// TODO: put in onDestroyView() with other map clearing instead?  original commit had it here
-        if (mgrsTileOverlay != null) {
-            mgrsTileOverlay.remove();
-        }
+		preferences.edit()
+			.putBoolean(getString(R.string.showMGRSKey), mgrsVisible)
+			.putBoolean(getString(R.string.showMGRSDetailsKey), mgrsDetailsVisible)
+			.apply();
 
 		getView().removeCallbacks(refreshObservationsTask);
 		getView().removeCallbacks(refreshLocationsTask);
@@ -389,6 +392,9 @@ public class MapFragment extends Fragment implements
 			searchMarkers.clear();
 		}
 
+		staticGeometryCollection.clear();
+		staticGeometryCollection = null;
+
 		map.setOnMapClickListener(null);
 		map.setOnMarkerClickListener(null);
 		map.setOnMapLongClickListener(null);
@@ -405,10 +411,9 @@ public class MapFragment extends Fragment implements
 
 		mapOverlayManager.dispose();
 
-		staticGeometryCollection.clear();
-		staticGeometryCollection = null;
 		currentUser = null;
 		map = null;
+
 		mapView.onDestroy();
 	}
 
@@ -466,24 +471,29 @@ public class MapFragment extends Fragment implements
 		searchView.setIconified(false);
 		searchView.clearFocus();
 
-        mgrsBottomSheet = constraintLayout.findViewById(R.id.mgrs_panel);
-        mgrsBottomSheetBehavior = BottomSheetBehavior.from(mgrsBottomSheet);
+        mgrsPanel = constraintLayout.findViewById(R.id.mgrs_panel);
+        mgrsMinimal = mgrsPanel.findViewById(R.id.mgrs_panel_minimal);
+        mgrsDetails = mgrsPanel.findViewById(R.id.mgrs_panel_details);
         mgrsCursor = constraintLayout.findViewById(R.id.mgrs_grid_cursor);
-        mgrsTextView = (TextView) mgrsBottomSheet.findViewById(R.id.mgrs_code);
-        mgrsGzdTextView = (TextView) mgrsBottomSheet.findViewById(R.id.mgrs_gzd);
-        mgrs100dKmTextView = (TextView) mgrsBottomSheet.findViewById(R.id.mgrs_100km);
-        mgrsEastingTextView = (TextView) mgrsBottomSheet.findViewById(R.id.mgrs_easting);
-        mgrsNorthingTextView = (TextView) mgrsBottomSheet.findViewById(R.id.mgrs_northing);
+        mgrsTextView = (TextView) mgrsPanel.findViewById(R.id.mgrs_code);
+        mgrsGzdTextView = (TextView) mgrsPanel.findViewById(R.id.mgrs_gzd);
+        mgrs100KmTextView = (TextView) mgrsPanel.findViewById(R.id.mgrs_100km);
+        mgrsEastingTextView = (TextView) mgrsPanel.findViewById(R.id.mgrs_easting);
+        mgrsNorthingTextView = (TextView) mgrsPanel.findViewById(R.id.mgrs_northing);
 
         mapWrapper = (FrameLayout) constraintLayout.findViewById(R.id.map_wrapper);
 		mapWrapper.addView(mapView);
 
 		if (layersPanelVisible) {
-			showLayersPanel();
+			showMapDataPanel();
 		}
 		else if (searchInputVisible) {
 		    showSearchInput();
         }
+
+		if (mgrsVisible) {
+			showMgrs();
+		}
 
 		container.addView(constraintLayout);
 		return container;
@@ -581,9 +591,8 @@ public class MapFragment extends Fragment implements
 		scheduleMarkerRefresh(refreshLocationsTask);
 		scheduleMarkerRefresh(refreshHistoricLocationsTask);
 
-		mgrsCursor.setVisibility(showMgrs ? View.VISIBLE : View.GONE);
-		if (showMgrs) {
-			mgrsTileOverlay = map.addTileOverlay(new TileOverlayOptions().tileProvider(new MGRSTileProvider(getContext())));
+		if (mgrsVisible) {
+			showMgrsTilesIfMapReady();
 		}
 
 		((AppCompatActivity) getActivity()).getSupportActionBar().setSubtitle(getFilterTitle());
@@ -637,7 +646,7 @@ public class MapFragment extends Fragment implements
 			hideLayersPanel();
 		}
 		else {
-			showLayersPanel();
+			showMapDataPanel();
 		}
     }
 
@@ -646,7 +655,7 @@ public class MapFragment extends Fragment implements
 	}
 
     private boolean isLayersPanelVisible() {
-		return getChildFragmentManager().findFragmentById(R.id.map_overlays_container) != null;
+		return getChildFragmentManager().findFragmentById(R.id.map_data_panel) != null;
 	}
 
     private void showSearchInput() {
@@ -663,23 +672,68 @@ public class MapFragment extends Fragment implements
 		searchLayout.setVisibility(View.GONE);
 	}
 
-    private void showLayersPanel() {
+    private void showMapDataPanel() {
 		hideSearchInput();
 		// TODO: animate layout change with ObjectAnimator on map padding
 		layoutOverlaysExpanded.applyTo(constraintLayout);
-		MapOverlaysFragment overlays = (MapOverlaysFragment) Fragment.instantiate(getActivity(), MapOverlaysFragment.class.getName());
-		overlays.setOverlayManager(mapOverlayManager);
+		MapDataFragment mapDataFragment = (MapDataFragment) Fragment.instantiate(getActivity(), MapDataFragment.class.getName());
+		MapDataFragment.BuiltinDataControlValues builtinDataControlValues = MapDataFragment.BuiltinDataControlValues.create()
+			.baseMapType(map.getMapType())
+			.observationsVisible(observations.isVisible())
+			.locationsVisible(locations.isVisible())
+			.mgrsVisible(mgrsVisible)
+			.finish();
+		mapDataFragment.setDataSources(builtinDataControlValues, mapOverlayManager);
+		mapDataFragment.setMapDataListener(this);
 		FragmentManager fragmentManager = getChildFragmentManager();
-		fragmentManager.beginTransaction().replace(R.id.map_overlays_container, overlays).commit();
+		fragmentManager.beginTransaction().replace(R.id.map_data_panel, mapDataFragment).commit();
 	}
 
 	private void hideLayersPanel() {
 		layoutOverlaysCollapsed.applyTo(constraintLayout);
 		FragmentManager fragmentManager = getChildFragmentManager();
-		Fragment overlays = fragmentManager.findFragmentById(R.id.map_overlays_container);
-		if (overlays != null) {
-			fragmentManager.beginTransaction().remove(overlays).commit();
+		MapDataFragment mapDataFragment = (MapDataFragment) fragmentManager.findFragmentById(R.id.map_data_panel);
+		if (mapDataFragment != null) {
+			mapDataFragment.setMapDataListener(null);
+			fragmentManager.beginTransaction().remove(mapDataFragment).commit();
 		}
+	}
+
+	private void showMgrs() {
+		mgrsPanel.setVisibility(View.VISIBLE);
+		mgrsCursor.setVisibility(View.VISIBLE);
+		showMgrsTilesIfMapReady();
+		mgrsVisible = true;
+	}
+
+	private void showMgrsTilesIfMapReady() {
+		if (map == null) {
+			return;
+		}
+		if (mgrsTileOverlay == null) {
+			mgrsTileOverlay = map.addTileOverlay(new TileOverlayOptions().tileProvider(new MGRSTileProvider(getContext())));
+		}
+		else {
+			mgrsTileOverlay.setVisible(true);
+		}
+		updateMgrs();
+	}
+
+	private void hideMgrs() {
+		mgrsTileOverlay.setVisible(false);
+		mgrsPanel.setVisibility(View.GONE);
+		mgrsCursor.setVisibility(View.GONE);
+		mgrsVisible = false;
+	}
+
+	private void expandMgrs() {
+		mgrsDetails.setVisibility(View.VISIBLE);
+		mgrsDetailsVisible = true;
+	}
+
+	private void collapseMgrs() {
+		mgrsDetails.setVisibility(View.GONE);
+		mgrsDetailsVisible = false;
 	}
 
 	private void onNewObservation() {
@@ -1020,8 +1074,7 @@ public class MapFragment extends Fragment implements
 
 	@Override
 	public void onCameraIdle() {
-		// TODO: anything for followMe?
-		setMgrsCode();
+		updateMgrs();
 	}
 
 	@Override
@@ -1086,14 +1139,40 @@ public class MapFragment extends Fragment implements
 		}
 	}
 
-	private void setMgrsCode() {
-		if (mgrsTileOverlay != null) {
-			LatLng center = map.getCameraPosition().target;
+	@Override
+	public void onBaseMapChanged(MapDataFragment.BuiltinDataControlValues change) {
+		map.setMapType(change.getBaseMapType());
+	}
 
+	@Override
+	public void onObservationsVisibilityChanged(MapDataFragment.BuiltinDataControlValues change) {
+		observations.setVisibility(change.isObservationsVisible());
+	}
+
+	@Override
+	public void onLocationsVisibilityChanged(MapDataFragment.BuiltinDataControlValues change) {
+		locations.setVisibility(change.isLocationsVisible());
+	}
+
+	@Override
+	public void onMgrsVisibilityChanged(MapDataFragment.BuiltinDataControlValues change) {
+		if (change.isMgrsVisible()) {
+			showMgrs();
+		}
+		else {
+			hideMgrs();
+		}
+	}
+
+	private void updateMgrs() {
+		if (map != null) {
+			int centerX = (mgrsCursor.getLeft() + mgrsCursor.getWidth() / 2);
+			int centerY = (mgrsCursor.getTop() + mgrsCursor.getHeight() / 2);
+			LatLng center = map.getProjection().fromScreenLocation(new Point(centerX, centerY));
 			MGRS mgrs = MGRS.from(new mil.nga.mgrs.wgs84.LatLng(center.latitude, center.longitude));
 			mgrsTextView.setText(mgrs.format(5));
 			mgrsGzdTextView.setText(String.format(Locale.getDefault(),"%s%c", mgrs.getZone(), mgrs.getBand()));
-			mgrs100dKmTextView.setText(String.format(Locale.getDefault(),"%c%c", mgrs.getE100k(), mgrs.getN100k()));
+			mgrs100KmTextView.setText(String.format(Locale.getDefault(),"%c%c", mgrs.getE100k(), mgrs.getN100k()));
 			mgrsEastingTextView.setText(String.format(Locale.getDefault(),"%05d", mgrs.getEasting()));
 			mgrsNorthingTextView.setText(String.format(Locale.getDefault(),"%05d", mgrs.getNorthing()));
 		}
@@ -1157,7 +1236,6 @@ public class MapFragment extends Fragment implements
 	private void loadLastMapPosition() {
 		// Check the map type
 		map.setMapType(preferences.getInt(getString(R.string.baseLayerKey), getResources().getInteger(R.integer.baseLayerDefaultValue)));
-
 		// Check the map location and zoom
 		String xyz = preferences.getString(getString(R.string.recentMapXYZKey), getString(R.string.recentMapXYZDefaultValue));
 		if (xyz == null) {

@@ -36,14 +36,15 @@
             android:layout_height="wrap_content"
             android:layout_alignParentTop="true"
             android:layout_toEndOf="@id/mgrs_code_label"
+            android:text="##############"
             style="@style/MGRSPrimary"
-            tools:text="AAAA1234567890"
+            tools:text="AABB1234567890"
             />
 
     </RelativeLayout>
 
     <GridLayout
-        android:id="@+id/mgrs_panel_expanded"
+        android:id="@+id/mgrs_panel_details"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:rowCount="2"
@@ -65,6 +66,7 @@
             android:layout_height="wrap_content"
             android:layout_marginEnd="12dp"
             android:layout_gravity="end"
+            android:text="##"
             style="@style/MGRSDetail"
             tools:text="AA"
             />
@@ -83,6 +85,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="end"
+            android:text="#####"
             style="@style/MGRSDetail"
             tools:text="12345"
             />
@@ -102,8 +105,9 @@
             android:layout_height="wrap_content"
             android:layout_marginEnd="12dp"
             android:layout_gravity="end"
+            android:text="##"
             style="@style/MGRSDetail"
-            tools:text="AA"
+            tools:text="BB"
             />
 
         <TextView
@@ -120,6 +124,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="end"
+            android:text="#####"
             style="@style/MGRSDetail"
             tools:text="67890"
             />

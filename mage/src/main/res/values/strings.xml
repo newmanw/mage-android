@@ -108,8 +108,6 @@
     <string name="feature_overlay_no_content_text">No feature overlays, click the refresh button above to pull all feature overlays from the server.</string>
     <string name="feature_overlay_refresh">You are about to refresh all feature overlays, this could take a while.</string>
     <string name="clear_data_message">You are about to delete the selected data and logout.\n\n Are you sure you want to do this?</string>
-    <string name="overlay_tab_tiles">Map Tiles</string>
-    <string name="overlay_tab_features">Features</string>
 
     <string name="overlay_cache_directory">MapCache</string>
 
@@ -140,5 +138,11 @@
     <string name="location_edit_error_rectangle_min_points">Rectangle must have four points</string>
     <string name="location_edit_error_polygon_kinks">Polygon cannot intersect itself</string>
 
+    <string name="showMGRSDetailsKey">showMGRSDetails</string>
+    <string name="map_data_base_map_label">Base Map Type</string>
+    <string name="map_data_observations_label">Observations</string>
+    <string name="map_data_locations_label">Locations</string>
+    <string name="map_data_mgrs_label">MGRS</string>
+    <string name="map_data_overlays_header">DATA LAYERS</string>
 
 </resources>
