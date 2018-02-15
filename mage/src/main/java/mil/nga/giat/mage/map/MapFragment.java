@@ -433,7 +433,7 @@ public class MapFragment extends Fragment implements
 
 	private void cleanUpForLayoutChange() {
 	    searchInputVisible = isSearchInputVisible();
-	    layersPanelVisible = isLayersPanelVisible();
+	    layersPanelVisible = isMapDataPanelVisible();
 		container.removeAllViews();
 		mapWrapper.removeAllViews();
 		zoomToLocationButton.setOnClickListener(null);
@@ -641,9 +641,9 @@ public class MapFragment extends Fragment implements
 		}
 	}
 
-	private void onLayersPanelToggled() {
-		if (isLayersPanelVisible()) {
-			hideLayersPanel();
+	private void onMapDataPanelToggled() {
+		if (isMapDataPanelVisible()) {
+			hideMapDataPanel();
 		}
 		else {
 			showMapDataPanel();
@@ -654,12 +654,12 @@ public class MapFragment extends Fragment implements
 		return searchLayout.getVisibility() == View.VISIBLE;
 	}
 
-    private boolean isLayersPanelVisible() {
+    private boolean isMapDataPanelVisible() {
 		return getChildFragmentManager().findFragmentById(R.id.map_data_panel) != null;
 	}
 
     private void showSearchInput() {
-		hideLayersPanel();
+		hideMapDataPanel();
 		searchLayout.setVisibility(View.VISIBLE);
 		searchView.requestFocus();
 		InputMethodManager inputMethodManager = (InputMethodManager) getActivity().getSystemService(Activity.INPUT_METHOD_SERVICE);
@@ -689,8 +689,11 @@ public class MapFragment extends Fragment implements
 		fragmentManager.beginTransaction().replace(R.id.map_data_panel, mapDataFragment).commit();
 	}
 
-	private void hideLayersPanel() {
+	private void hideMapDataPanel() {
 		layoutOverlaysCollapsed.applyTo(constraintLayout);
+		if (mgrsVisible) {
+			showMgrs();
+		}
 		FragmentManager fragmentManager = getChildFragmentManager();
 		MapDataFragment mapDataFragment = (MapDataFragment) fragmentManager.findFragmentById(R.id.map_data_panel);
 		if (mapDataFragment != null) {
@@ -1036,7 +1039,7 @@ public class MapFragment extends Fragment implements
 				onSearchToggled();
 				return;
 			case R.id.map_layer_button:
-			    onLayersPanelToggled();
+			    onMapDataPanelToggled();
 				return;
 			case R.id.new_observation_button:
 				onNewObservation();
