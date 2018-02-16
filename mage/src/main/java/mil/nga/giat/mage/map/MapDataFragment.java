@@ -325,6 +325,8 @@ public class MapDataFragment extends Fragment implements OverlayOnMapManager.Ove
         public void onNothingSelected(AdapterView<?> parent) {}
     }
 
+    private static final int LAST_STATIC_CONTROL_POS = StaticControl.values().length - 1;
+
     private DragListView mapControlList;
     private BuiltinDataControlValues builtinDataControlValues;
     private OverlayOnMapManager overlayManager;
@@ -408,13 +410,12 @@ public class MapDataFragment extends Fragment implements OverlayOnMapManager.Ove
 
     @Override
     public boolean canDragItemAtPosition(int dragPosition) {
-        return dragPosition >= StaticControl.values().length;
+        return dragPosition > LAST_STATIC_CONTROL_POS;
     }
 
     @Override
     public boolean canDropItemAtPosition(int dropPosition) {
-        // TODO: in the correct section?
-        return false;
+        return dropPosition > LAST_STATIC_CONTROL_POS;
     }
 
     private void syncDataList() {
