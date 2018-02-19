@@ -420,7 +420,7 @@ public class MapDataFragment extends Fragment implements OverlayOnMapManager.Ove
 
     private void syncDataList() {
         MapDataItemAdapter adapter = (MapDataItemAdapter) mapControlList.getAdapter();
-        List<CacheOverlay> overlays = overlayManager.getOverlays();
+        List<CacheOverlay> overlays = overlayManager.getOverlaysInZOrder();
         List<Object> mapDataItems = new ArrayList<Object>(Arrays.asList(StaticControl.values()));
         mapDataItems.addAll(overlays);
         adapter.setItemList(mapDataItems);

@@ -5,6 +5,7 @@ import com.google.android.gms.maps.model.LatLng;
 
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
@@ -16,7 +17,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import de.bechte.junit.runners.context.HierarchicalContextRunner;
+
+import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.not;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.is;
@@ -34,6 +39,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.withSettings;
 
+@RunWith(HierarchicalContextRunner.class)
 public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermission {
 
     static class TestOverlayOnMap extends OverlayOnMapManager.OverlayOnMap {
@@ -41,6 +47,7 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
         boolean visible;
         boolean onMap;
         boolean disposed;
+        int zIndex;
 
         TestOverlayOnMap(OverlayOnMapManager manager) {
             manager.super();
@@ -68,7 +75,11 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
 
         @Override
         protected void setZIndex(int z) {
+            zIndex = z;
+        }
 
+        int getZIndex() {
+            return zIndex;
         }
 
         @Override
@@ -85,6 +96,7 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
         protected boolean isVisible() {
             return visible;
         }
+
 
         @Override
         protected String onMapClick(LatLng latLng, MapView mapView) {
@@ -117,20 +129,20 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
         }
     }
 
-    private static OverlayOnMapManager.OverlayOnMap mockOverlayOnMap(OverlayOnMapManager overlayManager) {
+    static OverlayOnMapManager.OverlayOnMap mockOverlayOnMap(OverlayOnMapManager overlayManager) {
         return mock(OverlayOnMapManager.OverlayOnMap.class, withSettings().useConstructor(overlayManager));
     }
 
     @SafeVarargs
-    private static <T> Set<T> setOf(T... things) {
+    static <T> Set<T> setOf(T... things) {
         return Collections.unmodifiableSet(new HashSet<>(Arrays.asList(things)));
     }
 
 
-    private CacheManager cacheManager;
-    private CacheOverlayTest.TestCacheProvider1 provider1;
-    private CacheOverlayTest.TestCacheProvider2 provider2;
-    private List<CacheProvider> providers;
+    CacheManager cacheManager;
+    CacheOverlayTest.TestCacheProvider1 provider1;
+    CacheOverlayTest.TestCacheProvider2 provider2;
+    List<CacheProvider> providers;
 
     @Before
     public void setup() {
@@ -164,8 +176,8 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
 
         overlayManager.onCacheOverlaysUpdated(update);
 
-        assertThat(overlayManager.getOverlays().size(), is(2));
-        assertThat(overlayManager.getOverlays(), hasItems(overlay1, overlay2));
+        assertThat(overlayManager.getOverlaysInZOrder().size(), is(2));
+        assertThat(overlayManager.getOverlaysInZOrder(), hasItems(overlay1, overlay2));
     }
 
     @Test
@@ -179,13 +191,13 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
 
         OverlayOnMapManager overlayManager = new OverlayOnMapManager(cacheManager, providers, null);
 
-        assertThat(overlayManager.getOverlays().size(), is(2));
-        assertThat(overlayManager.getOverlays(), hasItems(overlay1, overlay2));
+        assertThat(overlayManager.getOverlaysInZOrder().size(), is(2));
+        assertThat(overlayManager.getOverlaysInZOrder(), hasItems(overlay1, overlay2));
 
         CacheManager.CacheOverlayUpdate update = cacheManager.new CacheOverlayUpdate(this, Collections.<MapCache>emptySet(), Collections.<MapCache>emptySet(), setOf(mapCache));
         overlayManager.onCacheOverlaysUpdated(update);
 
-        assertTrue(overlayManager.getOverlays().isEmpty());
+        assertTrue(overlayManager.getOverlaysInZOrder().isEmpty());
     }
 
     @Test
@@ -199,7 +211,7 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
 
         OverlayOnMapManager overlayManager = new OverlayOnMapManager(cacheManager, providers, null);
 
-        List<CacheOverlay> overlays = overlayManager.getOverlays();
+        List<CacheOverlay> overlays = overlayManager.getOverlaysInZOrder();
         assertThat(overlays.size(), is(2));
         assertThat(overlays, hasItems(overlay1, overlay2));
 
@@ -213,7 +225,7 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
 
         overlayManager.onCacheOverlaysUpdated(update);
 
-        overlays = overlayManager.getOverlays();
+        overlays = overlayManager.getOverlaysInZOrder();
         assertThat(overlays.size(), is(1));
         assertThat(overlays, hasItem(overlay2));
     }
@@ -228,8 +240,8 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
 
         OverlayOnMapManager overlayManager = new OverlayOnMapManager(cacheManager, providers, null);
 
-        assertThat(overlayManager.getOverlays().size(), is(1));
-        assertThat(overlayManager.getOverlays(), hasItem(overlay1));
+        assertThat(overlayManager.getOverlaysInZOrder().size(), is(1));
+        assertThat(overlayManager.getOverlaysInZOrder(), hasItem(overlay1));
 
 
         CacheOverlay overlay2 = new CacheOverlayTest.TestCacheOverlay1("test overlay 2", "test cache", provider1.getClass());
@@ -238,8 +250,8 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
             this, Collections.<MapCache>emptySet(), setOf(cache), Collections.<MapCache>emptySet());
         overlayManager.onCacheOverlaysUpdated(update);
 
-        assertThat(overlayManager.getOverlays().size(), is(2));
-        assertThat(overlayManager.getOverlays(), hasItems(overlay1, overlay2));
+        assertThat(overlayManager.getOverlaysInZOrder().size(), is(2));
+        assertThat(overlayManager.getOverlaysInZOrder(), hasItems(overlay1, overlay2));
     }
 
     @Test
@@ -252,8 +264,8 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
 
         OverlayOnMapManager overlayManager = new OverlayOnMapManager(cacheManager, providers, null);
 
-        assertThat(overlayManager.getOverlays().size(), is(1));
-        assertThat(overlayManager.getOverlays(), hasItem(overlay1));
+        assertThat(overlayManager.getOverlaysInZOrder().size(), is(1));
+        assertThat(overlayManager.getOverlaysInZOrder(), hasItem(overlay1));
 
         CacheOverlay overlay2 = new CacheOverlayTest.TestCacheOverlay1("overlay 2", "test cache", provider1.getClass());
         cache = new MapCache(cache.getName(), cache.getType(), null, setOf(overlay2));
@@ -261,8 +273,8 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
             this, Collections.<MapCache>emptySet(), setOf(cache), Collections.<MapCache>emptySet());
         overlayManager.onCacheOverlaysUpdated(update);
 
-        assertThat(overlayManager.getOverlays().size(), is(1));
-        assertThat(overlayManager.getOverlays(), hasItems(overlay2));
+        assertThat(overlayManager.getOverlaysInZOrder().size(), is(1));
+        assertThat(overlayManager.getOverlaysInZOrder(), hasItems(overlay2));
     }
 
     @Test
@@ -275,8 +287,8 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
 
         OverlayOnMapManager overlayManager = new OverlayOnMapManager(cacheManager, providers, null);
 
-        assertThat(overlayManager.getOverlays().size(), is(1));
-        assertThat(overlayManager.getOverlays(), hasItem(overlay1));
+        assertThat(overlayManager.getOverlaysInZOrder().size(), is(1));
+        assertThat(overlayManager.getOverlaysInZOrder(), hasItem(overlay1));
 
         CacheOverlay overlay1Updated = new CacheOverlayTest.TestCacheOverlay1(overlay1.getOverlayName(), overlay1.getCacheName(), overlay1.getCacheType());
         cache = new MapCache(cache.getName(), cache.getType(), null, setOf(overlay1Updated));
@@ -284,10 +296,10 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
             this, Collections.<MapCache>emptySet(), setOf(cache), Collections.<MapCache>emptySet());
         overlayManager.onCacheOverlaysUpdated(update);
 
-        assertThat(overlayManager.getOverlays().size(), is(1));
-        assertThat(overlayManager.getOverlays(), hasItem(overlay1));
-        assertThat(overlayManager.getOverlays(), not(hasItem(sameInstance(overlay1))));
-        assertThat(overlayManager.getOverlays(), hasItem(sameInstance(overlay1Updated)));
+        assertThat(overlayManager.getOverlaysInZOrder().size(), is(1));
+        assertThat(overlayManager.getOverlaysInZOrder(), hasItem(overlay1));
+        assertThat(overlayManager.getOverlaysInZOrder(), not(hasItem(sameInstance(overlay1))));
+        assertThat(overlayManager.getOverlaysInZOrder(), hasItem(sameInstance(overlay1Updated)));
     }
 
     @Test
@@ -301,8 +313,8 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
 
         overlayManager.onCacheOverlaysUpdated(update);
 
-        assertThat(overlayManager.getOverlays().size(), is(1));
-        assertThat(overlayManager.getOverlays(), hasItems(overlay1));
+        assertThat(overlayManager.getOverlaysInZOrder().size(), is(1));
+        assertThat(overlayManager.getOverlaysInZOrder(), hasItems(overlay1));
         assertFalse(overlayManager.isOverlayVisible(overlay1));
         verify(provider1, never()).createOverlayOnMapFromCache(any(CacheOverlay.class), Mockito.same(overlayManager));
 
@@ -325,8 +337,8 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
 
         OverlayOnMapManager overlayManager = new OverlayOnMapManager(cacheManager, providers, null);
 
-        assertThat(overlayManager.getOverlays().size(), is(1));
-        assertThat(overlayManager.getOverlays(), hasItem(overlay1));
+        assertThat(overlayManager.getOverlaysInZOrder().size(), is(1));
+        assertThat(overlayManager.getOverlaysInZOrder(), hasItem(overlay1));
         assertFalse(overlayManager.isOverlayVisible(overlay1));
 
         OverlayOnMapManager.OverlayOnMap onMap =  mockOverlayOnMap(overlayManager);
@@ -363,8 +375,8 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
 
         OverlayOnMapManager overlayManager = new OverlayOnMapManager(cacheManager, providers, null);
 
-        assertThat(overlayManager.getOverlays().size(), is(1));
-        assertThat(overlayManager.getOverlays(), hasItem(overlay1));
+        assertThat(overlayManager.getOverlaysInZOrder().size(), is(1));
+        assertThat(overlayManager.getOverlaysInZOrder(), hasItem(overlay1));
         assertFalse(overlayManager.isOverlayVisible(overlay1));
 
         OverlayOnMapManager.OverlayOnMap onMap =  mockOverlayOnMap(overlayManager);
@@ -401,8 +413,8 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
 
         OverlayOnMapManager overlayManager = new OverlayOnMapManager(cacheManager, providers, null);
 
-        assertThat(overlayManager.getOverlays().size(), is(1));
-        assertThat(overlayManager.getOverlays(), hasItem(overlay1));
+        assertThat(overlayManager.getOverlaysInZOrder().size(), is(1));
+        assertThat(overlayManager.getOverlaysInZOrder(), hasItem(overlay1));
         assertFalse(overlayManager.isOverlayVisible(overlay1));
 
         OverlayOnMapManager.OverlayOnMap onMap =  mockOverlayOnMap(overlayManager);
@@ -437,8 +449,8 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
 
         OverlayOnMapManager overlayManager = new OverlayOnMapManager(cacheManager, providers, null);
 
-        assertThat(overlayManager.getOverlays().size(), is(2));
-        assertThat(overlayManager.getOverlays(), hasItems(overlay1, overlay2));
+        assertThat(overlayManager.getOverlaysInZOrder().size(), is(2));
+        assertThat(overlayManager.getOverlaysInZOrder(), hasItems(overlay1, overlay2));
 
         OverlayOnMapManager.OverlayOnMap onMap =  mockOverlayOnMap(overlayManager);
         when(provider1.createOverlayOnMapFromCache(overlay1, overlayManager)).thenReturn(onMap);
@@ -467,8 +479,8 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
 
         OverlayOnMapManager overlayManager = new OverlayOnMapManager(cacheManager, providers, null);
 
-        assertThat(overlayManager.getOverlays().size(), is(2));
-        assertThat(overlayManager.getOverlays(), hasItems(overlay1, overlay2));
+        assertThat(overlayManager.getOverlaysInZOrder().size(), is(2));
+        assertThat(overlayManager.getOverlaysInZOrder(), hasItems(overlay1, overlay2));
 
         OverlayOnMapManager.OverlayOnMap onMap =  mockOverlayOnMap(overlayManager);
         when(provider1.createOverlayOnMapFromCache(overlay1, overlayManager)).thenReturn(onMap);
@@ -520,8 +532,8 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
 
         OverlayOnMapManager overlayManager = new OverlayOnMapManager(cacheManager, providers, null);
 
-        assertThat(overlayManager.getOverlays().size(), is(2));
-        assertThat(overlayManager.getOverlays(), hasItems(overlay1, overlay2));
+        assertThat(overlayManager.getOverlaysInZOrder().size(), is(2));
+        assertThat(overlayManager.getOverlaysInZOrder(), hasItems(overlay1, overlay2));
 
         OverlayOnMapManager.OverlayOnMap onMap1 = mockOverlayOnMap(overlayManager);
         OverlayOnMapManager.OverlayOnMap onMap2 = mockOverlayOnMap(overlayManager);
@@ -550,12 +562,6 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
     }
 
     @Test
-    public void behavesWhenTwoOverlaysFromDifferentCachesHaveTheSameName() {
-
-        fail("unimplemented");
-    }
-
-    @Test
     public void behavesWhenTwoOverlaysAndTheirCachesHaveTheSameNames() {
 
         fail("unimplemented");
@@ -568,37 +574,7 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
     }
 
     @Test
-    public void updatesZOrder() {
-
-        Set<CacheOverlay> overlays = setOf((CacheOverlay)
-            new CacheOverlayTest.TestCacheOverlay1("o0", "c1", provider1.getClass()),
-            new CacheOverlayTest.TestCacheOverlay1("o1", "c1", provider1.getClass()),
-            new CacheOverlayTest.TestCacheOverlay1("o2", "c1", provider1.getClass()),
-            new CacheOverlayTest.TestCacheOverlay1("o3", "c1", provider1.getClass())
-        );
-        MapCache cache = new MapCache("c1", provider1.getClass(), null, overlays);
-        when(cacheManager.getCaches()).thenReturn(setOf(cache));
-        final OverlayOnMapManager overlayManager = new OverlayOnMapManager(cacheManager, providers, null);
-
-
-
-        when(provider1.createOverlayOnMapFromCache(any(CacheOverlay.class), same(overlayManager))).then(new Answer<OverlayOnMapManager.OverlayOnMap>() {
-            @Override
-            public OverlayOnMapManager.OverlayOnMap answer(InvocationOnMock invocation) throws Throwable {
-                OverlayOnMapManager.OverlayOnMap onMap = mockOverlayOnMap(overlayManager);
-                return null;
-            }
-        });
-        overlayManager.changeZOrder(0, 1);
-
-        assertThat(overlayManager.getOverlays().get(0).getOverlayName(), is("o1"));
-        assertThat(overlayManager.getOverlays().get(1).getOverlayName(), is("o2"));
-
-        fail("unimplemented");
-    }
-
-    @Test
-    public void forwardsMapClicksToOverlays() {
+    public void forwardsMapClicksToOverlaysInZOrder() {
 
         fail("unimplemented");
     }
@@ -661,5 +637,115 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
         verify(onMap2).dispose();
         verify(onMap3).removeFromMap();
         verify(onMap3).dispose();
+    }
+
+    public class ZOrderTests {
+
+        private CacheOverlay c1o1;
+        private CacheOverlay c1o2;
+        private CacheOverlay c1o3;
+        private CacheOverlay c2o1;
+        private CacheOverlay c2o2;
+        private MapCache cache1;
+        private MapCache cache2;
+
+        @Before
+        public void setup() {
+
+            c1o1 = new CacheOverlayTest.TestCacheOverlay1("c1.1", "c1", provider1.getClass());
+            c1o2 = new CacheOverlayTest.TestCacheOverlay1("c1.2", "c1", provider1.getClass());
+            c1o3 = new CacheOverlayTest.TestCacheOverlay1("c1.3", "c1", provider1.getClass());
+            cache1 = new MapCache("c1", provider1.getClass(), null, setOf(c1o1, c1o2, c1o3));
+
+            c2o1 = new CacheOverlayTest.TestCacheOverlay2("c2.0", "c2", provider2.getClass());
+            c2o2 = new CacheOverlayTest.TestCacheOverlay2("c2.1", "c2", provider2.getClass());
+            cache2 = new MapCache("c2", provider2.getClass(), null, setOf(c2o2, c2o1));
+
+            when(cacheManager.getCaches()).thenReturn(setOf(cache1, cache2));
+        }
+
+        @Test
+        public void returnsModifiableCopyOfOverlayZOrder() {
+
+            OverlayOnMapManager overlayManager = new OverlayOnMapManager(cacheManager, providers, null);
+            List<CacheOverlay> orderModified = overlayManager.getOverlaysInZOrder();
+            Collections.reverse(orderModified);
+            List<CacheOverlay> orderUnmodified = overlayManager.getOverlaysInZOrder();
+
+            assertThat(orderUnmodified, not(sameInstance(orderModified)));
+            assertThat(orderUnmodified, not(contains(orderModified.toArray())));
+            assertThat(orderUnmodified.get(0), sameInstance(orderModified.get(orderModified.size() - 1)));
+        }
+
+        @Test
+        public void initializesOverlaysOnMapWithProperZOrder() {
+
+            OverlayOnMapManager overlayManager = new OverlayOnMapManager(cacheManager, providers, null);
+            List<CacheOverlay> order = overlayManager.getOverlaysInZOrder();
+            int c1o1z = order.indexOf(c1o1);
+            int c2o1z = order.indexOf(c2o1);
+
+            TestOverlayOnMap c1o1OnMap = new TestOverlayOnMap(overlayManager);
+            TestOverlayOnMap c2o1OnMap = new TestOverlayOnMap(overlayManager);
+            when(provider1.createOverlayOnMapFromCache(c1o1, overlayManager)).thenReturn(c1o1OnMap);
+            when(provider2.createOverlayOnMapFromCache(c2o1, overlayManager)).thenReturn(c2o1OnMap);
+
+            overlayManager.showOverlay(c1o1);
+            overlayManager.showOverlay(c2o1);
+
+            assertThat(c1o1OnMap.getZIndex(), is(c1o1z));
+            assertThat(c2o1OnMap.getZIndex(), is(c2o1z));
+        }
+
+        @Test
+        public void setsComprehensiveZOrderFromList() {
+
+            OverlayOnMapManager overlayManager = new OverlayOnMapManager(cacheManager, providers, null);
+            List<CacheOverlay> order = overlayManager.getOverlaysInZOrder();
+            Collections.reverse(order);
+            overlayManager.setZOrder(order);
+            List<CacheOverlay> orderMod = overlayManager.getOverlaysInZOrder();
+
+            assertThat(orderMod, equalTo(order));
+        }
+
+        @Test
+        public void doesNotSetZOrderIfNewOrderHasDifferingElements() {
+
+            OverlayOnMapManager overlayManager = new OverlayOnMapManager(cacheManager, providers, null);
+            List<CacheOverlay> invalidOrder = overlayManager.getOverlaysInZOrder();
+            invalidOrder.set(0, new CacheOverlayTest.TestCacheOverlay1("c1.1.tainted", "c1", provider1.getClass()));
+            overlayManager.setZOrder(invalidOrder);
+
+            List<CacheOverlay> unchangedOrder = overlayManager.getOverlaysInZOrder();
+
+            assertThat(unchangedOrder, not(equalTo(invalidOrder)));
+            assertThat(unchangedOrder, not(hasItem(invalidOrder.get(0))));
+        }
+
+        @Test
+        public void movesTopZOrderToLowerZOrder() {
+
+            final OverlayOnMapManager overlayManager = new OverlayOnMapManager(cacheManager, providers, null);
+
+            when(provider1.createOverlayOnMapFromCache(any(CacheOverlay.class), same(overlayManager))).then(new Answer<OverlayOnMapManager.OverlayOnMap>() {
+                @Override
+                public OverlayOnMapManager.OverlayOnMap answer(InvocationOnMock invocation) throws Throwable {
+                    OverlayOnMapManager.OverlayOnMap onMap = mockOverlayOnMap(overlayManager);
+                    return onMap;
+                }
+            });
+            overlayManager.changeZOrder(0, 1);
+
+            assertThat(overlayManager.getOverlaysInZOrder().get(0).getOverlayName(), is("o1"));
+            assertThat(overlayManager.getOverlaysInZOrder().get(1).getOverlayName(), is("o2"));
+
+            fail("unimplemented");
+        }
+
+        @Test
+        public void movesLowerToTop() {
+
+        }
     }
 }
