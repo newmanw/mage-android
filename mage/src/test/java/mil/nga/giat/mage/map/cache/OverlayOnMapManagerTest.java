@@ -710,6 +710,49 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
         }
 
         @Test
+        public void setsZOrderOfOverlaysOnMapFromComprehensiveUpdate() {
+
+            OverlayOnMapManager overlayManager = new OverlayOnMapManager(cacheManager, providers, null);
+            List<CacheOverlay> order = overlayManager.getOverlaysInZOrder();
+            int c1o1z = order.indexOf(c1o1);
+            int c2o1z = order.indexOf(c2o1);
+            int c2o2z = order.indexOf(c2o2);
+            TestOverlayOnMap c1o1OnMap = new TestOverlayOnMap(overlayManager);
+            TestOverlayOnMap c2o1OnMap = new TestOverlayOnMap(overlayManager);
+            TestOverlayOnMap c2o2OnMap = new TestOverlayOnMap(overlayManager);
+
+            when(provider1.createOverlayOnMapFromCache(c1o1, overlayManager)).thenReturn(c1o1OnMap);
+            when(provider2.createOverlayOnMapFromCache(c2o1, overlayManager)).thenReturn(c2o1OnMap);
+            when(provider2.createOverlayOnMapFromCache(c2o2, overlayManager)).thenReturn(c2o2OnMap);
+
+            overlayManager.showOverlay(c1o1);
+            overlayManager.showOverlay(c2o1);
+            overlayManager.showOverlay(c2o2);
+
+            assertThat(c1o1OnMap.getZIndex(), is(c1o1z));
+            assertThat(c2o1OnMap.getZIndex(), is(c2o1z));
+            assertThat(c2o2OnMap.getZIndex(), is(c2o2z));
+
+            int c1o1zMod = c2o1z;
+            int c2o1zMod = c2o2z;
+            int c2o2zMod = c1o1z;
+            order.set(c1o1zMod, c1o1);
+            order.set(c2o1zMod, c2o1);
+            order.set(c2o2zMod, c2o2);
+
+            overlayManager.setZOrder(order);
+            List<CacheOverlay> orderMod = overlayManager.getOverlaysInZOrder();
+
+            assertThat(orderMod, equalTo(order));
+            assertThat(orderMod.indexOf(c1o1), is(c1o1zMod));
+            assertThat(orderMod.indexOf(c2o1), is(c2o1zMod));
+            assertThat(orderMod.indexOf(c2o2), is(c2o2zMod));
+            assertThat(c1o1OnMap.getZIndex(), is(c1o1zMod));
+            assertThat(c2o1OnMap.getZIndex(), is(c2o1zMod));
+            assertThat(c2o2OnMap.getZIndex(), is(c2o2zMod));
+        }
+
+        @Test
         public void doesNotSetZOrderIfNewOrderHasDifferingElements() {
 
             OverlayOnMapManager overlayManager = new OverlayOnMapManager(cacheManager, providers, null);

@@ -161,15 +161,15 @@ public class OverlayOnMapManager implements CacheManager.CacheOverlaysUpdateList
     }
 
     /**
-     * Return a modifiable copy of the overlay list in z-order.  The first element
-     * (index 0) in the list is the top-most element.
+     * Return a modifiable copy of the overlay list in z-order.  The last element
+     * (index {@code size() - 1}) in the list is the top-most element.
      */
     public List<CacheOverlay> getOverlaysInZOrder() {
         return new ArrayList<>(overlaysInZOrder);
     }
 
     public void showOverlay(CacheOverlay cacheOverlay) {
-        addOverlayToMap(cacheOverlay, true);
+        addOverlayToMap(cacheOverlay);
     }
 
     public void hideOverlay(CacheOverlay cacheOverlay) {
@@ -194,12 +194,6 @@ public class OverlayOnMapManager implements CacheManager.CacheOverlaysUpdateList
         }
     }
 
-    public void zoomToOverlay(CacheOverlay cacheOverlay) {
-        addOverlayToMap(cacheOverlay, true);
-        OverlayOnMap onMap = overlaysOnMap.get(cacheOverlay);
-        onMap.zoomMapToBoundingBox();
-    }
-
     public void setZOrder(List<CacheOverlay> order) {
         if (order.size() != overlaysInZOrder.size()) {
             return;
@@ -220,6 +214,14 @@ public class OverlayOnMapManager implements CacheManager.CacheOverlaysUpdateList
             return;
         }
         this.overlaysInZOrder = overlaysInZOrder;
+        int zIndex = 0;
+        for (CacheOverlay overlay : this.overlaysInZOrder) {
+            OverlayOnMap onMap = overlaysOnMap.get(overlay);
+            if (onMap != null) {
+                onMap.setZIndex(zIndex);
+            }
+            zIndex += 1;
+        }
     }
 
     public void changeZOrder(int fromPosition, int toPosition) {
@@ -255,7 +257,7 @@ public class OverlayOnMapManager implements CacheManager.CacheOverlaysUpdateList
         }
         overlaysInZOrder.set(position, updatedOverlay);
         if (removeFromMapReturningVisibility(currentOverlay)) {
-            addOverlayToMap(updatedOverlay, true);
+            addOverlayToMapAtPosition(position);
         }
     }
 
@@ -263,19 +265,25 @@ public class OverlayOnMapManager implements CacheManager.CacheOverlaysUpdateList
 
     }
 
-    private void addOverlayToMap(CacheOverlay cacheOverlay, boolean visible) {
-        OverlayOnMap onMap = overlaysOnMap.remove(cacheOverlay);
-        if (onMap == null) {
-            CacheProvider provider = providers.get(cacheOverlay.getCacheType());
-            onMap = provider.createOverlayOnMapFromCache(cacheOverlay, this);
+    private void addOverlayToMap(CacheOverlay overlay) {
+        int position = overlaysInZOrder.indexOf(overlay);
+        if (position > -1) {
+            addOverlayToMapAtPosition(position);
         }
-        overlaysOnMap.put(cacheOverlay, onMap);
+    }
 
+    private void addOverlayToMapAtPosition(int position) {
+        CacheOverlay overlay = overlaysInZOrder.get(position);
+        OverlayOnMap onMap = overlaysOnMap.remove(overlay);
+        if (onMap == null) {
+            CacheProvider provider = providers.get(overlay.getCacheType());
+            onMap = provider.createOverlayOnMapFromCache(overlay, this);
+            onMap.setZIndex(position);
+        }
+        overlaysOnMap.put(overlay, onMap);
         if (!onMap.isOnMap()) {
             onMap.addToMap();
         }
-        if (visible) {
-            onMap.show();
-        }
+        onMap.show();
     }
 }
