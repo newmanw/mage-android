@@ -753,6 +753,39 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
         }
 
         @Test
+        public void setsZOrderOfHiddenOverlayOnMapFromComprehensiveUpdate() {
+
+            OverlayOnMapManager overlayManager = new OverlayOnMapManager(cacheManager, providers, null);
+            List<CacheOverlay> order = overlayManager.getOverlaysInZOrder();
+            int c1o1z = order.indexOf(c1o1);
+            int c2o1z = order.indexOf(c2o1);
+            TestOverlayOnMap c1o1OnMap = new TestOverlayOnMap(overlayManager);
+            TestOverlayOnMap c2o1OnMap = new TestOverlayOnMap(overlayManager);
+
+            when(provider1.createOverlayOnMapFromCache(c1o1, overlayManager)).thenReturn(c1o1OnMap);
+            when(provider2.createOverlayOnMapFromCache(c2o1, overlayManager)).thenReturn(c2o1OnMap);
+
+            overlayManager.showOverlay(c1o1);
+            overlayManager.showOverlay(c2o1);
+
+            assertThat(c1o1OnMap.getZIndex(), is(c1o1z));
+            assertThat(c2o1OnMap.getZIndex(), is(c2o1z));
+
+            overlayManager.hideOverlay(c1o1);
+            Collections.swap(order, c1o1z, c2o1z);
+            overlayManager.setZOrder(order);
+            List<CacheOverlay> orderMod = overlayManager.getOverlaysInZOrder();
+
+            assertThat(orderMod, equalTo(order));
+            assertThat(orderMod.indexOf(c1o1), is(c2o1z));
+            assertThat(orderMod.indexOf(c2o1), is(c1o1z));
+            assertTrue(c1o1OnMap.isOnMap());
+            assertFalse(c1o1OnMap.isVisible());
+            assertTrue(c2o1OnMap.isOnMap());
+            assertTrue(c2o1OnMap.isVisible());
+        }
+
+        @Test
         public void doesNotSetZOrderIfNewOrderHasDifferingElements() {
 
             OverlayOnMapManager overlayManager = new OverlayOnMapManager(cacheManager, providers, null);
@@ -764,6 +797,19 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
 
             assertThat(unchangedOrder, not(equalTo(invalidOrder)));
             assertThat(unchangedOrder, not(hasItem(invalidOrder.get(0))));
+        }
+
+        @Test
+        public void doesNotSetZOrderIfNewOrderHasDifferentSize() {
+
+            OverlayOnMapManager overlayManager = new OverlayOnMapManager(cacheManager, providers, null);
+            List<CacheOverlay> invalidOrder = overlayManager.getOverlaysInZOrder();
+            invalidOrder.remove(0);
+            overlayManager.setZOrder(invalidOrder);
+
+            List<CacheOverlay> unchangedOrder = overlayManager.getOverlaysInZOrder();
+
+            assertThat(unchangedOrder, not(equalTo(invalidOrder)));
         }
 
         @Test
