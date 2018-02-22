@@ -20,6 +20,7 @@ import com.woxthebox.draglistview.DragListView;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -403,9 +404,15 @@ public class MapDataFragment extends Fragment implements OverlayOnMapManager.Ove
 
     @Override
     public void onItemDragEnded(int fromPosition, int toPosition) {
-        if (fromPosition != toPosition) {
-            overlayManager.moveZIndex(fromPosition, toPosition);
+        // TODO: technically there should be an event dispatched from overlay manager
+        // that z-order changed, but this just assumes the re-ordering worked
+        if (fromPosition == toPosition) {
+            return;
         }
+        int lastIndex = mapControlList.getAdapter().getItemList().size() - 1;
+        int fromReversed = lastIndex - fromPosition;
+        int toReversed = lastIndex - toPosition;
+        overlayManager.moveZIndex(fromReversed, toReversed);
     }
 
     @Override
@@ -421,6 +428,7 @@ public class MapDataFragment extends Fragment implements OverlayOnMapManager.Ove
     private void syncDataList() {
         MapDataItemAdapter adapter = (MapDataItemAdapter) mapControlList.getAdapter();
         List<CacheOverlay> overlays = overlayManager.getOverlaysInZOrder();
+        Collections.reverse(overlays);
         List<Object> mapDataItems = new ArrayList<Object>(Arrays.asList(StaticControl.values()));
         mapDataItems.addAll(overlays);
         adapter.setItemList(mapDataItems);

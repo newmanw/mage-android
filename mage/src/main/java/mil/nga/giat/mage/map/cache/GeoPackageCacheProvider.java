@@ -9,6 +9,9 @@ import android.widget.Toast;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapView;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
+import com.google.android.gms.maps.model.Polygon;
+import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.TileOverlay;
 import com.google.android.gms.maps.model.TileOverlayOptions;
 
@@ -33,6 +36,13 @@ import mil.nga.geopackage.features.user.FeatureRow;
 import mil.nga.geopackage.geom.GeoPackageGeometryData;
 import mil.nga.geopackage.map.geom.GoogleMapShape;
 import mil.nga.geopackage.map.geom.GoogleMapShapeConverter;
+import mil.nga.geopackage.map.geom.MultiMarker;
+import mil.nga.geopackage.map.geom.MultiPolygon;
+import mil.nga.geopackage.map.geom.MultiPolygonMarkers;
+import mil.nga.geopackage.map.geom.MultiPolyline;
+import mil.nga.geopackage.map.geom.MultiPolylineMarkers;
+import mil.nga.geopackage.map.geom.PolygonMarkers;
+import mil.nga.geopackage.map.geom.PolylineMarkers;
 import mil.nga.geopackage.map.tiles.overlay.BoundedOverlay;
 import mil.nga.geopackage.map.tiles.overlay.FeatureOverlay;
 import mil.nga.geopackage.map.tiles.overlay.FeatureOverlayQuery;
@@ -489,6 +499,50 @@ public class GeoPackageCacheProvider implements CacheProvider {
                 overlay.setZIndex(z);
             }
             // TODO: GoogleMapShape needs z-index support
+            for (int i = 0; i < shapesOnMap.size(); i++) {
+                GoogleMapShape shape = shapesOnMap.valueAt(i);
+                Object nativeShape = shape.getShape();
+                switch(shape.getShapeType()) {
+                    case MARKER:
+                        ((Marker)shape.getShape()).setZIndex(zIndex);
+                        break;
+                    case POLYGON:
+                        ((Polygon)shape.getShape()).setZIndex(zIndex);
+                        break;
+                    case POLYLINE:
+                        ((Polyline)shape.getShape()).setZIndex(zIndex);
+                        break;
+                    case MULTI_MARKER:
+                        for (Marker x : ((MultiMarker)shape.getShape()).getMarkers()) {
+                            x.setZIndex(zIndex);
+                        }
+                        break;
+                    case MULTI_POLYLINE:
+                        for (Polyline x : ((MultiPolyline)shape.getShape()).getPolylines()) {
+                            x.setZIndex(zIndex);
+                        }
+                        break;
+                    case MULTI_POLYGON:
+                        for (Polygon x : ((MultiPolygon)shape.getShape()).getPolygons()) {
+                            x.setZIndex(zIndex);
+                        }
+                        break;
+                    case POLYLINE_MARKERS:
+                        ((PolylineMarkers) shape.getShape()).getPolyline().setZIndex(zIndex);
+                        for (Marker x : ((PolylineMarkers) shape.getShape()).getMarkers()) {
+                            x.setZIndex(zIndex);
+                        }
+                        break;
+                    case POLYGON_MARKERS:
+                        break;
+                    case MULTI_POLYLINE_MARKERS:
+                        break;
+                    case MULTI_POLYGON_MARKERS:
+                        break;
+                    case COLLECTION:
+                        break;
+                }
+            }
         }
 
         @Override

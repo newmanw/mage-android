@@ -69,6 +69,27 @@ public class OverlayOnMapManager implements CacheManager.CacheOverlaysUpdateList
         abstract protected void dispose();
     }
 
+    /**
+     * Compute the fractional step necessary to stack {@code count} map objects
+     * within a single integral zoom level.  This is a convenience for {@link CacheProvider}
+     * implementations of {@link OverlayOnMap} to use when setting the integer
+     * {@link OverlayOnMap#setZIndex(int) z-index}.  The implementation can use the
+     * return value to increment the float z-index of {@code count} {@link GoogleMap} objects
+     * logically contained in a single overlay.  For example, if an overlay contains 5 map
+     * objects, such as {@link com.google.android.gms.maps.model.TileOverlay tiles} and
+     * {@link com.google.android.gms.maps.model.Polygon polygons}, and the integer z-index
+     * to set on the overlay is 6, this method will return 1 / (5 + 1), ~= 0.167, and map
+     * objects can have fractional zoom levels (6 + 1 * 0.167), (6 + 2 * 0.167), etc.,
+     * without intruding on the next integral zoom level, 7, which {@link OverlayOnMapManager}
+     * will assign to the next {@link CacheOverlay}/{@link OverlayOnMap} in the
+     * {@link #getOverlaysInZOrder() z-order}.
+     * @param count
+     * @return
+     */
+    public static float zIndexStepForObjectCount(int count) {
+        return 1.0f / (count + 1.0f);
+    }
+
     private static String keyForCache(MapCache cache) {
         return cache.getName() + ":" + cache.getType().getName();
     }
