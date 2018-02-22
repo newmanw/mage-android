@@ -404,7 +404,7 @@ public class MapDataFragment extends Fragment implements OverlayOnMapManager.Ove
     @Override
     public void onItemDragEnded(int fromPosition, int toPosition) {
         if (fromPosition != toPosition) {
-            overlayManager.changeZOrder(fromPosition, toPosition);
+            overlayManager.moveZIndex(fromPosition, toPosition);
         }
     }
 

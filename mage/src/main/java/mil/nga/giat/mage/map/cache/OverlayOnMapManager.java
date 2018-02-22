@@ -202,20 +202,20 @@ public class OverlayOnMapManager implements CacheManager.CacheOverlaysUpdateList
         for (CacheOverlay overlay : overlaysInZOrder) {
             index.put(overlay, overlay);
         }
-        List<CacheOverlay> overlaysInZOrder = new ArrayList<>(this.overlaysInZOrder.size());
+        List<CacheOverlay> targetOrder = new ArrayList<>(overlaysInZOrder.size());
         for (CacheOverlay overlayToMove : order) {
             CacheOverlay target = index.remove(overlayToMove);
             if (target == null) {
                 return;
             }
-            overlaysInZOrder.add(target);
+            targetOrder.add(target);
         }
         if (index.size() > 0) {
             return;
         }
-        this.overlaysInZOrder = overlaysInZOrder;
+        overlaysInZOrder = targetOrder;
         int zIndex = 0;
-        for (CacheOverlay overlay : this.overlaysInZOrder) {
+        for (CacheOverlay overlay : overlaysInZOrder) {
             OverlayOnMap onMap = overlaysOnMap.get(overlay);
             if (onMap != null) {
                 onMap.setZIndex(zIndex);
@@ -224,8 +224,11 @@ public class OverlayOnMapManager implements CacheManager.CacheOverlaysUpdateList
         }
     }
 
-    public void changeZOrder(int fromPosition, int toPosition) {
-
+    public void moveZIndex(int fromPosition, int toPosition) {
+        List<CacheOverlay> order = getOverlaysInZOrder();
+        CacheOverlay target = order.remove(fromPosition);
+        order.add(toPosition, target);
+        setZOrder(order);
     }
 
     public void dispose() {

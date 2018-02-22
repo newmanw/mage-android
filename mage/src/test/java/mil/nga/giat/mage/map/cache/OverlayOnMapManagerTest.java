@@ -7,14 +7,16 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import de.bechte.junit.runners.context.HierarchicalContextRunner;
@@ -31,7 +33,6 @@ import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -657,8 +658,8 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
             c1o3 = new CacheOverlayTest.TestCacheOverlay1("c1.3", "c1", provider1.getClass());
             cache1 = new MapCache("c1", provider1.getClass(), null, setOf(c1o1, c1o2, c1o3));
 
-            c2o1 = new CacheOverlayTest.TestCacheOverlay2("c2.0", "c2", provider2.getClass());
-            c2o2 = new CacheOverlayTest.TestCacheOverlay2("c2.1", "c2", provider2.getClass());
+            c2o1 = new CacheOverlayTest.TestCacheOverlay2("c2.1", "c2", provider2.getClass());
+            c2o2 = new CacheOverlayTest.TestCacheOverlay2("c2.2", "c2", provider2.getClass());
             cache2 = new MapCache("c2", provider2.getClass(), null, setOf(c2o2, c2o1));
 
             when(cacheManager.getCaches()).thenReturn(setOf(cache1, cache2));
@@ -790,13 +791,24 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
 
             OverlayOnMapManager overlayManager = new OverlayOnMapManager(cacheManager, providers, null);
             List<CacheOverlay> invalidOrder = overlayManager.getOverlaysInZOrder();
-            invalidOrder.set(0, new CacheOverlayTest.TestCacheOverlay1("c1.1.tainted", "c1", provider1.getClass()));
+            TestOverlayOnMap firstOnMap = new TestOverlayOnMap(overlayManager);
+            CacheOverlay first = invalidOrder.get(0);
+
+            when(provider1.createOverlayOnMapFromCache(first, overlayManager)).thenReturn(firstOnMap);
+            when(provider2.createOverlayOnMapFromCache(first, overlayManager)).thenReturn(firstOnMap);
+
+            overlayManager.showOverlay(first);
+
+            assertThat(firstOnMap.getZIndex(), is(0));
+
+            invalidOrder.set(1, new CacheOverlayTest.TestCacheOverlay1("c1.1.tainted", "c1", provider1.getClass()));
             overlayManager.setZOrder(invalidOrder);
 
             List<CacheOverlay> unchangedOrder = overlayManager.getOverlaysInZOrder();
 
             assertThat(unchangedOrder, not(equalTo(invalidOrder)));
-            assertThat(unchangedOrder, not(hasItem(invalidOrder.get(0))));
+            assertThat(unchangedOrder, not(hasItem(invalidOrder.get(1))));
+            assertThat(firstOnMap.getZIndex(), is(0));
         }
 
         @Test
@@ -804,37 +816,107 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
 
             OverlayOnMapManager overlayManager = new OverlayOnMapManager(cacheManager, providers, null);
             List<CacheOverlay> invalidOrder = overlayManager.getOverlaysInZOrder();
+            TestOverlayOnMap lastOnMap = new TestOverlayOnMap(overlayManager);
+            int lastZIndex = invalidOrder.size() - 1;
+            CacheOverlay last = invalidOrder.get(lastZIndex);
+
+            when(provider1.createOverlayOnMapFromCache(last, overlayManager)).thenReturn(lastOnMap);
+            when(provider2.createOverlayOnMapFromCache(last, overlayManager)).thenReturn(lastOnMap);
+
+            overlayManager.showOverlay(last);
+
+            assertThat(lastOnMap.getZIndex(), is(lastZIndex));
+
             invalidOrder.remove(0);
             overlayManager.setZOrder(invalidOrder);
 
             List<CacheOverlay> unchangedOrder = overlayManager.getOverlaysInZOrder();
 
             assertThat(unchangedOrder, not(equalTo(invalidOrder)));
+            assertThat(unchangedOrder.size(), is(invalidOrder.size() + 1));
+            assertThat(lastOnMap.getZIndex(), is(lastZIndex));
         }
 
-        @Test
-        public void movesTopZOrderToLowerZOrder() {
+        public class MovingSingleOverlayZIndex {
 
-            final OverlayOnMapManager overlayManager = new OverlayOnMapManager(cacheManager, providers, null);
+            private String qnameOf(CacheOverlay overlay) {
+                return overlay.getCacheName() + ":" + overlay.getOverlayName();
+            }
 
-            when(provider1.createOverlayOnMapFromCache(any(CacheOverlay.class), same(overlayManager))).then(new Answer<OverlayOnMapManager.OverlayOnMap>() {
-                @Override
-                public OverlayOnMapManager.OverlayOnMap answer(InvocationOnMock invocation) throws Throwable {
-                    OverlayOnMapManager.OverlayOnMap onMap = mockOverlayOnMap(overlayManager);
-                    return onMap;
+            OverlayOnMapManager overlayManager;
+            Map<CacheOverlay, TestOverlayOnMap> overlaysOnMap;
+
+            @Before
+            public void addAllOverlaysToMap() {
+                overlayManager = new OverlayOnMapManager(cacheManager, providers, null);
+                overlaysOnMap = new HashMap<>();
+                List<CacheOverlay> orderByName = overlayManager.getOverlaysInZOrder();
+                Collections.sort(orderByName, new Comparator<CacheOverlay>() {
+                    @Override
+                    public int compare(CacheOverlay o1, CacheOverlay o2) {
+                        return qnameOf(o1).compareTo(qnameOf(o2));
+                    }
+                });
+                overlayManager.setZOrder(orderByName);
+                for (CacheOverlay overlay : orderByName) {
+                    TestOverlayOnMap onMap = new TestOverlayOnMap(overlayManager);
+                    overlaysOnMap.put(overlay, onMap);
+                    if (overlay.getCacheType() == provider1.getClass()) {
+                        when(provider1.createOverlayOnMapFromCache(overlay, overlayManager)).thenReturn(onMap);
+                    }
+                    else if (overlay.getCacheType() == provider2.getClass()) {
+                        when(provider2.createOverlayOnMapFromCache(overlay, overlayManager)).thenReturn(onMap);
+                    }
+                    overlayManager.showOverlay(overlay);
                 }
-            });
-            overlayManager.changeZOrder(0, 1);
+            }
 
-            assertThat(overlayManager.getOverlaysInZOrder().get(0).getOverlayName(), is("o1"));
-            assertThat(overlayManager.getOverlaysInZOrder().get(1).getOverlayName(), is("o2"));
+            private void assertZIndexMove(int from, int to) {
+                List<CacheOverlay> order = overlayManager.getOverlaysInZOrder();
+                List<CacheOverlay> expectedOrder = new ArrayList<>(order);
+                CacheOverlay target = expectedOrder.remove(from);
+                expectedOrder.add(to, target);
+                overlayManager.moveZIndex(from, to);
+                order = overlayManager.getOverlaysInZOrder();
+                assertThat(String.format("%d to %d", from, to), order, equalTo(expectedOrder));
+                for (int zIndex = 0; zIndex < expectedOrder.size(); zIndex++) {
+                    CacheOverlay overlay = expectedOrder.get(zIndex);
+                    TestOverlayOnMap onMap = overlaysOnMap.get(overlay);
+                    assertThat(qnameOf(overlay) + " on map", onMap.getZIndex(), is(zIndex));
+                }
+            }
 
-            fail("unimplemented");
-        }
+            @Test
+            public void movesTopToLowerZIndex() {
+                // c1.1, c1.2, c1.3, c2.1, c2.2
+                // c1.1, c1.2, c2.2, c1.3, c2.1
+                assertZIndexMove(4, 2);
+            }
 
-        @Test
-        public void movesLowerToTop() {
+            @Test
+            public void movesTopToBottomZIndex() {
+                assertZIndexMove(4, 0);
+            }
 
+            @Test
+            public void movesBottomToTopZIndex() {
+                assertZIndexMove(0, 4);
+            }
+
+            @Test
+            public void movesBottomToHigherZIndex() {
+                assertZIndexMove(0, 3);
+            }
+
+            @Test
+            public void movesMiddleToLowerZIndex() {
+                assertZIndexMove(2, 1);
+            }
+
+            @Test
+            public void movesMiddleToHigherZIndex() {
+                assertZIndexMove(2, 3);
+            }
         }
     }
 }
