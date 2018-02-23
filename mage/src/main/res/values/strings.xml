@@ -144,5 +144,6 @@
     <string name="map_data_locations_label">Locations</string>
     <string name="map_data_mgrs_label">MGRS</string>
     <string name="map_data_overlays_header">DATA LAYERS</string>
+    <string name="z_index_move_failed">Failed to change stacking order</string>
 
 </resources>

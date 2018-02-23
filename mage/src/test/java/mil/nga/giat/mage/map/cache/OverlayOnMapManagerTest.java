@@ -704,7 +704,9 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
             OverlayOnMapManager overlayManager = new OverlayOnMapManager(cacheManager, providers, null);
             List<CacheOverlay> order = overlayManager.getOverlaysInZOrder();
             Collections.reverse(order);
-            overlayManager.setZOrder(order);
+
+            assertTrue(overlayManager.setZOrder(order));
+
             List<CacheOverlay> orderMod = overlayManager.getOverlaysInZOrder();
 
             assertThat(orderMod, equalTo(order));
@@ -741,7 +743,8 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
             order.set(c2o1zMod, c2o1);
             order.set(c2o2zMod, c2o2);
 
-            overlayManager.setZOrder(order);
+            assertTrue(overlayManager.setZOrder(order));
+
             List<CacheOverlay> orderMod = overlayManager.getOverlaysInZOrder();
 
             assertThat(orderMod, equalTo(order));
@@ -774,7 +777,9 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
 
             overlayManager.hideOverlay(c1o1);
             Collections.swap(order, c1o1z, c2o1z);
-            overlayManager.setZOrder(order);
+
+            assertTrue(overlayManager.setZOrder(order));
+
             List<CacheOverlay> orderMod = overlayManager.getOverlaysInZOrder();
 
             assertThat(orderMod, equalTo(order));
@@ -802,7 +807,8 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
             assertThat(firstOnMap.getZIndex(), is(0));
 
             invalidOrder.set(1, new CacheOverlayTest.TestCacheOverlay1("c1.1.tainted", "c1", provider1.getClass()));
-            overlayManager.setZOrder(invalidOrder);
+
+            assertFalse(overlayManager.setZOrder(invalidOrder));
 
             List<CacheOverlay> unchangedOrder = overlayManager.getOverlaysInZOrder();
 
@@ -828,7 +834,8 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
             assertThat(lastOnMap.getZIndex(), is(lastZIndex));
 
             invalidOrder.remove(0);
-            overlayManager.setZOrder(invalidOrder);
+
+            assertFalse(overlayManager.setZOrder(invalidOrder));
 
             List<CacheOverlay> unchangedOrder = overlayManager.getOverlaysInZOrder();
 
@@ -857,7 +864,9 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
                         return qnameOf(o1).compareTo(qnameOf(o2));
                     }
                 });
-                overlayManager.setZOrder(orderByName);
+
+                assertTrue(overlayManager.setZOrder(orderByName));
+
                 for (CacheOverlay overlay : orderByName) {
                     TestOverlayOnMap onMap = new TestOverlayOnMap(overlayManager);
                     overlaysOnMap.put(overlay, onMap);
@@ -876,7 +885,9 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
                 List<CacheOverlay> expectedOrder = new ArrayList<>(order);
                 CacheOverlay target = expectedOrder.remove(from);
                 expectedOrder.add(to, target);
-                overlayManager.moveZIndex(from, to);
+
+                assertTrue(overlayManager.moveZIndex(from, to));
+
                 order = overlayManager.getOverlaysInZOrder();
                 assertThat(String.format("%d to %d", from, to), order, equalTo(expectedOrder));
                 for (int zIndex = 0; zIndex < expectedOrder.size(); zIndex++) {
@@ -888,8 +899,6 @@ public class OverlayOnMapManagerTest implements CacheManager.CreateUpdatePermiss
 
             @Test
             public void movesTopToLowerZIndex() {
-                // c1.1, c1.2, c1.3, c2.1, c2.2
-                // c1.1, c1.2, c2.2, c1.3, c2.1
                 assertZIndexMove(4, 2);
             }
 

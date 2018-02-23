@@ -14,6 +14,7 @@ import android.widget.CompoundButton;
 import android.widget.ImageView;
 import android.widget.Spinner;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.woxthebox.draglistview.DragItemAdapter;
 import com.woxthebox.draglistview.DragListView;
@@ -369,6 +370,7 @@ public class MapDataFragment extends Fragment implements OverlayOnMapManager.Ove
         mapControlList.setAdapter(new MapDataItemAdapter(), false);
         mapControlList.setDragListListener(this);
         mapControlList.setDragListCallback(this);
+        mapControlList.setSnapDragItemToTouch(false);
         syncDataList();
         return root;
     }
@@ -412,7 +414,10 @@ public class MapDataFragment extends Fragment implements OverlayOnMapManager.Ove
         int lastIndex = mapControlList.getAdapter().getItemList().size() - 1;
         int fromReversed = lastIndex - fromPosition;
         int toReversed = lastIndex - toPosition;
-        overlayManager.moveZIndex(fromReversed, toReversed);
+        if (!overlayManager.moveZIndex(fromReversed, toReversed)) {
+            Toast.makeText(getContext(), R.string.z_index_move_failed, Toast.LENGTH_SHORT).show();
+            syncDataList();
+        }
     }
 
     @Override
