@@ -371,6 +371,8 @@ public class MapDataFragment extends Fragment implements OverlayOnMapManager.Ove
         mapControlList.setDragListListener(this);
         mapControlList.setDragListCallback(this);
         mapControlList.setSnapDragItemToTouch(false);
+        // TODO: add loading status getter to OverlayOnMapManager
+        overlayManager.addOverlayOnMapListener(this);
         syncDataList();
         return root;
     }
