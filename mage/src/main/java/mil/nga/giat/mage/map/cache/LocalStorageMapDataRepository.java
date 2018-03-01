@@ -9,7 +9,6 @@ import android.os.Environment;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -22,7 +21,7 @@ import mil.nga.giat.mage.sdk.utils.MediaUtility;
 import mil.nga.giat.mage.sdk.utils.StorageUtility;
 
 /**
- * Find <code>/MapCache</code> directories in storage roots using {@link StorageUtility},
+ * Find <code>/MapDataResource</code> directories in storage roots using {@link StorageUtility},
  * as well as the application cache directory.
  */
 public class LocalStorageMapDataRepository implements MapDataRepository {
@@ -170,7 +169,7 @@ public class LocalStorageMapDataRepository implements MapDataRepository {
     }
 
     @Override
-    public Set<MapCache> retrieveMapDataResources() {
+    public Set<MapDataResource> retrieveMapDataResources() {
         List<File> dirs = new ArrayList<>();
         Map<StorageUtility.StorageType, File> storageLocations = StorageUtility.getReadableStorageLocations();
         for (File storageLocation : storageLocations.values()) {

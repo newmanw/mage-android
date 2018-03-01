@@ -22,12 +22,12 @@ public abstract class MapLayerDescriptor {
     private final String overlayName;
 
     /**
-     * The {@link MapCache#getName() name} of the cache that contains this overlay's data
+     * The {@link MapDataResource#getName() name} of the cache that contains this overlay's data
      */
     private final String cacheName;
 
     /**
-     * The {@link MapCache#getType() type} of the cache that contains this overlay's data
+     * The {@link MapDataResource#getType() type} of the cache that contains this overlay's data
      */
     private final Class<? extends CacheProvider> cacheType;
 
@@ -46,8 +46,8 @@ public abstract class MapLayerDescriptor {
     }
 
     /**
-     * Return the name of the {@link MapCache#getName() cache} that contains this overlay.
-     * @return a {@link MapCache} instance
+     * Return the name of the {@link MapDataResource#getName() cache} that contains this overlay.
+     * @return a {@link MapDataResource} instance
      */
     public String getCacheName() {
         return cacheName;
@@ -83,7 +83,7 @@ public abstract class MapLayerDescriptor {
     /**
      * Two <code>MapLayerDescriptor</code> instances are equal if they have the
      * same {@link #getOverlayName() name} and their comprising caches' {@link #getCacheName() name}
-     * and {@link #getCacheType() type} are {@link MapCache#equals(Object) equal} as well.
+     * and {@link #getCacheType() type} are {@link MapDataResource#equals(Object) equal} as well.
      * @param obj
      * @return
      */

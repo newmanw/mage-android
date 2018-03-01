@@ -88,7 +88,7 @@ public class OverlayOnMapManager implements MapDataManager.CacheOverlaysUpdateLi
         return 1.0f / (count + 1.0f);
     }
 
-    private static String keyForCache(MapCache cache) {
+    private static String keyForCache(MapDataResource cache) {
         return cache.getName() + ":" + cache.getType().getName();
     }
 
@@ -109,7 +109,7 @@ public class OverlayOnMapManager implements MapDataManager.CacheOverlaysUpdateLi
         for (CacheProvider provider : providers) {
             this.providers.put(provider.getClass(), provider);
         }
-        for (MapCache cache : mapDataManager.getCaches()) {
+        for (MapDataResource cache : mapDataManager.getCaches()) {
             overlaysInZOrder.addAll(cache.getLayers().values());
         }
         mapDataManager.addUpdateListener(this);
@@ -118,11 +118,11 @@ public class OverlayOnMapManager implements MapDataManager.CacheOverlaysUpdateLi
     @Override
     public void onCacheOverlaysUpdated(MapDataManager.CacheOverlayUpdate update) {
         Set<String> removedCacheNames = new HashSet<>(update.removed.size());
-        for (MapCache removed : update.removed) {
+        for (MapDataResource removed : update.removed) {
 			removedCacheNames.add(removed.getName());
 		}
 		Map<String, Map<String, MapLayerDescriptor>> updatedCaches = new HashMap<>(update.updated.size());
-        for (MapCache cache : update.updated) {
+        for (MapDataResource cache : update.updated) {
             Map<String, MapLayerDescriptor> updatedOverlays = new HashMap<>(cache.getLayers());
             updatedCaches.put(keyForCache(cache), updatedOverlays);
         }
@@ -158,7 +158,7 @@ public class OverlayOnMapManager implements MapDataManager.CacheOverlaysUpdateLi
             overlaysInZOrder.addAll(newOverlaysFromUpdatedCaches.values());
         }
 
-        for (MapCache added : update.added) {
+        for (MapDataResource added : update.added) {
             overlaysInZOrder.addAll(added.getLayers().values());
         }
 

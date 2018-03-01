@@ -104,18 +104,18 @@ public class XYZDirectoryCacheProvider implements CacheProvider {
     }
 
     @Override
-    public MapCache importCacheFromFile(URI resource) throws CacheImportException {
+    public MapDataResource importCacheFromFile(URI resource) throws CacheImportException {
         File xyzDir = new File(resource);
         if (!xyzDir.isDirectory()) {
             throw new CacheImportException(resource, "resource is not a directory: " + resource);
         }
         Set<MapLayerDescriptor> overlays = new HashSet<>();
         overlays.add(new XYZDirectoryLayerDescriptor(xyzDir.getName(), xyzDir.getName(), xyzDir));
-        return new MapCache(xyzDir.getName(), getClass(), resource, Collections.unmodifiableSet(overlays));
+        return new MapDataResource(xyzDir.getName(), getClass(), resource, Collections.unmodifiableSet(overlays));
     }
 
     @Override
-    public Set<MapCache> refreshCaches(Set<MapCache> existingCaches) {
+    public Set<MapDataResource> refreshCaches(Set<MapDataResource> existingCaches) {
         // TODO
         return Collections.emptySet();
     }

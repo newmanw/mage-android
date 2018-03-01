@@ -99,16 +99,16 @@ public class GeoPackageCacheProvider implements CacheProvider {
     }
 
     @Override
-    public MapCache importCacheFromFile(URI resource) throws CacheImportException {
+    public MapDataResource importCacheFromFile(URI resource) throws CacheImportException {
         File cacheFile = new File(resource.getPath());
         String cacheName = getOrImportGeoPackageDatabase(cacheFile);
         return createCache(cacheFile, cacheName);
     }
 
     @Override
-    public Set<MapCache> refreshCaches(Set<MapCache> existingCaches) {
-        Set<MapCache> refreshed = new HashSet<>(existingCaches.size());
-        for (MapCache cache : existingCaches) {
+    public Set<MapDataResource> refreshCaches(Set<MapDataResource> existingCaches) {
+        Set<MapDataResource> refreshed = new HashSet<>(existingCaches.size());
+        for (MapDataResource cache : existingCaches) {
             File dbFile = geoPackageManager.getFile(cache.getName());
             if (!dbFile.exists() || !dbFile.canRead()) {
                 cache = null;
@@ -189,7 +189,7 @@ public class GeoPackageCacheProvider implements CacheProvider {
      * @param database
      * @return cache overlay
      */
-    private MapCache createCache(File sourceFile, String database) {
+    private MapDataResource createCache(File sourceFile, String database) {
 
         GeoPackage geoPackage = null;
 
@@ -255,7 +255,7 @@ public class GeoPackageCacheProvider implements CacheProvider {
             // Add stand alone tile tables that were not linked to feature tables
             tables.addAll(tileCacheOverlays.values());
 
-            return new MapCache(database, this.getClass(), sourceFile.toURI(), tables);
+            return new MapDataResource(database, this.getClass(), sourceFile.toURI(), tables);
         }
         catch (Exception e) {
             Log.e(LOG_NAME, "error creating GeoPackage cache", e);
@@ -715,7 +715,7 @@ public class GeoPackageCacheProvider implements CacheProvider {
      * TODO: this was originally in TileOverlayPreferenceActivity to handle deleting on long press
      * this logic to go searching through directories to delete the cache file should be reworked
      */
-    private void deleteGeoPackageCacheOverlay(MapCache cache){
+    private void deleteGeoPackageCacheOverlay(MapDataResource cache){
 
         String database = cache.getName();
 

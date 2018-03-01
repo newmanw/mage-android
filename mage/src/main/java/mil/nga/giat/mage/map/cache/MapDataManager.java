@@ -54,12 +54,12 @@ public class MapDataManager {
     public interface CreateUpdatePermission {};
 
     public final class CacheOverlayUpdate {
-        public final Set<MapCache> added;
-        public final Set<MapCache> updated;
-        public final Set<MapCache> removed;
+        public final Set<MapDataResource> added;
+        public final Set<MapDataResource> updated;
+        public final Set<MapDataResource> removed;
         public final MapDataManager source = MapDataManager.this;
 
-        public CacheOverlayUpdate(CreateUpdatePermission updatePermission, Set<MapCache> added, Set<MapCache> updated, Set<MapCache> removed) {
+        public CacheOverlayUpdate(CreateUpdatePermission updatePermission, Set<MapDataResource> added, Set<MapDataResource> updated, Set<MapDataResource> removed) {
             if (updatePermission != source.updatePermission) {
                 throw new Error("erroneous attempt to create update from cache manager instance " + MapDataManager.this);
             }
@@ -128,7 +128,7 @@ public class MapDataManager {
     private final MapDataRepository cacheLocations;
     private final List<CacheProvider> providers = new ArrayList<>();
     private final Collection<CacheOverlaysUpdateListener> cacheOverlayListeners = new ArrayList<>();
-    private Set<MapCache> caches = Collections.emptySet();
+    private Set<MapDataResource> caches = Collections.emptySet();
     private RefreshAvailableCachesTask refreshTask;
     private FindNewCacheFilesInProvidedLocationsTask findNewCacheFilesTask;
     private ImportCacheFileTask importCacheFilesForRefreshTask;
@@ -159,7 +159,7 @@ public class MapDataManager {
         // TODO: rename to delete, implement CacheProvider.deleteCache()
     }
 
-    public Set<MapCache> getCaches() {
+    public Set<MapDataResource> getCaches() {
         return caches;
     }
 
@@ -199,7 +199,7 @@ public class MapDataManager {
             if (refreshTask == null) {
                 throw new IllegalStateException("import task for refresh finished but refresh task is null");
             }
-            refreshTask.executeOnExecutor(executor, caches.toArray(new MapCache[caches.size()]));
+            refreshTask.executeOnExecutor(executor, caches.toArray(new MapDataResource[caches.size()]));
         }
         else {
             updateCaches(task, null);
@@ -221,7 +221,7 @@ public class MapDataManager {
     }
 
     private void updateCaches(ImportCacheFileTask importTask, RefreshAvailableCachesTask refreshTask) {
-        Set<MapCache> allIncoming;
+        Set<MapDataResource> allIncoming;
         try {
             CacheImportResult importResult = importTask.get();
             allIncoming = importResult.imported;
@@ -233,16 +233,16 @@ public class MapDataManager {
             throw new IllegalStateException("unexpected error retrieving cache update results", e);
         }
 
-        Map<MapCache, MapCache> incomingIndex = new HashMap<>();
-        for (MapCache cache : allIncoming) {
+        Map<MapDataResource, MapDataResource> incomingIndex = new HashMap<>();
+        for (MapDataResource cache : allIncoming) {
             incomingIndex.put(cache, cache);
         }
-        Set<MapCache> added = new HashSet<>(allIncoming);
+        Set<MapDataResource> added = new HashSet<>(allIncoming);
         added.removeAll(caches);
-        Set<MapCache> removed = new HashSet<>();
-        Set<MapCache> updated = new HashSet<>();
-        for (MapCache existing : caches) {
-            MapCache incoming = incomingIndex.get(existing);
+        Set<MapDataResource> removed = new HashSet<>();
+        Set<MapDataResource> updated = new HashSet<>();
+        for (MapDataResource existing : caches) {
+            MapDataResource incoming = incomingIndex.get(existing);
             if (incoming == null) {
                 removed.add(existing);
             }
@@ -264,11 +264,11 @@ public class MapDataManager {
     }
 
     private static class CacheImportResult {
-        private final Set<MapCache> imported;
+        private final Set<MapDataResource> imported;
         // TODO: propagate failed imports to user somehow
         private final List<CacheImportException> failed;
 
-        private CacheImportResult(Set<MapCache> imported, List<CacheImportException> failed) {
+        private CacheImportResult(Set<MapDataResource> imported, List<CacheImportException> failed) {
             this.imported = imported;
             this.failed = failed;
         }
@@ -276,7 +276,7 @@ public class MapDataManager {
 
     private class ImportCacheFileTask extends AsyncTask<URI, Void, CacheImportResult> {
 
-        private MapCache importFromFirstCapableProvider(URI resource) throws CacheImportException {
+        private MapDataResource importFromFirstCapableProvider(URI resource) throws CacheImportException {
             for (CacheProvider provider : providers) {
                 if (resource.getScheme().equalsIgnoreCase("file")) {
                     File cacheFile = new File(resource.getPath());
@@ -293,10 +293,10 @@ public class MapDataManager {
 
         @Override
         protected CacheImportResult doInBackground(URI... files) {
-            Set<MapCache> caches = new HashSet<>(files.length);
+            Set<MapDataResource> caches = new HashSet<>(files.length);
             List<CacheImportException> fails = new ArrayList<>(files.length);
             for (URI cacheFile : files) {
-                MapCache imported = null;
+                MapDataResource imported = null;
                 try {
                     imported = importFromFirstCapableProvider(cacheFile);
                     caches.add(imported);
@@ -314,22 +314,22 @@ public class MapDataManager {
         }
     }
 
-    private final class RefreshAvailableCachesTask extends AsyncTask<MapCache, Void, Set<MapCache>> {
+    private final class RefreshAvailableCachesTask extends AsyncTask<MapDataResource, Void, Set<MapDataResource>> {
 
         @Override
-        protected final Set<MapCache> doInBackground(MapCache... existingCaches) {
-            Map<Class<? extends CacheProvider>, Set<MapCache>> cachesByProvider = new HashMap<>(providers.size());
-            for (MapCache cache : existingCaches) {
-                Set<MapCache> providerCaches = cachesByProvider.get(cache.getType());
+        protected final Set<MapDataResource> doInBackground(MapDataResource... existingCaches) {
+            Map<Class<? extends CacheProvider>, Set<MapDataResource>> cachesByProvider = new HashMap<>(providers.size());
+            for (MapDataResource cache : existingCaches) {
+                Set<MapDataResource> providerCaches = cachesByProvider.get(cache.getType());
                 if (providerCaches == null) {
                     providerCaches = new HashSet<>();
                     cachesByProvider.put(cache.getType(), providerCaches);
                 }
                 providerCaches.add(cache);
             }
-            Set<MapCache> caches = new HashSet<>();
+            Set<MapDataResource> caches = new HashSet<>();
             for (CacheProvider provider : providers) {
-                Set<MapCache> providerCaches = cachesByProvider.get(provider.getClass());
+                Set<MapDataResource> providerCaches = cachesByProvider.get(provider.getClass());
                 if (providerCaches == null) {
                     providerCaches = Collections.emptySet();
                 }
@@ -339,7 +339,7 @@ public class MapDataManager {
         }
 
         @Override
-        protected void onPostExecute(Set<MapCache> caches) {
+        protected void onPostExecute(Set<MapDataResource> caches) {
             refreshFinished(this);
         }
     }

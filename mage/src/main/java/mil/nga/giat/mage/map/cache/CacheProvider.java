@@ -29,7 +29,7 @@ public interface CacheProvider {
      *
      * TODO: assumes one cache per file; child caches can get around this, but maybe that's not always the best model
      */
-    MapCache importCacheFromFile(URI cacheFile) throws CacheImportException;
+    MapDataResource importCacheFromFile(URI cacheFile) throws CacheImportException;
 
     /**
      * Refresh the data in the given set of caches.  Return a new subset of the
@@ -40,7 +40,7 @@ public interface CacheProvider {
      * @param existingCaches a set of caches to refresh
      * @return a subset (possibly equal) to the given cache set
      */
-    Set<MapCache> refreshCaches(Set<MapCache> existingCaches);
+    Set<MapDataResource> refreshCaches(Set<MapDataResource> existingCaches);
 
 
     OverlayOnMapManager.OverlayOnMap createOverlayOnMapFromCache(MapLayerDescriptor cache, OverlayOnMapManager map);

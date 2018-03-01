@@ -18,12 +18,12 @@ public class MapLayerDescriptorTest {
         }
 
         @Override
-        public MapCache importCacheFromFile(URI cacheFile) throws CacheImportException {
+        public MapDataResource importCacheFromFile(URI cacheFile) throws CacheImportException {
             return null;
         }
 
         @Override
-        public Set<MapCache> refreshCaches(Set<MapCache> existingCaches) {
+        public Set<MapDataResource> refreshCaches(Set<MapDataResource> existingCaches) {
             return null;
         }
 
@@ -41,12 +41,12 @@ public class MapLayerDescriptorTest {
         }
 
         @Override
-        public MapCache importCacheFromFile(URI cacheFile) throws CacheImportException {
+        public MapDataResource importCacheFromFile(URI cacheFile) throws CacheImportException {
             return null;
         }
 
         @Override
-        public Set<MapCache> refreshCaches(Set<MapCache> existingCaches) {
+        public Set<MapDataResource> refreshCaches(Set<MapDataResource> existingCaches) {
             return null;
         }
 

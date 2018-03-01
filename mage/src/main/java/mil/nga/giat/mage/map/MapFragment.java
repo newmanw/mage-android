@@ -91,7 +91,7 @@ import mil.nga.giat.mage.filter.FilterActivity;
 import mil.nga.giat.mage.map.cache.MapDataManager;
 import mil.nga.giat.mage.map.cache.MapDataManager.CacheOverlaysUpdateListener;
 import mil.nga.giat.mage.map.cache.MapLayerDescriptor;
-import mil.nga.giat.mage.map.cache.MapCache;
+import mil.nga.giat.mage.map.cache.MapDataResource;
 import mil.nga.giat.mage.map.cache.OverlayOnMapManager;
 import mil.nga.giat.mage.map.marker.LocationMarkerCollection;
 import mil.nga.giat.mage.map.marker.MyHistoricalLocationMarkerCollection;
@@ -1120,7 +1120,7 @@ public class MapFragment extends Fragment implements
 		if (update.added.size() != 1) {
 			return;
 		}
-		MapCache explicitlyRequestedCache = update.added.iterator().next();
+		MapDataResource explicitlyRequestedCache = update.added.iterator().next();
 		for (MapLayerDescriptor layerDesc : explicitlyRequestedCache.getLayers().values()) {
 			mapOverlayManager.showOverlay(layerDesc);
 		}
