@@ -1,14 +1,11 @@
 package mil.nga.giat.mage.map.cache;
 
-import java.io.File;
-import java.net.URI;
-import java.util.List;
-import java.util.concurrent.Future;
+import java.util.Set;
 
 public class MAGEServerMapDataRepository implements MapDataRepository {
 
     @Override
-    public Future<List<URI>> retrieveMapDataResources() {
+    public Set<MapDataResource> retrieveMapDataResources() {
         return null;
     }
 }

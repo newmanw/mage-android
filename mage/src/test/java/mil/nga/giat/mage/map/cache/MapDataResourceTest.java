@@ -14,38 +14,38 @@ public class MapDataResourceTest {
 
     @Test
     public void equalWhenNameAndTypeAreEqual() {
-        MapDataResource c1 = new MapDataResource("c1", CacheProvider.class, null, none);
-        MapDataResource c2 = new MapDataResource("c1", CacheProvider.class, null, none);
+        MapDataResource c1 = new MapDataResource(null, "c1", MapDataProvider.class, none);
+        MapDataResource c2 = new MapDataResource(null, "c1", MapDataProvider.class, none);
 
         assertTrue(c1.equals(c2));
     }
 
     public void equalWhenOverlaysAreDifferent() {
-        MapDataResource c1 = new MapDataResource("c1", CacheProvider.class, null, none);
-        MapDataResource c2 = new MapDataResource("c1", CacheProvider.class, null,
-            Collections.<MapLayerDescriptor>singleton(new CacheOverlayTest.TestLayerDescriptor1("test", "c1", CacheProvider.class)));
+        MapDataResource c1 = new MapDataResource(null, "c1", MapDataProvider.class, none);
+        MapDataResource c2 = new MapDataResource(null, "c1", MapDataProvider.class,
+            Collections.<MapLayerDescriptor>singleton(new MapLayerDescriptorTest.TestLayerDescriptor1("test", "c1", MapDataProvider.class)));
 
         assertTrue(c1.equals(c2));
     }
 
     @Test
     public void notEqualWhenOtherIsNull() {
-        MapDataResource c1 = new MapDataResource("c1", CacheProvider.class, null, none);
+        MapDataResource c1 = new MapDataResource(null, "c1", MapDataProvider.class, none);
 
         assertFalse(c1.equals(null));
     }
 
     @Test
     public void notEqualWhenOtherIsNotMapCache() {
-        MapDataResource c1 = new MapDataResource("c1", CacheProvider.class, null, none);
+        MapDataResource c1 = new MapDataResource(null, "c1", MapDataProvider.class, none);
 
         assertFalse(c1.equals(new Object()));
     }
 
     @Test
     public void notEqualWhenNamesAreDifferent() {
-        MapDataResource c1 = new MapDataResource("c1", CacheProvider.class, null, none);
-        MapDataResource c2 = new MapDataResource("c2", CacheProvider.class, null, none);
+        MapDataResource c1 = new MapDataResource(null, "c1", MapDataProvider.class, none);
+        MapDataResource c2 = new MapDataResource(null, "c2", MapDataProvider.class, none);
 
         assertFalse(c1.equals(c2));
     }

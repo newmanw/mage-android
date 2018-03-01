@@ -4,12 +4,12 @@ import java.net.URI;
 import java.util.Set;
 
 /**
- * A CacheProvider represents a specific cache data format that can put overlays on a map.
+ * A MapDataProvider represents a specific cache data format that can put overlays on a map.
  *
  * TODO: thread-safety coniderations - {@link MapDataManager} for now only invokes these methods serially
  * across all providers, but could be otherwise
  */
-public interface CacheProvider {
+public interface MapDataProvider {
 
     /**
      * Does this provider recognize the given file as its type of cache?
@@ -26,8 +26,6 @@ public interface CacheProvider {
      * @param cacheFile
      * @return
      * @throws CacheImportException
-     *
-     * TODO: assumes one cache per file; child caches can get around this, but maybe that's not always the best model
      */
     MapDataResource importCacheFromFile(URI cacheFile) throws CacheImportException;
 

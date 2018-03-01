@@ -10,6 +10,8 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -112,7 +114,7 @@ public class LocalStorageMapDataRepository implements MapDataRepository {
         @Override
         protected void onPostExecute(String result) {
             if (result == null) {
-                MapDataManager.getInstance().tryImportCacheFile(cacheFile.toURI());
+                MapDataManager.getInstance().tryImportResource(cacheFile.toURI());
             }
         }
     }
@@ -182,6 +184,13 @@ public class LocalStorageMapDataRepository implements MapDataRepository {
         if (applicationCacheDirectory != null && applicationCacheDirectory.exists()) {
             dirs.add(applicationCacheDirectory);
         }
-        return dirs;
+        Set<MapDataResource> potentialResources = new HashSet<>();
+        for (File dir : dirs) {
+            File[] files = dir.listFiles();
+            for (File file : files) {
+                potentialResources.add(new MapDataResource(file.toURI(), "", null, Collections.<MapLayerDescriptor>emptySet()));
+            }
+        }
+        return potentialResources;
     }
 }

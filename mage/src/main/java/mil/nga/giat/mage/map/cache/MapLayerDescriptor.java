@@ -4,7 +4,7 @@ import android.support.annotation.Nullable;
 
 /**
  * A <code>MapLayerDescriptor</code> represents a cached data set which can appear on a map.
- * A {@link CacheProvider} implementation will create instances of its associated
+ * A {@link MapDataProvider} implementation will create instances of its associated
  * <code>MapLayerDescriptor</code> subclass.  Note that this class provides default
  * {@link #equals(Object)} and {@link #hashCode()} implementations because
  * {@link MapDataManager} places <code>MapLayerDescriptor</code> instances in sets and they
@@ -29,13 +29,13 @@ public abstract class MapLayerDescriptor {
     /**
      * The {@link MapDataResource#getType() type} of the cache that contains this overlay's data
      */
-    private final Class<? extends CacheProvider> cacheType;
+    private final Class<? extends MapDataProvider> cacheType;
 
     /**
      * Constructor
      * @param overlayName a unique, persistent name for the overlay
      */
-    protected MapLayerDescriptor(String overlayName, String cacheName, Class<? extends CacheProvider> cacheType) {
+    protected MapLayerDescriptor(String overlayName, String cacheName, Class<? extends MapDataProvider> cacheType) {
         this.overlayName = overlayName;
         this.cacheName = cacheName;
         this.cacheType = cacheType;
@@ -54,11 +54,11 @@ public abstract class MapLayerDescriptor {
     }
 
     /**
-     * Return the {@link CacheProvider provider} type.  This just returns
+     * Return the {@link MapDataProvider provider} type.  This just returns
      * the result of this cache overlay's comprising {@link #getCacheName() cache}.
-     * @return the {@link CacheProvider} type
+     * @return the {@link MapDataProvider} type
      */
-    public Class<? extends CacheProvider> getCacheType() {
+    public Class<? extends MapDataProvider> getCacheType() {
         return cacheType;
     }
 
@@ -109,7 +109,7 @@ public abstract class MapLayerDescriptor {
         return getCacheName() + ":" + getOverlayName() + "(" + getCacheType() + ")";
     }
 
-    public boolean isTypeOf(Class<? extends CacheProvider> providerType) {
+    public boolean isTypeOf(Class<? extends MapDataProvider> providerType) {
         return providerType.isAssignableFrom(getCacheType());
     }
 }

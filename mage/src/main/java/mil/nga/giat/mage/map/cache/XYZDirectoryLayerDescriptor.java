@@ -23,7 +23,7 @@ public class XYZDirectoryLayerDescriptor extends MapLayerDescriptor {
      * @param directory tile directory
      */
     public XYZDirectoryLayerDescriptor(String overlayName, String cacheName, File directory) {
-        super(overlayName, cacheName, XYZDirectoryCacheProvider.class);
+        super(overlayName, cacheName, XYZDirectoryProvider.class);
         this.directory = directory;
     }
 

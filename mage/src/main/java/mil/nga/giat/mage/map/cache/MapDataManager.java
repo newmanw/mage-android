@@ -77,7 +77,7 @@ public class MapDataManager {
         private Application context;
         private CreateUpdatePermission updatePermission;
         private MapDataRepository cacheLocations;
-        private List<CacheProvider> providers = new ArrayList<>();
+        private List<MapDataProvider> providers = new ArrayList<>();
         private Executor executor = AsyncTask.SERIAL_EXECUTOR;
 
         public Config context(Application x) {
@@ -100,7 +100,7 @@ public class MapDataManager {
             return this;
         }
 
-        public Config providers(CacheProvider... x) {
+        public Config providers(MapDataProvider... x) {
             providers.addAll(Arrays.asList(x));
             return this;
         }
@@ -126,7 +126,7 @@ public class MapDataManager {
     private final CreateUpdatePermission updatePermission;
     private final Executor executor;
     private final MapDataRepository cacheLocations;
-    private final List<CacheProvider> providers = new ArrayList<>();
+    private final List<MapDataProvider> providers = new ArrayList<>();
     private final Collection<CacheOverlaysUpdateListener> cacheOverlayListeners = new ArrayList<>();
     private Set<MapDataResource> caches = Collections.emptySet();
     private RefreshAvailableCachesTask refreshTask;
@@ -151,12 +151,13 @@ public class MapDataManager {
         cacheOverlayListeners.remove(listener);
     }
 
-    public void tryImportCacheFile(URI cacheFile) {
-        new ImportCacheFileTask().executeOnExecutor(executor, cacheFile);
+    public void tryImportResource(URI cacheFile) {
+        MapDataResource resource = new MapDataResource(cacheFile);
+        new ImportCacheFileTask().executeOnExecutor(executor, resource);
     }
 
     public void removeCacheOverlay(String name) {
-        // TODO: rename to delete, implement CacheProvider.deleteCache()
+        // TODO: rename to delete, implement MapDataProvider.deleteCache()
     }
 
     public Set<MapDataResource> getCaches() {
@@ -274,31 +275,32 @@ public class MapDataManager {
         }
     }
 
-    private class ImportCacheFileTask extends AsyncTask<URI, Void, CacheImportResult> {
+    private class ImportCacheFileTask extends AsyncTask<MapDataResource, Void, CacheImportResult> {
 
-        private MapDataResource importFromFirstCapableProvider(URI resource) throws CacheImportException {
-            for (CacheProvider provider : providers) {
-                if (resource.getScheme().equalsIgnoreCase("file")) {
-                    File cacheFile = new File(resource.getPath());
+        private MapDataResource importFromFirstCapableProvider(MapDataResource resource) throws CacheImportException {
+            URI uri = resource.getUri();
+            for (MapDataProvider provider : providers) {
+                if (uri.getScheme().equalsIgnoreCase("file")) {
+                    File cacheFile = new File(uri.getPath());
                     if (!cacheFile.canRead()) {
-                        throw new CacheImportException(resource, "cache file is not readable or does not exist: " + cacheFile.getName());
+                        throw new CacheImportException(uri, "cache file is not readable or does not exist: " + cacheFile.getName());
                     }
                 }
-                if (provider.isCacheFile(resource)) {
-                    return provider.importCacheFromFile(resource);
+                if (provider.isCacheFile(uri)) {
+                    return provider.importCacheFromFile(uri);
                 }
             }
-            throw new CacheImportException(resource, "no cache provider could handle file " + resource);
+            throw new CacheImportException(uri, "no cache provider could handle file " + resource);
         }
 
         @Override
-        protected CacheImportResult doInBackground(URI... files) {
-            Set<MapDataResource> caches = new HashSet<>(files.length);
-            List<CacheImportException> fails = new ArrayList<>(files.length);
-            for (URI cacheFile : files) {
-                MapDataResource imported = null;
+        protected CacheImportResult doInBackground(MapDataResource... resources) {
+            Set<MapDataResource> caches = new HashSet<>(resources.length);
+            List<CacheImportException> fails = new ArrayList<>(resources.length);
+            for (MapDataResource resource : resources) {
+                MapDataResource imported;
                 try {
-                    imported = importFromFirstCapableProvider(cacheFile);
+                    imported = importFromFirstCapableProvider(resource);
                     caches.add(imported);
                 }
                 catch (CacheImportException e) {
@@ -318,7 +320,7 @@ public class MapDataManager {
 
         @Override
         protected final Set<MapDataResource> doInBackground(MapDataResource... existingCaches) {
-            Map<Class<? extends CacheProvider>, Set<MapDataResource>> cachesByProvider = new HashMap<>(providers.size());
+            Map<Class<? extends MapDataProvider>, Set<MapDataResource>> cachesByProvider = new HashMap<>(providers.size());
             for (MapDataResource cache : existingCaches) {
                 Set<MapDataResource> providerCaches = cachesByProvider.get(cache.getType());
                 if (providerCaches == null) {
@@ -328,7 +330,7 @@ public class MapDataManager {
                 providerCaches.add(cache);
             }
             Set<MapDataResource> caches = new HashSet<>();
-            for (CacheProvider provider : providers) {
+            for (MapDataProvider provider : providers) {
                 Set<MapDataResource> providerCaches = cachesByProvider.get(provider.getClass());
                 if (providerCaches == null) {
                     providerCaches = Collections.emptySet();
@@ -344,23 +346,16 @@ public class MapDataManager {
         }
     }
 
-    private final class FindNewCacheFilesInProvidedLocationsTask extends AsyncTask<Void, Void, URI[]> {
+    private final class FindNewCacheFilesInProvidedLocationsTask extends AsyncTask<Void, Void, MapDataResource[]> {
 
         @Override
-        protected URI[] doInBackground(Void... voids) {
-            List<File> searchDirs = cacheLocations.retrieveMapDataResources();
-            List<URI> potentialCaches = new ArrayList<>();
-            for (File dir : searchDirs) {
-                File[] files = dir.listFiles();
-                for (File file : files) {
-                    potentialCaches.add(file.toURI());
-                }
-            }
-            return potentialCaches.toArray(new URI[potentialCaches.size()]);
+        protected MapDataResource[] doInBackground(Void... voids) {
+            Set<MapDataResource> resources = cacheLocations.retrieveMapDataResources();
+            return resources.toArray(new MapDataResource[resources.size()]);
         }
 
         @Override
-        protected void onPostExecute(URI[] result) {
+        protected void onPostExecute(MapDataResource[] result) {
             findNewCacheFilesFinished(this);
         }
     }

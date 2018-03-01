@@ -57,9 +57,9 @@ import mil.nga.giat.mage.sdk.utils.StorageUtility;
 import mil.nga.wkb.geom.Geometry;
 import mil.nga.wkb.geom.GeometryType;
 
-public class GeoPackageCacheProvider implements CacheProvider {
+public class GeoPackageProvider implements MapDataProvider {
 
-    private static final String LOG_NAME = GeoPackageCacheProvider.class.getName();
+    private static final String LOG_NAME = GeoPackageProvider.class.getName();
     private static final float Z_INDEX_TILE_TABLE = -2.0f;
     private static final float Z_INDEX_FEATURE_TABLE = -1.0f;
 
@@ -84,7 +84,7 @@ public class GeoPackageCacheProvider implements CacheProvider {
     private final GeoPackageManager geoPackageManager;
     private final GeoPackageCache geoPackageCache;
 
-    public GeoPackageCacheProvider(Context context) {
+    public GeoPackageProvider(Context context) {
         this.context = context;
         geoPackageManager = GeoPackageFactory.getManager(context);
         geoPackageCache = new GeoPackageCache(geoPackageManager);
@@ -255,7 +255,7 @@ public class GeoPackageCacheProvider implements CacheProvider {
             // Add stand alone tile tables that were not linked to feature tables
             tables.addAll(tileCacheOverlays.values());
 
-            return new MapDataResource(database, this.getClass(), sourceFile.toURI(), tables);
+            return new MapDataResource(sourceFile.toURI(), database, this.getClass(), tables);
         }
         catch (Exception e) {
             Log.e(LOG_NAME, "error creating GeoPackage cache", e);

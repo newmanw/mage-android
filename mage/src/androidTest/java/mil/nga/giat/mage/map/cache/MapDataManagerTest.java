@@ -55,14 +55,14 @@ public class MapDataManagerTest {
 
     // had to do this to make Mockito generate a different class for
     // two mock providers, because it uses the same class for two
-    // separate mock instances of CacheProvider directly, which is
+    // separate mock instances of MapDataProvider directly, which is
     // a collision for MapLayerDescriptor.getCacheType()
-    static abstract class CatProvider implements CacheProvider {}
-    static abstract class DogProvider implements CacheProvider {}
+    static abstract class CatProvider implements MapDataProvider {}
+    static abstract class DogProvider implements MapDataProvider {}
 
     static class TestLayerDescriptor extends MapLayerDescriptor {
 
-        TestLayerDescriptor(String overlayName, String cacheName, Class<? extends CacheProvider> type) {
+        TestLayerDescriptor(String overlayName, String cacheName, Class<? extends MapDataProvider> type) {
             super(overlayName, cacheName, type);
         }
     }
@@ -82,8 +82,8 @@ public class MapDataManagerTest {
     private List<File> cacheDirs;
     private MapDataManager mapDataManager;
     private Executor executor;
-    private CacheProvider catProvider;
-    private CacheProvider dogProvider;
+    private MapDataProvider catProvider;
+    private MapDataProvider dogProvider;
     private MapDataManager.CacheOverlaysUpdateListener listener;
     private ArgumentCaptor<MapDataManager.CacheOverlayUpdate> updateCaptor = ArgumentCaptor.forClass(MapDataManager.CacheOverlayUpdate.class);
 
@@ -172,7 +172,7 @@ public class MapDataManagerTest {
 
         assertTrue(cacheFile.createNewFile());
 
-        mapDataManager.tryImportCacheFile(cacheFile.toURI());
+        mapDataManager.tryImportResource(cacheFile.toURI());
 
         verify(dogProvider, timeout(1000)).importCacheFromFile(cacheFile.toURI());
         verify(catProvider, never()).importCacheFromFile(any(URI.class));
@@ -181,12 +181,12 @@ public class MapDataManagerTest {
     @Test
     public void addsImportedCacheOverlayToCacheOverlaySet() throws Exception {
         File cacheFile = new File(cacheDir2, "data.cat");
-        MapDataResource catCache = new MapDataResource(cacheDir2.getName(), catProvider.getClass(), cacheFile.toURI(), Collections.<MapLayerDescriptor>emptySet());
+        MapDataResource catCache = new MapDataResource(cacheFile.toURI(), cacheDir2.getName(), catProvider.getClass(), Collections.<MapLayerDescriptor>emptySet());
         when(catProvider.importCacheFromFile(cacheFile.toURI())).thenReturn(catCache);
 
         assertTrue(cacheFile.createNewFile());
 
-        mapDataManager.tryImportCacheFile(cacheFile.toURI());
+        mapDataManager.tryImportResource(cacheFile.toURI());
 
         verify(listener, timeout(1000)).onCacheOverlaysUpdated(updateCaptor.capture());
 
@@ -206,8 +206,8 @@ public class MapDataManagerTest {
     public void refreshingFindsCachesInProvidedLocations() throws Exception {
         File cache1File = new File(cacheDir1, "pluto.dog");
         File cache2File = new File(cacheDir2, "figaro.cat");
-        MapDataResource cache1 = new MapDataResource(cache1File.getName(), dogProvider.getClass(), cache1File.toURI(), Collections.<MapLayerDescriptor>emptySet());
-        MapDataResource cache2 = new MapDataResource(cache2File.getName(), catProvider.getClass(), cache2File.toURI(), Collections.<MapLayerDescriptor>emptySet());
+        MapDataResource cache1 = new MapDataResource(cache1File.toURI(), cache1File.getName(), dogProvider.getClass(), Collections.<MapLayerDescriptor>emptySet());
+        MapDataResource cache2 = new MapDataResource(cache2File.toURI(), cache2File.getName(), catProvider.getClass(), Collections.<MapLayerDescriptor>emptySet());
         when(dogProvider.importCacheFromFile(cache1File.toURI())).thenReturn(cache1);
         when(catProvider.importCacheFromFile(cache2File.toURI())).thenReturn(cache2);
 
@@ -232,9 +232,9 @@ public class MapDataManagerTest {
 
     @Test
     public void refreshingGetsAvailableCachesFromProviders() {
-        MapDataResource dogCache1 = new MapDataResource("dog1", dogProvider.getClass(), new File(cacheDir1, "dog1.dog").toURI(), Collections.<MapLayerDescriptor>emptySet());
-        MapDataResource dogCache2 = new MapDataResource("dog2", dogProvider.getClass(), new File(cacheDir1, "dog2.dog").toURI(), Collections.<MapLayerDescriptor>emptySet());
-        MapDataResource catCache = new MapDataResource("cat1", catProvider.getClass(), new File(cacheDir1, "cat1.cat").toURI(), Collections.<MapLayerDescriptor>emptySet());
+        MapDataResource dogCache1 = new MapDataResource(new File(cacheDir1, "dog1.dog").toURI(), "dog1", dogProvider.getClass(), Collections.<MapLayerDescriptor>emptySet());
+        MapDataResource dogCache2 = new MapDataResource(new File(cacheDir1, "dog2.dog").toURI(), "dog2", dogProvider.getClass(), Collections.<MapLayerDescriptor>emptySet());
+        MapDataResource catCache = new MapDataResource(new File(cacheDir1, "cat1.cat").toURI(), "cat1", catProvider.getClass(), Collections.<MapLayerDescriptor>emptySet());
 
         when(dogProvider.refreshCaches(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(cacheSetWithCaches(dogCache1, dogCache2));
         when(catProvider.refreshCaches(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(cacheSetWithCaches(catCache));
@@ -259,9 +259,9 @@ public class MapDataManagerTest {
 
     @Test
     public void refreshingRemovesCachesNoLongerAvailable() {
-        MapDataResource dogCache1 = new MapDataResource("dog1", dogProvider.getClass(), new File(cacheDir1, "dog1.dog").toURI(), Collections.<MapLayerDescriptor>emptySet());
-        MapDataResource dogCache2 = new MapDataResource("dog2", dogProvider.getClass(), new File(cacheDir1, "dog2.dog").toURI(), Collections.<MapLayerDescriptor>emptySet());
-        MapDataResource catCache = new MapDataResource("cat1", catProvider.getClass(), new File(cacheDir1, "cat1.cat").toURI(), Collections.<MapLayerDescriptor>emptySet());
+        MapDataResource dogCache1 = new MapDataResource(new File(cacheDir1, "dog1.dog").toURI(), "dog1", dogProvider.getClass(), Collections.<MapLayerDescriptor>emptySet());
+        MapDataResource dogCache2 = new MapDataResource(new File(cacheDir1, "dog2.dog").toURI(), "dog2", dogProvider.getClass(), Collections.<MapLayerDescriptor>emptySet());
+        MapDataResource catCache = new MapDataResource(new File(cacheDir1, "cat1.cat").toURI(), "cat1", catProvider.getClass(), Collections.<MapLayerDescriptor>emptySet());
 
         when(dogProvider.refreshCaches(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(cacheSetWithCaches(dogCache1, dogCache2));
         when(catProvider.refreshCaches(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(cacheSetWithCaches(catCache));
@@ -300,7 +300,7 @@ public class MapDataManagerTest {
 
     @Test
     public void refreshingUpdatesExistingCachesThatChanged() {
-        MapDataResource dogOrig = new MapDataResource("dog1", dogProvider.getClass(), new File(cacheDir1, "dog1.dog").toURI(), Collections.<MapLayerDescriptor>emptySet());
+        MapDataResource dogOrig = new MapDataResource(new File(cacheDir1, "dog1.dog").toURI(), "dog1", dogProvider.getClass(), Collections.<MapLayerDescriptor>emptySet());
 
         when(dogProvider.refreshCaches(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(cacheSetWithCaches(dogOrig));
 
@@ -318,7 +318,7 @@ public class MapDataManagerTest {
         assertThat(update.updated, empty());
         assertThat(update.removed, empty());
 
-        MapDataResource dogUpdated = new MapDataResource("dog1", dogProvider.getClass(), new File(cacheDir1, "dog1.dog").toURI(), Collections.<MapLayerDescriptor>emptySet());
+        MapDataResource dogUpdated = new MapDataResource(new File(cacheDir1, "dog1.dog").toURI(), "dog1", dogProvider.getClass(), Collections.<MapLayerDescriptor>emptySet());
 
         when(dogProvider.refreshCaches(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(cacheSetWithCaches(dogUpdated));
 

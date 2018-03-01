@@ -16,7 +16,7 @@ import java.util.Set;
 
 import mil.nga.giat.mage.map.FileSystemTileProvider;
 
-public class XYZDirectoryCacheProvider implements CacheProvider {
+public class XYZDirectoryProvider implements MapDataProvider {
 
     static class OnMap extends OverlayOnMapManager.OverlayOnMap {
 
@@ -111,7 +111,7 @@ public class XYZDirectoryCacheProvider implements CacheProvider {
         }
         Set<MapLayerDescriptor> overlays = new HashSet<>();
         overlays.add(new XYZDirectoryLayerDescriptor(xyzDir.getName(), xyzDir.getName(), xyzDir));
-        return new MapDataResource(xyzDir.getName(), getClass(), resource, Collections.unmodifiableSet(overlays));
+        return new MapDataResource(resource, xyzDir.getName(), getClass(), Collections.unmodifiableSet(overlays));
     }
 
     @Override

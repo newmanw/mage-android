@@ -33,7 +33,7 @@ public abstract class GeoPackageTableDescriptor extends MapLayerDescriptor {
      * @param maxZoom    max zoom level
      */
     GeoPackageTableDescriptor(String geoPackage, String tableName, int count, int minZoom, Integer maxZoom) {
-        super(tableName, geoPackage, GeoPackageCacheProvider.class);
+        super(tableName, geoPackage, GeoPackageProvider.class);
         this.count = count;
         this.minZoom = minZoom;
         this.maxZoom = maxZoom;

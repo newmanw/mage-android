@@ -31,8 +31,8 @@ import mil.nga.giat.mage.login.ServerUrlActivity;
 import mil.nga.giat.mage.login.SignupActivity;
 import mil.nga.giat.mage.map.cache.MapDataManager;
 import mil.nga.giat.mage.map.cache.LocalStorageMapDataRepository;
-import mil.nga.giat.mage.map.cache.GeoPackageCacheProvider;
-import mil.nga.giat.mage.map.cache.XYZDirectoryCacheProvider;
+import mil.nga.giat.mage.map.cache.GeoPackageProvider;
+import mil.nga.giat.mage.map.cache.XYZDirectoryProvider;
 import mil.nga.giat.mage.observation.ObservationNotificationListener;
 import mil.nga.giat.mage.sdk.datastore.observation.ObservationHelper;
 import mil.nga.giat.mage.sdk.datastore.user.User;
@@ -110,8 +110,8 @@ public class MAGE extends MultiDexApplication implements ISessionEventListener, 
 
         MapDataManager.initialize(new MapDataManager.Config()
 			.context(this)
-			.providers(new XYZDirectoryCacheProvider())
-			.providers(new GeoPackageCacheProvider(this))
+			.providers(new XYZDirectoryProvider())
+			.providers(new GeoPackageProvider(this))
 			.cacheLocations(new LocalStorageMapDataRepository(this))
 			.updatePermission(new MapDataManager.CreateUpdatePermission(){}));
 

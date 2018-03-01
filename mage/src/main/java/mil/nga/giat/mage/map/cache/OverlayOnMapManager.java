@@ -69,7 +69,7 @@ public class OverlayOnMapManager implements MapDataManager.CacheOverlaysUpdateLi
 
     /**
      * Compute the fractional step necessary to stack {@code count} map objects
-     * within a single integral zoom level.  This is a convenience for {@link CacheProvider}
+     * within a single integral zoom level.  This is a convenience for {@link MapDataProvider}
      * implementations of {@link OverlayOnMap} to use when setting the integer
      * {@link OverlayOnMap#setZIndex(int) z-index}.  The implementation can use the
      * return value to increment the float z-index of {@code count} {@link GoogleMap} objects
@@ -98,15 +98,15 @@ public class OverlayOnMapManager implements MapDataManager.CacheOverlaysUpdateLi
 
     private final MapDataManager mapDataManager;
     private final GoogleMap map;
-    private final Map<Class<? extends CacheProvider>, CacheProvider> providers = new HashMap<>();
+    private final Map<Class<? extends MapDataProvider>, MapDataProvider> providers = new HashMap<>();
     private final Map<MapLayerDescriptor, OverlayOnMap> overlaysOnMap = new HashMap<>();
     private final List<OverlayOnMapListener> listeners = new ArrayList<>();
     private List<MapLayerDescriptor> overlaysInZOrder = new ArrayList<>();
 
-    public OverlayOnMapManager(MapDataManager mapDataManager, List<CacheProvider> providers, GoogleMap map) {
+    public OverlayOnMapManager(MapDataManager mapDataManager, List<MapDataProvider> providers, GoogleMap map) {
         this.mapDataManager = mapDataManager;
         this.map = map;
-        for (CacheProvider provider : providers) {
+        for (MapDataProvider provider : providers) {
             this.providers.put(provider.getClass(), provider);
         }
         for (MapDataResource cache : mapDataManager.getCaches()) {
@@ -299,7 +299,7 @@ public class OverlayOnMapManager implements MapDataManager.CacheOverlaysUpdateLi
         MapLayerDescriptor overlay = overlaysInZOrder.get(position);
         OverlayOnMap onMap = overlaysOnMap.remove(overlay);
         if (onMap == null) {
-            CacheProvider provider = providers.get(overlay.getCacheType());
+            MapDataProvider provider = providers.get(overlay.getCacheType());
             onMap = provider.createOverlayOnMapFromCache(overlay, this);
             onMap.setZIndex(position);
         }

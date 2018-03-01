@@ -406,7 +406,7 @@ public class LandingActivity extends AppCompatActivity implements NavigationView
     private void handleOpenFilePath() {
 
         File cacheFile = new File(openPath);
-        MapDataManager.getInstance().tryImportCacheFile(cacheFile.toURI());
+        MapDataManager.getInstance().tryImportResource(cacheFile.toURI());
     }
 
     public static void deleteAllData(Context context) {

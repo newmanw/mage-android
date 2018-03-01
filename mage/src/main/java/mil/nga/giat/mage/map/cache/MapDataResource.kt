@@ -5,7 +5,13 @@ import com.google.android.gms.maps.model.LatLngBounds
 import java.net.URI
 
 
-class MapDataResource(val name: String, val type: Class<out CacheProvider>, val sourceFile: URI, layerDescriptors: Set<MapLayerDescriptor>) {
+class MapDataResource(val uri: URI, val name: String, val type: Class<out MapDataProvider>?, layerDescriptors: Set<MapLayerDescriptor>) {
+
+    /**
+     * Create a new [MapDataResource] from the given URI that has not been resolved
+     * and so has no type information.
+     */
+    constructor(uri: URI) : this(uri, "", null, emptySet())
 
     /**
      * Return a map of [layer descriptors][MapLayerDescriptor] keyed by their [names][MapLayerDescriptor.getOverlayName].
@@ -17,7 +23,6 @@ class MapDataResource(val name: String, val type: Class<out CacheProvider>, val 
     val bounds: LatLngBounds?
         get() = null
 
-
     init {
         updateRefreshTimestamp()
     }
@@ -28,12 +33,13 @@ class MapDataResource(val name: String, val type: Class<out CacheProvider>, val 
 
     /**
      * Two [MapDataResource] objects are equal if and only if their [types][.getType]
-     * ane [names][.getName] are equal.
+     * are non-null and equal, and [names][.getName] are equal.  A [MapDataResource]
+     * with a null type will never be equal to another [MapDataResource].
      * @param other
      * @return
      */
     override fun equals(other: Any?): Boolean {
-        when (other) { is MapDataResource -> return type == other.type && name == other.name }
+        when (other) { is MapDataResource -> return type != null && type == other.type && name == other.name }
         return false
     }
 
