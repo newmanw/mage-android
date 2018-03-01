@@ -1,12 +1,12 @@
 package mil.nga.giat.mage.map.cache;
 
 /**
- * This class is a {@link CacheOverlay} subclass corresponding to the data
+ * This class is a {@link MapLayerDescriptor} subclass corresponding to the data
  * in a single table within a GeoPackage.
  *
  * @author osbornb
  */
-public abstract class GeoPackageTableCacheOverlay extends CacheOverlay {
+public abstract class GeoPackageTableDescriptor extends MapLayerDescriptor {
 
     /**
      * Count of data in the table
@@ -32,7 +32,7 @@ public abstract class GeoPackageTableCacheOverlay extends CacheOverlay {
      * @param minZoom    min zoom level
      * @param maxZoom    max zoom level
      */
-    GeoPackageTableCacheOverlay(String geoPackage, String tableName, int count, int minZoom, Integer maxZoom) {
+    GeoPackageTableDescriptor(String geoPackage, String tableName, int count, int minZoom, Integer maxZoom) {
         super(tableName, geoPackage, GeoPackageCacheProvider.class);
         this.count = count;
         this.minZoom = minZoom;

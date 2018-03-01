@@ -1,26 +1,15 @@
 package mil.nga.giat.mage.map.cache;
 
-import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
-
-import com.google.android.gms.maps.GoogleMap;
-import com.google.android.gms.maps.MapView;
-import com.google.android.gms.maps.model.LatLng;
-import com.google.android.gms.maps.model.TileOverlay;
-import com.google.android.gms.maps.model.TileOverlayOptions;
-import com.google.android.gms.maps.model.TileProvider;
-
 import java.io.File;
 
 import mil.nga.giat.mage.R;
-import mil.nga.giat.mage.map.FileSystemTileProvider;
 
 /**
  * XYZ directory of tiles cache overlay
  *
  * @author osbornb
  */
-public class XYZDirectoryCacheOverlay extends CacheOverlay {
+public class XYZDirectoryLayerDescriptor extends MapLayerDescriptor {
 
     /**
      * Tile directory
@@ -33,7 +22,7 @@ public class XYZDirectoryCacheOverlay extends CacheOverlay {
      * @param cacheName cache name
      * @param directory tile directory
      */
-    public XYZDirectoryCacheOverlay(String overlayName, String cacheName, File directory) {
+    public XYZDirectoryLayerDescriptor(String overlayName, String cacheName, File directory) {
         super(overlayName, cacheName, XYZDirectoryCacheProvider.class);
         this.directory = directory;
     }
@@ -49,7 +38,7 @@ public class XYZDirectoryCacheOverlay extends CacheOverlay {
 
     @Override
     public boolean equals(Object other) {
-        return other instanceof XYZDirectoryCacheOverlay && getDirectory().equals(((XYZDirectoryCacheOverlay) other).getDirectory());
+        return other instanceof XYZDirectoryLayerDescriptor && getDirectory().equals(((XYZDirectoryLayerDescriptor) other).getDirectory());
     }
 
     @Override

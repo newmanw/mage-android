@@ -42,7 +42,7 @@ import mil.nga.giat.mage.MAGE;
 import mil.nga.giat.mage.R;
 import mil.nga.giat.mage.disclaimer.DisclaimerActivity;
 import mil.nga.giat.mage.event.EventActivity;
-import mil.nga.giat.mage.map.cache.DefaultCacheLocationProvider;
+import mil.nga.giat.mage.map.cache.LocalStorageMapDataRepository;
 import mil.nga.giat.mage.sdk.datastore.DaoStore;
 import mil.nga.giat.mage.sdk.datastore.user.Event;
 import mil.nga.giat.mage.sdk.datastore.user.User;
@@ -377,7 +377,7 @@ public class LoginActivity extends AppCompatActivity implements LoginFragment.Lo
 		// Cannot pass this to another activity to handle as the URI might
 		// become invalid between now and then.  Copy it now
 		if (openPath == null || MediaUtility.isTemporaryPath(openPath)) {
-			DefaultCacheLocationProvider.copyToCache(this, uri, openPath);
+			LocalStorageMapDataRepository.copyToCache(this, uri, openPath);
 		} else {
 			// Else, store the path to pass to further intents
 			mOpenFilePath = openPath;

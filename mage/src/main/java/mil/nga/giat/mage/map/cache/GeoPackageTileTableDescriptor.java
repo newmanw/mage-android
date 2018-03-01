@@ -7,7 +7,7 @@ import mil.nga.giat.mage.R;
  *
  * @author osbornb
  */
-public class GeoPackageTileTableCacheOverlay extends GeoPackageTableCacheOverlay {
+public class GeoPackageTileTableDescriptor extends GeoPackageTableDescriptor {
 
     /**
      * Constructor
@@ -18,7 +18,7 @@ public class GeoPackageTileTableCacheOverlay extends GeoPackageTableCacheOverlay
      * @param minZoom    min zoom level
      * @param maxZoom    max zoom level
      */
-    GeoPackageTileTableCacheOverlay(String geoPackage, String tableName, int count, int minZoom, int maxZoom) {
+    GeoPackageTileTableDescriptor(String geoPackage, String tableName, int count, int minZoom, int maxZoom) {
         super(geoPackage, tableName, count, minZoom, maxZoom);
     }
 

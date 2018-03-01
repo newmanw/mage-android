@@ -51,18 +51,18 @@ import static org.mockito.Mockito.withSettings;
 
 @RunWith(AndroidJUnit4.class)
 @SmallTest
-public class CacheManagerTest {
+public class MapDataManagerTest {
 
     // had to do this to make Mockito generate a different class for
     // two mock providers, because it uses the same class for two
     // separate mock instances of CacheProvider directly, which is
-    // a collision for CacheOverlay.getCacheType()
+    // a collision for MapLayerDescriptor.getCacheType()
     static abstract class CatProvider implements CacheProvider {}
     static abstract class DogProvider implements CacheProvider {}
 
-    static class TestCacheOverlay extends CacheOverlay {
+    static class TestLayerDescriptor extends MapLayerDescriptor {
 
-        TestCacheOverlay(String overlayName, String cacheName, Class<? extends CacheProvider> type) {
+        TestLayerDescriptor(String overlayName, String cacheName, Class<? extends CacheProvider> type) {
             super(overlayName, cacheName, type);
         }
     }
@@ -80,12 +80,12 @@ public class CacheManagerTest {
     private File cacheDir1;
     private File cacheDir2;
     private List<File> cacheDirs;
-    private CacheManager cacheManager;
+    private MapDataManager mapDataManager;
     private Executor executor;
     private CacheProvider catProvider;
     private CacheProvider dogProvider;
-    private CacheManager.CacheOverlaysUpdateListener listener;
-    private ArgumentCaptor<CacheManager.CacheOverlayUpdate> updateCaptor = ArgumentCaptor.forClass(CacheManager.CacheOverlayUpdate.class);
+    private MapDataManager.CacheOverlaysUpdateListener listener;
+    private ArgumentCaptor<MapDataManager.CacheOverlayUpdate> updateCaptor = ArgumentCaptor.forClass(MapDataManager.CacheOverlayUpdate.class);
 
     @Before
     public void configureCacheManager() throws Exception {
@@ -128,33 +128,33 @@ public class CacheManagerTest {
             }
         });
 
-        CacheManager.Config config = new CacheManager.Config()
+        MapDataManager.Config config = new MapDataManager.Config()
             .context(context)
             .executor(executor)
             .providers(catProvider, dogProvider)
             .cacheLocations(new MapDataRepository() {
                 @Override
-                public List<File> getLocalSearchDirs() {
+                public List<File> retrieveMapDataResources() {
                     return cacheDirs;
                 }
             })
-            .updatePermission(new CacheManager.CreateUpdatePermission(){});
+            .updatePermission(new MapDataManager.CreateUpdatePermission(){});
 
 
-        listener = mock(CacheManager.CacheOverlaysUpdateListener.class);
-        cacheManager = new CacheManager(config);
-        cacheManager.addUpdateListener(listener);
+        listener = mock(MapDataManager.CacheOverlaysUpdateListener.class);
+        mapDataManager = new MapDataManager(config);
+        mapDataManager.addUpdateListener(listener);
     }
 
     @Test
     public void isMockable() {
-        mock(CacheManager.class, withSettings()
-            .useConstructor(new CacheManager.Config().updatePermission(new CacheManager.CreateUpdatePermission(){})));
+        mock(MapDataManager.class, withSettings()
+            .useConstructor(new MapDataManager.Config().updatePermission(new MapDataManager.CreateUpdatePermission(){})));
     }
 
     @Test(expected = IllegalArgumentException.class)
     public void requiresUpdatePermission() {
-        CacheManager manager = new CacheManager(new CacheManager.Config()
+        MapDataManager manager = new MapDataManager(new MapDataManager.Config()
             .cacheLocations(null)
             .executor(executor)
             .providers()
@@ -163,7 +163,7 @@ public class CacheManagerTest {
 
     @Test(expected = Error.class)
     public void cannotCreateUpdateWithoutPermission() {
-        cacheManager.new CacheOverlayUpdate(new CacheManager.CreateUpdatePermission() {}, null, null, null);
+        mapDataManager.new CacheOverlayUpdate(new MapDataManager.CreateUpdatePermission() {}, null, null, null);
     }
 
     @Test
@@ -172,7 +172,7 @@ public class CacheManagerTest {
 
         assertTrue(cacheFile.createNewFile());
 
-        cacheManager.tryImportCacheFile(cacheFile.toURI());
+        mapDataManager.tryImportCacheFile(cacheFile.toURI());
 
         verify(dogProvider, timeout(1000)).importCacheFromFile(cacheFile.toURI());
         verify(catProvider, never()).importCacheFromFile(any(URI.class));
@@ -181,17 +181,17 @@ public class CacheManagerTest {
     @Test
     public void addsImportedCacheOverlayToCacheOverlaySet() throws Exception {
         File cacheFile = new File(cacheDir2, "data.cat");
-        MapCache catCache = new MapCache(cacheDir2.getName(), catProvider.getClass(), cacheFile.toURI(), Collections.<CacheOverlay>emptySet());
+        MapCache catCache = new MapCache(cacheDir2.getName(), catProvider.getClass(), cacheFile.toURI(), Collections.<MapLayerDescriptor>emptySet());
         when(catProvider.importCacheFromFile(cacheFile.toURI())).thenReturn(catCache);
 
         assertTrue(cacheFile.createNewFile());
 
-        cacheManager.tryImportCacheFile(cacheFile.toURI());
+        mapDataManager.tryImportCacheFile(cacheFile.toURI());
 
         verify(listener, timeout(1000)).onCacheOverlaysUpdated(updateCaptor.capture());
 
-        CacheManager.CacheOverlayUpdate update = updateCaptor.getValue();
-        Set<MapCache> caches = cacheManager.getCaches();
+        MapDataManager.CacheOverlayUpdate update = updateCaptor.getValue();
+        Set<MapCache> caches = mapDataManager.getCaches();
 
         assertThat(caches.size(), is(1));
         assertThat(caches, hasItem(catCache));
@@ -199,27 +199,27 @@ public class CacheManagerTest {
         assertThat(update.added, hasItem(catCache));
         assertTrue(update.updated.isEmpty());
         assertTrue(update.removed.isEmpty());
-        assertThat(update.source, sameInstance(cacheManager));
+        assertThat(update.source, sameInstance(mapDataManager));
     }
 
     @Test
     public void refreshingFindsCachesInProvidedLocations() throws Exception {
         File cache1File = new File(cacheDir1, "pluto.dog");
         File cache2File = new File(cacheDir2, "figaro.cat");
-        MapCache cache1 = new MapCache(cache1File.getName(), dogProvider.getClass(), cache1File.toURI(), Collections.<CacheOverlay>emptySet());
-        MapCache cache2 = new MapCache(cache2File.getName(), catProvider.getClass(), cache2File.toURI(), Collections.<CacheOverlay>emptySet());
+        MapCache cache1 = new MapCache(cache1File.getName(), dogProvider.getClass(), cache1File.toURI(), Collections.<MapLayerDescriptor>emptySet());
+        MapCache cache2 = new MapCache(cache2File.getName(), catProvider.getClass(), cache2File.toURI(), Collections.<MapLayerDescriptor>emptySet());
         when(dogProvider.importCacheFromFile(cache1File.toURI())).thenReturn(cache1);
         when(catProvider.importCacheFromFile(cache2File.toURI())).thenReturn(cache2);
 
         assertTrue(cache1File.createNewFile());
         assertTrue(cache2File.createNewFile());
 
-        cacheManager.refreshAvailableCaches();
+        mapDataManager.refreshAvailableCaches();
 
         verify(listener, timeout(1000)).onCacheOverlaysUpdated(updateCaptor.capture());
 
-        CacheManager.CacheOverlayUpdate update = updateCaptor.getValue();
-        Set<MapCache> caches = cacheManager.getCaches();
+        MapDataManager.CacheOverlayUpdate update = updateCaptor.getValue();
+        Set<MapCache> caches = mapDataManager.getCaches();
 
         assertThat(caches.size(), is(2));
         assertThat(caches, hasItems(cache1, cache2));
@@ -227,26 +227,26 @@ public class CacheManagerTest {
         assertThat(update.added, hasItems(cache1, cache2));
         assertTrue(update.updated.isEmpty());
         assertTrue(update.removed.isEmpty());
-        assertThat(update.source, sameInstance(cacheManager));
+        assertThat(update.source, sameInstance(mapDataManager));
     }
 
     @Test
     public void refreshingGetsAvailableCachesFromProviders() {
-        MapCache dogCache1 = new MapCache("dog1", dogProvider.getClass(), new File(cacheDir1, "dog1.dog").toURI(), Collections.<CacheOverlay>emptySet());
-        MapCache dogCache2 = new MapCache("dog2", dogProvider.getClass(), new File(cacheDir1, "dog2.dog").toURI(), Collections.<CacheOverlay>emptySet());
-        MapCache catCache = new MapCache("cat1", catProvider.getClass(), new File(cacheDir1, "cat1.cat").toURI(), Collections.<CacheOverlay>emptySet());
+        MapCache dogCache1 = new MapCache("dog1", dogProvider.getClass(), new File(cacheDir1, "dog1.dog").toURI(), Collections.<MapLayerDescriptor>emptySet());
+        MapCache dogCache2 = new MapCache("dog2", dogProvider.getClass(), new File(cacheDir1, "dog2.dog").toURI(), Collections.<MapLayerDescriptor>emptySet());
+        MapCache catCache = new MapCache("cat1", catProvider.getClass(), new File(cacheDir1, "cat1.cat").toURI(), Collections.<MapLayerDescriptor>emptySet());
 
         when(dogProvider.refreshCaches(ArgumentMatchers.<MapCache>anySet())).thenReturn(cacheSetWithCaches(dogCache1, dogCache2));
         when(catProvider.refreshCaches(ArgumentMatchers.<MapCache>anySet())).thenReturn(cacheSetWithCaches(catCache));
 
-        cacheManager.refreshAvailableCaches();
+        mapDataManager.refreshAvailableCaches();
 
         verify(listener, timeout(1000)).onCacheOverlaysUpdated(updateCaptor.capture());
         verify(dogProvider).refreshCaches(eq(Collections.<MapCache>emptySet()));
         verify(catProvider).refreshCaches(eq(Collections.<MapCache>emptySet()));
 
-        CacheManager.CacheOverlayUpdate update = updateCaptor.getValue();
-        Set<MapCache> caches = cacheManager.getCaches();
+        MapDataManager.CacheOverlayUpdate update = updateCaptor.getValue();
+        Set<MapCache> caches = mapDataManager.getCaches();
 
         assertThat(caches.size(), is(3));
         assertThat(caches, hasItems(dogCache1, dogCache2, catCache));
@@ -254,25 +254,25 @@ public class CacheManagerTest {
         assertThat(update.added, hasItems(dogCache1, dogCache2, catCache));
         assertTrue(update.updated.isEmpty());
         assertTrue(update.removed.isEmpty());
-        assertThat(update.source, sameInstance(cacheManager));
+        assertThat(update.source, sameInstance(mapDataManager));
     }
 
     @Test
     public void refreshingRemovesCachesNoLongerAvailable() {
-        MapCache dogCache1 = new MapCache("dog1", dogProvider.getClass(), new File(cacheDir1, "dog1.dog").toURI(), Collections.<CacheOverlay>emptySet());
-        MapCache dogCache2 = new MapCache("dog2", dogProvider.getClass(), new File(cacheDir1, "dog2.dog").toURI(), Collections.<CacheOverlay>emptySet());
-        MapCache catCache = new MapCache("cat1", catProvider.getClass(), new File(cacheDir1, "cat1.cat").toURI(), Collections.<CacheOverlay>emptySet());
+        MapCache dogCache1 = new MapCache("dog1", dogProvider.getClass(), new File(cacheDir1, "dog1.dog").toURI(), Collections.<MapLayerDescriptor>emptySet());
+        MapCache dogCache2 = new MapCache("dog2", dogProvider.getClass(), new File(cacheDir1, "dog2.dog").toURI(), Collections.<MapLayerDescriptor>emptySet());
+        MapCache catCache = new MapCache("cat1", catProvider.getClass(), new File(cacheDir1, "cat1.cat").toURI(), Collections.<MapLayerDescriptor>emptySet());
 
         when(dogProvider.refreshCaches(ArgumentMatchers.<MapCache>anySet())).thenReturn(cacheSetWithCaches(dogCache1, dogCache2));
         when(catProvider.refreshCaches(ArgumentMatchers.<MapCache>anySet())).thenReturn(cacheSetWithCaches(catCache));
 
-        cacheManager.refreshAvailableCaches();
+        mapDataManager.refreshAvailableCaches();
 
         verify(listener, timeout(1000)).onCacheOverlaysUpdated(updateCaptor.capture());
         verify(dogProvider).refreshCaches(eq(Collections.<MapCache>emptySet()));
         verify(catProvider).refreshCaches(eq(Collections.<MapCache>emptySet()));
 
-        Set<MapCache> caches = cacheManager.getCaches();
+        Set<MapCache> caches = mapDataManager.getCaches();
 
         assertThat(caches.size(), is(3));
         assertThat(caches, hasItems(dogCache1, dogCache2, catCache));
@@ -280,36 +280,36 @@ public class CacheManagerTest {
         when(dogProvider.refreshCaches(ArgumentMatchers.<MapCache>anySet())).thenReturn(cacheSetWithCaches(dogCache2));
         when(catProvider.refreshCaches(ArgumentMatchers.<MapCache>anySet())).thenReturn(Collections.<MapCache>emptySet());
 
-        cacheManager.refreshAvailableCaches();
+        mapDataManager.refreshAvailableCaches();
 
         verify(listener, timeout(1000).times(2)).onCacheOverlaysUpdated(updateCaptor.capture());
 
         verify(dogProvider).refreshCaches(eq(cacheSetWithCaches(dogCache1, dogCache2)));
         verify(catProvider).refreshCaches(eq(cacheSetWithCaches(catCache)));
 
-        caches = cacheManager.getCaches();
-        CacheManager.CacheOverlayUpdate update = updateCaptor.getValue();
+        caches = mapDataManager.getCaches();
+        MapDataManager.CacheOverlayUpdate update = updateCaptor.getValue();
 
         assertThat(caches.size(), is(1));
         assertThat(caches, hasItem(dogCache2));
         assertThat(update.added, empty());
         assertThat(update.updated, empty());
         assertThat(update.removed, hasItems(dogCache1, catCache));
-        assertThat(update.source, sameInstance(cacheManager));
+        assertThat(update.source, sameInstance(mapDataManager));
     }
 
     @Test
     public void refreshingUpdatesExistingCachesThatChanged() {
-        MapCache dogOrig = new MapCache("dog1", dogProvider.getClass(), new File(cacheDir1, "dog1.dog").toURI(), Collections.<CacheOverlay>emptySet());
+        MapCache dogOrig = new MapCache("dog1", dogProvider.getClass(), new File(cacheDir1, "dog1.dog").toURI(), Collections.<MapLayerDescriptor>emptySet());
 
         when(dogProvider.refreshCaches(ArgumentMatchers.<MapCache>anySet())).thenReturn(cacheSetWithCaches(dogOrig));
 
-        cacheManager.refreshAvailableCaches();
+        mapDataManager.refreshAvailableCaches();
 
         verify(listener, timeout(1000)).onCacheOverlaysUpdated(updateCaptor.capture());
 
-        Set<MapCache> caches = cacheManager.getCaches();
-        CacheManager.CacheOverlayUpdate update = updateCaptor.getValue();
+        Set<MapCache> caches = mapDataManager.getCaches();
+        MapDataManager.CacheOverlayUpdate update = updateCaptor.getValue();
 
         assertThat(caches.size(), is(1));
         assertThat(caches, hasItem(dogOrig));
@@ -318,15 +318,15 @@ public class CacheManagerTest {
         assertThat(update.updated, empty());
         assertThat(update.removed, empty());
 
-        MapCache dogUpdated = new MapCache("dog1", dogProvider.getClass(), new File(cacheDir1, "dog1.dog").toURI(), Collections.<CacheOverlay>emptySet());
+        MapCache dogUpdated = new MapCache("dog1", dogProvider.getClass(), new File(cacheDir1, "dog1.dog").toURI(), Collections.<MapLayerDescriptor>emptySet());
 
         when(dogProvider.refreshCaches(ArgumentMatchers.<MapCache>anySet())).thenReturn(cacheSetWithCaches(dogUpdated));
 
-        cacheManager.refreshAvailableCaches();
+        mapDataManager.refreshAvailableCaches();
 
         verify(listener, timeout(1000).times(2)).onCacheOverlaysUpdated(updateCaptor.capture());
 
-        Set<MapCache> overlaysRefreshed = cacheManager.getCaches();
+        Set<MapCache> overlaysRefreshed = mapDataManager.getCaches();
         update = updateCaptor.getValue();
 
         assertThat(overlaysRefreshed, not(sameInstance(caches)));
@@ -337,7 +337,7 @@ public class CacheManagerTest {
         assertThat(update.updated.size(), is(1));
         assertThat(update.updated, hasItem(sameInstance(dogUpdated)));
         assertThat(update.removed, empty());
-        assertThat(update.source, sameInstance(cacheManager));
+        assertThat(update.source, sameInstance(mapDataManager));
     }
 
     @Test
@@ -352,7 +352,7 @@ public class CacheManagerTest {
             }
         }).when(executor).execute(any(Runnable.class));
 
-        cacheManager.refreshAvailableCaches();
+        mapDataManager.refreshAvailableCaches();
 
         verify(executor).execute(any(Runnable.class));
         assertTrue(overrodeMock[0]);
@@ -393,7 +393,7 @@ public class CacheManagerTest {
         when(catProvider.refreshCaches(ArgumentMatchers.<MapCache>anySet())).thenReturn(Collections.<MapCache>emptySet());
         when(dogProvider.refreshCaches(ArgumentMatchers.<MapCache>anySet())).thenReturn(Collections.<MapCache>emptySet());
 
-        cacheManager.refreshAvailableCaches();
+        mapDataManager.refreshAvailableCaches();
 
         verify(executor, times(1)).execute(any(Runnable.class));
 
@@ -401,7 +401,7 @@ public class CacheManagerTest {
         // and verify no new tasks were submitted to executor
         taskBegan.await();
 
-        cacheManager.refreshAvailableCaches();
+        mapDataManager.refreshAvailableCaches();
 
         verify(executor, times(1)).execute(any(Runnable.class));
 

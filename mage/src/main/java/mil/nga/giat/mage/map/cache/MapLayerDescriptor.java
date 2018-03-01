@@ -3,18 +3,18 @@ package mil.nga.giat.mage.map.cache;
 import android.support.annotation.Nullable;
 
 /**
- * A <code>CacheOverlay</code> represents a cached data set which can appear on a map.
+ * A <code>MapLayerDescriptor</code> represents a cached data set which can appear on a map.
  * A {@link CacheProvider} implementation will create instances of its associated
- * <code>CacheOverlay</code> subclass.  Note that this class provides default
+ * <code>MapLayerDescriptor</code> subclass.  Note that this class provides default
  * {@link #equals(Object)} and {@link #hashCode()} implementations because
- * {@link CacheManager} places <code>CacheOverlay</code> instances in sets and they
+ * {@link MapDataManager} places <code>MapLayerDescriptor</code> instances in sets and they
  * may also be used as {@link java.util.HashMap} keys.  Subclasses must take care
  * those methods work properly if overriding those or other methods on which
  * <code>equals()</code> and <code>hashCode()</code> depend.
  *
  * @author osbornb
  */
-public abstract class CacheOverlay {
+public abstract class MapLayerDescriptor {
 
     /**
      * Name of this cache overlay
@@ -35,7 +35,7 @@ public abstract class CacheOverlay {
      * Constructor
      * @param overlayName a unique, persistent name for the overlay
      */
-    protected CacheOverlay(String overlayName, String cacheName, Class<? extends CacheProvider> cacheType) {
+    protected MapLayerDescriptor(String overlayName, String cacheName, Class<? extends CacheProvider> cacheType) {
         this.overlayName = overlayName;
         this.cacheName = cacheName;
         this.cacheType = cacheType;
@@ -81,7 +81,7 @@ public abstract class CacheOverlay {
     }
 
     /**
-     * Two <code>CacheOverlay</code> instances are equal if they have the
+     * Two <code>MapLayerDescriptor</code> instances are equal if they have the
      * same {@link #getOverlayName() name} and their comprising caches' {@link #getCacheName() name}
      * and {@link #getCacheType() type} are {@link MapCache#equals(Object) equal} as well.
      * @param obj
@@ -89,10 +89,10 @@ public abstract class CacheOverlay {
      */
     @Override
     public boolean equals(Object obj) {
-        if (!(obj instanceof CacheOverlay)) {
+        if (!(obj instanceof MapLayerDescriptor)) {
             return false;
         }
-        CacheOverlay other = (CacheOverlay)obj;
+        MapLayerDescriptor other = (MapLayerDescriptor)obj;
         return
             getCacheType().equals(other.getCacheType()) &&
             getCacheName().equals(other.getCacheName()) &&

@@ -27,7 +27,7 @@ import java.util.List;
 import java.util.Map;
 
 import mil.nga.giat.mage.R;
-import mil.nga.giat.mage.map.cache.CacheOverlay;
+import mil.nga.giat.mage.map.cache.MapLayerDescriptor;
 import mil.nga.giat.mage.map.cache.OverlayOnMapManager;
 
 import static android.support.v7.widget.RecyclerView.NO_ID;
@@ -270,7 +270,7 @@ public class MapDataFragment extends Fragment implements OverlayOnMapManager.Ove
             if (mapData instanceof StaticControl) {
                 bindStaticControl();
             }
-            else if (mapData instanceof CacheOverlay) {
+            else if (mapData instanceof MapLayerDescriptor) {
                 bindCacheOverlay();
             }
             // don't let the switches animate as the list scrolls
@@ -289,7 +289,7 @@ public class MapDataFragment extends Fragment implements OverlayOnMapManager.Ove
             icon.setVisibility(View.VISIBLE);
             mGrabView.setVisibility(View.VISIBLE);
             dataVisible.setVisibility(View.VISIBLE);
-            CacheOverlay x = (CacheOverlay) mapData;
+            MapLayerDescriptor x = (MapLayerDescriptor) mapData;
             Integer iconResourceId = x.getIconImageResourceId();
             if (iconResourceId != null) {
                 icon.setImageResource(iconResourceId);
@@ -304,12 +304,12 @@ public class MapDataFragment extends Fragment implements OverlayOnMapManager.Ove
             if (mapData instanceof StaticControl) {
                 builtinDataControlValues = ((StaticControl) mapData).onCheckedChanged(buttonView, isChecked, builtinDataControlValues, listener);
             }
-            else if (mapData instanceof CacheOverlay) {
+            else if (mapData instanceof MapLayerDescriptor) {
                 if (isChecked){
-                    overlayManager.showOverlay((CacheOverlay) mapData);
+                    overlayManager.showOverlay((MapLayerDescriptor) mapData);
                 }
                 else {
-                    overlayManager.hideOverlay((CacheOverlay) mapData);
+                    overlayManager.hideOverlay((MapLayerDescriptor) mapData);
                 }
             }
         }
@@ -434,7 +434,7 @@ public class MapDataFragment extends Fragment implements OverlayOnMapManager.Ove
 
     private void syncDataList() {
         MapDataItemAdapter adapter = (MapDataItemAdapter) mapControlList.getAdapter();
-        List<CacheOverlay> overlays = overlayManager.getOverlaysInZOrder();
+        List<MapLayerDescriptor> overlays = overlayManager.getOverlaysInZOrder();
         Collections.reverse(overlays);
         List<Object> mapDataItems = new ArrayList<Object>(Arrays.asList(StaticControl.values()));
         mapDataItems.addAll(overlays);

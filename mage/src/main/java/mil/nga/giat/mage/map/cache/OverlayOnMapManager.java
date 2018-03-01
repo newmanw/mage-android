@@ -7,22 +7,20 @@ import com.google.android.gms.maps.MapView;
 import com.google.android.gms.maps.model.LatLng;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 @MainThread
-public class OverlayOnMapManager implements CacheManager.CacheOverlaysUpdateListener {
+public class OverlayOnMapManager implements MapDataManager.CacheOverlaysUpdateListener {
 
     public interface OverlayOnMapListener {
 
         /**
-         * Notify the listener that the {@link CacheManager} has updated the {@link #getOverlaysInZOrder() cache list}.
+         * Notify the listener that the {@link MapDataManager} has updated the {@link #getOverlaysInZOrder() cache list}.
          * {@link OverlayOnMapManager} will not invoke this method as result of its own on-map interactions,
          * such as adding, removing, showing, and hiding overlays.
          */
@@ -47,7 +45,7 @@ public class OverlayOnMapManager implements CacheManager.CacheOverlaysUpdateList
         abstract protected void setZIndex(int z);
 
         /**
-         * TODO: change to CacheOverlay.getBoundingBox() instead so OverlayOnMapManager can do the zoom
+         * TODO: change to MapLayerDescriptor.getBoundingBox() instead so OverlayOnMapManager can do the zoom
          */
         abstract protected void zoomMapToBoundingBox();
 
@@ -81,7 +79,7 @@ public class OverlayOnMapManager implements CacheManager.CacheOverlaysUpdateList
      * to set on the overlay is 6, this method will return 1 / (5 + 1), ~= 0.167, and map
      * objects can have fractional zoom levels (6 + 1 * 0.167), (6 + 2 * 0.167), etc.,
      * without intruding on the next integral zoom level, 7, which {@link OverlayOnMapManager}
-     * will assign to the next {@link CacheOverlay}/{@link OverlayOnMap} in the
+     * will assign to the next {@link MapLayerDescriptor}/{@link OverlayOnMap} in the
      * {@link #getOverlaysInZOrder() z-order}.
      * @param count
      * @return
@@ -94,45 +92,45 @@ public class OverlayOnMapManager implements CacheManager.CacheOverlaysUpdateList
         return cache.getName() + ":" + cache.getType().getName();
     }
 
-    private static String keyForCache(CacheOverlay overlay) {
+    private static String keyForCache(MapLayerDescriptor overlay) {
         return overlay.getCacheName() + ":" + overlay.getCacheType().getName();
     }
 
-    private final CacheManager cacheManager;
+    private final MapDataManager mapDataManager;
     private final GoogleMap map;
     private final Map<Class<? extends CacheProvider>, CacheProvider> providers = new HashMap<>();
-    private final Map<CacheOverlay, OverlayOnMap> overlaysOnMap = new HashMap<>();
+    private final Map<MapLayerDescriptor, OverlayOnMap> overlaysOnMap = new HashMap<>();
     private final List<OverlayOnMapListener> listeners = new ArrayList<>();
-    private List<CacheOverlay> overlaysInZOrder = new ArrayList<>();
+    private List<MapLayerDescriptor> overlaysInZOrder = new ArrayList<>();
 
-    public OverlayOnMapManager(CacheManager cacheManager, List<CacheProvider> providers, GoogleMap map) {
-        this.cacheManager = cacheManager;
+    public OverlayOnMapManager(MapDataManager mapDataManager, List<CacheProvider> providers, GoogleMap map) {
+        this.mapDataManager = mapDataManager;
         this.map = map;
         for (CacheProvider provider : providers) {
             this.providers.put(provider.getClass(), provider);
         }
-        for (MapCache cache : cacheManager.getCaches()) {
-            overlaysInZOrder.addAll(cache.getCacheOverlays().values());
+        for (MapCache cache : mapDataManager.getCaches()) {
+            overlaysInZOrder.addAll(cache.getLayers().values());
         }
-        cacheManager.addUpdateListener(this);
+        mapDataManager.addUpdateListener(this);
     }
 
     @Override
-    public void onCacheOverlaysUpdated(CacheManager.CacheOverlayUpdate update) {
+    public void onCacheOverlaysUpdated(MapDataManager.CacheOverlayUpdate update) {
         Set<String> removedCacheNames = new HashSet<>(update.removed.size());
         for (MapCache removed : update.removed) {
 			removedCacheNames.add(removed.getName());
 		}
-		Map<String, Map<String, CacheOverlay>> updatedCaches = new HashMap<>(update.updated.size());
+		Map<String, Map<String, MapLayerDescriptor>> updatedCaches = new HashMap<>(update.updated.size());
         for (MapCache cache : update.updated) {
-            Map<String, CacheOverlay> updatedOverlays = new HashMap<>(cache.getCacheOverlays());
+            Map<String, MapLayerDescriptor> updatedOverlays = new HashMap<>(cache.getLayers());
             updatedCaches.put(keyForCache(cache), updatedOverlays);
         }
 
         int position = 0;
-        Iterator<CacheOverlay> orderIterator = overlaysInZOrder.iterator();
+        Iterator<MapLayerDescriptor> orderIterator = overlaysInZOrder.iterator();
         while (orderIterator.hasNext()) {
-            CacheOverlay overlay = orderIterator.next();
+            MapLayerDescriptor overlay = orderIterator.next();
             if (removedCacheNames.contains(overlay.getCacheName())) {
                 removeFromMapReturningVisibility(overlay);
                 orderIterator.remove();
@@ -140,9 +138,9 @@ public class OverlayOnMapManager implements CacheManager.CacheOverlaysUpdateList
             }
             else {
                 String cacheKey = keyForCache(overlay);
-                Map<String, CacheOverlay> updatedCacheOverlays = updatedCaches.get(cacheKey);
+                Map<String, MapLayerDescriptor> updatedCacheOverlays = updatedCaches.get(cacheKey);
                 if (updatedCacheOverlays != null) {
-                    CacheOverlay updatedOverlay = updatedCacheOverlays.remove(overlay.getOverlayName());
+                    MapLayerDescriptor updatedOverlay = updatedCacheOverlays.remove(overlay.getOverlayName());
                     if (updatedOverlay != null) {
                         refreshOverlayAtPositionFromUpdatedCache(position, updatedOverlay);
                     }
@@ -156,12 +154,12 @@ public class OverlayOnMapManager implements CacheManager.CacheOverlaysUpdateList
             position++;
         }
 
-        for (Map<String, CacheOverlay> newOverlaysFromUpdatedCaches : updatedCaches.values()) {
+        for (Map<String, MapLayerDescriptor> newOverlaysFromUpdatedCaches : updatedCaches.values()) {
             overlaysInZOrder.addAll(newOverlaysFromUpdatedCaches.values());
         }
 
         for (MapCache added : update.added) {
-            overlaysInZOrder.addAll(added.getCacheOverlays().values());
+            overlaysInZOrder.addAll(added.getLayers().values());
         }
 
         for (OverlayOnMapListener listener : listeners) {
@@ -185,29 +183,29 @@ public class OverlayOnMapManager implements CacheManager.CacheOverlaysUpdateList
      * Return a modifiable copy of the overlay list in z-order.  The last element
      * (index {@code size() - 1}) in the list is the top-most element.
      */
-    public List<CacheOverlay> getOverlaysInZOrder() {
+    public List<MapLayerDescriptor> getOverlaysInZOrder() {
         return new ArrayList<>(overlaysInZOrder);
     }
 
-    public void showOverlay(CacheOverlay cacheOverlay) {
-        addOverlayToMap(cacheOverlay);
+    public void showOverlay(MapLayerDescriptor layerDesc) {
+        addOverlayToMap(layerDesc);
     }
 
-    public void hideOverlay(CacheOverlay cacheOverlay) {
-        OverlayOnMap onMap = overlaysOnMap.get(cacheOverlay);
+    public void hideOverlay(MapLayerDescriptor layerDesc) {
+        OverlayOnMap onMap = overlaysOnMap.get(layerDesc);
         if (onMap == null || !onMap.isVisible()) {
             return;
         }
         onMap.hide();
     }
 
-    public boolean isOverlayVisible(CacheOverlay cacheOverlay) {
-        OverlayOnMap onMap = overlaysOnMap.get(cacheOverlay);
+    public boolean isOverlayVisible(MapLayerDescriptor layerDesc) {
+        OverlayOnMap onMap = overlaysOnMap.get(layerDesc);
         return onMap != null && onMap.isVisible();
     }
 
     public void onMapClick(LatLng latLng, MapView mapView) {
-        for (CacheOverlay overlay : overlaysInZOrder) {
+        for (MapLayerDescriptor overlay : overlaysInZOrder) {
             OverlayOnMap onMap = overlaysOnMap.get(overlay);
             if (onMap != null) {
                 onMap.onMapClick(latLng, mapView);
@@ -215,17 +213,17 @@ public class OverlayOnMapManager implements CacheManager.CacheOverlaysUpdateList
         }
     }
 
-    public boolean setZOrder(List<CacheOverlay> order) {
+    public boolean setZOrder(List<MapLayerDescriptor> order) {
         if (order.size() != overlaysInZOrder.size()) {
             return false;
         }
-        Map<CacheOverlay, CacheOverlay> index = new HashMap<>(overlaysInZOrder.size());
-        for (CacheOverlay overlay : overlaysInZOrder) {
+        Map<MapLayerDescriptor, MapLayerDescriptor> index = new HashMap<>(overlaysInZOrder.size());
+        for (MapLayerDescriptor overlay : overlaysInZOrder) {
             index.put(overlay, overlay);
         }
-        List<CacheOverlay> targetOrder = new ArrayList<>(overlaysInZOrder.size());
-        for (CacheOverlay overlayToMove : order) {
-            CacheOverlay target = index.remove(overlayToMove);
+        List<MapLayerDescriptor> targetOrder = new ArrayList<>(overlaysInZOrder.size());
+        for (MapLayerDescriptor overlayToMove : order) {
+            MapLayerDescriptor target = index.remove(overlayToMove);
             if (target == null) {
                 return false;
             }
@@ -236,7 +234,7 @@ public class OverlayOnMapManager implements CacheManager.CacheOverlaysUpdateList
         }
         overlaysInZOrder = targetOrder;
         int zIndex = 0;
-        for (CacheOverlay overlay : overlaysInZOrder) {
+        for (MapLayerDescriptor overlay : overlaysInZOrder) {
             OverlayOnMap onMap = overlaysOnMap.get(overlay);
             if (onMap != null) {
                 onMap.setZIndex(zIndex);
@@ -247,16 +245,16 @@ public class OverlayOnMapManager implements CacheManager.CacheOverlaysUpdateList
     }
 
     public boolean moveZIndex(int fromPosition, int toPosition) {
-        List<CacheOverlay> order = getOverlaysInZOrder();
-        CacheOverlay target = order.remove(fromPosition);
+        List<MapLayerDescriptor> order = getOverlaysInZOrder();
+        MapLayerDescriptor target = order.remove(fromPosition);
         order.add(toPosition, target);
         return setZOrder(order);
     }
 
     public void dispose() {
         // TODO: remove and dispose all overlays/notify providers
-        cacheManager.removeUpdateListener(this);
-        Iterator<Map.Entry<CacheOverlay, OverlayOnMap>> entries = overlaysOnMap.entrySet().iterator();
+        mapDataManager.removeUpdateListener(this);
+        Iterator<Map.Entry<MapLayerDescriptor, OverlayOnMap>> entries = overlaysOnMap.entrySet().iterator();
         while (entries.hasNext()) {
             OverlayOnMap onMap = entries.next().getValue();
             onMap.removeFromMap();
@@ -265,7 +263,7 @@ public class OverlayOnMapManager implements CacheManager.CacheOverlaysUpdateList
         }
     }
 
-    private boolean removeFromMapReturningVisibility(CacheOverlay overlay) {
+    private boolean removeFromMapReturningVisibility(MapLayerDescriptor overlay) {
         boolean wasVisible = false;
         OverlayOnMap onMap = overlaysOnMap.remove(overlay);
         if (onMap != null) {
@@ -275,8 +273,8 @@ public class OverlayOnMapManager implements CacheManager.CacheOverlaysUpdateList
         return wasVisible;
     }
 
-    private void refreshOverlayAtPositionFromUpdatedCache(int position, CacheOverlay updatedOverlay) {
-        CacheOverlay currentOverlay = overlaysInZOrder.get(position);
+    private void refreshOverlayAtPositionFromUpdatedCache(int position, MapLayerDescriptor updatedOverlay) {
+        MapLayerDescriptor currentOverlay = overlaysInZOrder.get(position);
         if (currentOverlay == updatedOverlay) {
             return;
         }
@@ -286,11 +284,11 @@ public class OverlayOnMapManager implements CacheManager.CacheOverlaysUpdateList
         }
     }
 
-    private void disposeOverlay(CacheOverlay overlay) {
+    private void disposeOverlay(MapLayerDescriptor overlay) {
 
     }
 
-    private void addOverlayToMap(CacheOverlay overlay) {
+    private void addOverlayToMap(MapLayerDescriptor overlay) {
         int position = overlaysInZOrder.indexOf(overlay);
         if (position > -1) {
             addOverlayToMapAtPosition(position);
@@ -298,7 +296,7 @@ public class OverlayOnMapManager implements CacheManager.CacheOverlaysUpdateList
     }
 
     private void addOverlayToMapAtPosition(int position) {
-        CacheOverlay overlay = overlaysInZOrder.get(position);
+        MapLayerDescriptor overlay = overlaysInZOrder.get(position);
         OverlayOnMap onMap = overlaysOnMap.remove(overlay);
         if (onMap == null) {
             CacheProvider provider = providers.get(overlay.getCacheType());

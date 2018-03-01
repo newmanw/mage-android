@@ -88,9 +88,9 @@ import mil.nga.giat.mage.R;
 import mil.nga.giat.mage.filter.DateTimeFilter;
 import mil.nga.giat.mage.filter.Filter;
 import mil.nga.giat.mage.filter.FilterActivity;
-import mil.nga.giat.mage.map.cache.CacheManager;
-import mil.nga.giat.mage.map.cache.CacheManager.CacheOverlaysUpdateListener;
-import mil.nga.giat.mage.map.cache.CacheOverlay;
+import mil.nga.giat.mage.map.cache.MapDataManager;
+import mil.nga.giat.mage.map.cache.MapDataManager.CacheOverlaysUpdateListener;
+import mil.nga.giat.mage.map.cache.MapLayerDescriptor;
 import mil.nga.giat.mage.map.cache.MapCache;
 import mil.nga.giat.mage.map.cache.OverlayOnMapManager;
 import mil.nga.giat.mage.map.marker.LocationMarkerCollection;
@@ -110,17 +110,16 @@ import mil.nga.giat.mage.sdk.datastore.location.LocationHelper;
 import mil.nga.giat.mage.sdk.datastore.location.LocationProperty;
 import mil.nga.giat.mage.sdk.datastore.observation.Observation;
 import mil.nga.giat.mage.sdk.datastore.observation.ObservationHelper;
-import mil.nga.giat.mage.sdk.datastore.staticfeature.StaticFeatureHelper;
 import mil.nga.giat.mage.sdk.datastore.user.Event;
 import mil.nga.giat.mage.sdk.datastore.user.EventHelper;
 import mil.nga.giat.mage.sdk.datastore.user.User;
 import mil.nga.giat.mage.sdk.datastore.user.UserHelper;
 import mil.nga.giat.mage.sdk.event.ILocationEventListener;
 import mil.nga.giat.mage.sdk.event.IObservationEventListener;
-import mil.nga.giat.mage.sdk.event.IStaticFeatureEventListener;
 import mil.nga.giat.mage.sdk.event.IUserEventListener;
 import mil.nga.giat.mage.sdk.exceptions.LayerException;
 import mil.nga.giat.mage.sdk.exceptions.UserException;
+import mil.nga.giat.mage.sdk.fetch.StaticFeatureServerFetch;
 import mil.nga.giat.mage.sdk.location.LocationService;
 import mil.nga.mgrs.MGRS;
 import mil.nga.mgrs.gzd.MGRSTileProvider;
@@ -139,10 +138,10 @@ public class MapFragment extends Fragment implements
         LocationSource,
         LocationListener,
         CacheOverlaysUpdateListener,
+		StaticFeatureServerFetch.OnStaticLayersListener,
         SearchView.OnQueryTextListener,
         IObservationEventListener,
         ILocationEventListener,
-        IStaticFeatureEventListener,
         IUserEventListener,
 		MapDataFragment.MapDataListener
 {
@@ -300,7 +299,6 @@ public class MapFragment extends Fragment implements
 
 		ObservationHelper.getInstance(mage).removeListener(this);
 		LocationHelper.getInstance(mage).removeListener(this);
-		StaticFeatureHelper.getInstance(mage).removeListener(this);
         UserHelper.getInstance(mage).removeListener(this);
 		locationService.unregisterOnLocationListener(this);
 
@@ -492,7 +490,7 @@ public class MapFragment extends Fragment implements
 			map.setOnCameraMoveStartedListener(this);
 			map.setOnCameraIdleListener(this);
 
-			mapOverlayManager = CacheManager.getInstance().createMapManager(map);
+			mapOverlayManager = MapDataManager.getInstance().createMapManager(map);
 
 			observations = new ObservationMarkerCollection(mage, map);
 			locations = new LocationMarkerCollection(mage, map);
@@ -513,7 +511,6 @@ public class MapFragment extends Fragment implements
 
 		ObservationHelper.getInstance(mage).addListener(this);
 		LocationHelper.getInstance(mage).addListener(this);
-		StaticFeatureHelper.getInstance(mage).addListener(this);
 		UserHelper.getInstance(mage).addListener(this);
 
 		ObservationLoadTask observationLoad = new ObservationLoadTask(mage, observations);
@@ -961,7 +958,7 @@ public class MapFragment extends Fragment implements
 		mapOverlayManager.onMapClick(latLng, mapView);
 //		if(!overlays.isEmpty()) {
 //			StringBuilder clickMessage = new StringBuilder();
-//			for (CacheOverlay cacheOverlay : overlays.values()) {
+//			for (MapLayerDescriptor cacheOverlay : overlays.values()) {
 //				String message = null; //cacheOverlay.onMapClick(latLng, mapView, map);
 //				if(message != null){
 //					if(clickMessage.length() > 0){
@@ -1119,13 +1116,13 @@ public class MapFragment extends Fragment implements
 	}
 
 	@Override
-	public void onCacheOverlaysUpdated(CacheManager.CacheOverlayUpdate update) {
+	public void onCacheOverlaysUpdated(MapDataManager.CacheOverlayUpdate update) {
 		if (update.added.size() != 1) {
 			return;
 		}
 		MapCache explicitlyRequestedCache = update.added.iterator().next();
-		for (CacheOverlay cacheOverlay : explicitlyRequestedCache.getCacheOverlays().values()) {
-			mapOverlayManager.showOverlay(cacheOverlay);
+		for (MapLayerDescriptor layerDesc : explicitlyRequestedCache.getLayers().values()) {
+			mapOverlayManager.showOverlay(layerDesc);
 		}
 		LatLngBounds cacheBounds = explicitlyRequestedCache.getBounds();
 		if (cacheBounds != null) {
@@ -1160,19 +1157,24 @@ public class MapFragment extends Fragment implements
 	}
 
 	private void updateMgrs() {
-		if (map != null) {
-			int centerX = (mgrsCursor.getLeft() + mgrsCursor.getWidth() / 2);
-			int centerY = (mgrsCursor.getTop() + mgrsCursor.getHeight() / 2);
-			LatLng center = map.getProjection().fromScreenLocation(new Point(centerX, centerY));
-			MGRS mgrs = MGRS.from(new mil.nga.mgrs.wgs84.LatLng(center.latitude, center.longitude));
-			mgrsTextView.setText(mgrs.format(5));
-			mgrsGzdTextView.setText(String.format(Locale.getDefault(),"%s%c", mgrs.getZone(), mgrs.getBand()));
-			mgrs100KmTextView.setText(String.format(Locale.getDefault(),"%c%c", mgrs.getE100k(), mgrs.getN100k()));
-			mgrsEastingTextView.setText(String.format(Locale.getDefault(),"%05d", mgrs.getEasting()));
-			mgrsNorthingTextView.setText(String.format(Locale.getDefault(),"%05d", mgrs.getNorthing()));
+		if (map == null) {
+			return;
 		}
+		int centerX = (mgrsCursor.getLeft() + mgrsCursor.getWidth() / 2);
+		int centerY = (mgrsCursor.getTop() + mgrsCursor.getHeight() / 2);
+		LatLng center = map.getProjection().fromScreenLocation(new Point(centerX, centerY));
+		MGRS mgrs = MGRS.from(new mil.nga.mgrs.wgs84.LatLng(center.latitude, center.longitude));
+		mgrsTextView.setText(mgrs.format(5));
+		mgrsGzdTextView.setText(String.format(Locale.getDefault(),"%s%c", mgrs.getZone(), mgrs.getBand()));
+		mgrs100KmTextView.setText(String.format(Locale.getDefault(),"%c%c", mgrs.getE100k(), mgrs.getN100k()));
+		mgrsEastingTextView.setText(String.format(Locale.getDefault(),"%05d", mgrs.getEasting()));
+		mgrsNorthingTextView.setText(String.format(Locale.getDefault(),"%05d", mgrs.getNorthing()));
 	}
 
+	/**
+	 * Remove {@link #removeStaticFeatureLayers() non-applicable} layers from the map and
+	 * add enabled layers for the current event.
+	 */
 	private void updateStaticFeatureLayers() {
 		removeStaticFeatureLayers();
 		try {
@@ -1185,6 +1187,10 @@ public class MapFragment extends Fragment implements
 		}
 	}
 
+	/**
+	 * Remove from the map layers that are not in the current event and are not enabled
+	 * in preferences.
+	 */
 	private void removeStaticFeatureLayers() {
 		// TODO: clean up loading layers as well
 		Set<String> selectedLayerIds = preferences.getStringSet(getResources().getString(R.string.staticFeatureLayersKey), Collections.<String> emptySet());
@@ -1208,7 +1214,12 @@ public class MapFragment extends Fragment implements
 	}
 
 	@Override
-	public void onStaticFeaturesCreated(final Layer layer) {
+	public void onLayersLoaded(Set<Layer> layers) {
+
+	}
+
+	@Override
+	public void onFeaturesLoaded(final Layer layer) {
 		new Handler(Looper.getMainLooper()).post(new Runnable() {
 			@Override
 			public void run() {
@@ -1217,6 +1228,10 @@ public class MapFragment extends Fragment implements
 		});
 	}
 
+	/**
+	 * Add the given layer to the map if it's enabled in preferences.
+	 * @param layer
+	 */
 	private void onStaticFeatureLayer(Layer layer) {
 		Set<String> layers = preferences.getStringSet(getString(R.string.staticFeatureLayersKey), Collections.<String> emptySet());
 

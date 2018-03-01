@@ -21,11 +21,11 @@ public class XYZDirectoryCacheProvider implements CacheProvider {
     static class OnMap extends OverlayOnMapManager.OverlayOnMap {
 
         private final GoogleMap map;
-        private final XYZDirectoryCacheOverlay cache;
+        private final XYZDirectoryLayerDescriptor cache;
         private final TileOverlayOptions overlayOptions;
         private TileOverlay overlay;
 
-        OnMap(OverlayOnMapManager manager, XYZDirectoryCacheOverlay cache) {
+        OnMap(OverlayOnMapManager manager, XYZDirectoryLayerDescriptor cache) {
             manager.super();
             this.map = manager.getMap();
             this.cache = cache;
@@ -109,8 +109,8 @@ public class XYZDirectoryCacheProvider implements CacheProvider {
         if (!xyzDir.isDirectory()) {
             throw new CacheImportException(resource, "resource is not a directory: " + resource);
         }
-        Set<CacheOverlay> overlays = new HashSet<>();
-        overlays.add(new XYZDirectoryCacheOverlay(xyzDir.getName(), xyzDir.getName(), xyzDir));
+        Set<MapLayerDescriptor> overlays = new HashSet<>();
+        overlays.add(new XYZDirectoryLayerDescriptor(xyzDir.getName(), xyzDir.getName(), xyzDir));
         return new MapCache(xyzDir.getName(), getClass(), resource, Collections.unmodifiableSet(overlays));
     }
 
@@ -121,14 +121,14 @@ public class XYZDirectoryCacheProvider implements CacheProvider {
     }
 
     @Override
-    public OverlayOnMapManager.OverlayOnMap createOverlayOnMapFromCache(CacheOverlay cache, OverlayOnMapManager mapManager) {
-        return new OnMap(mapManager, (XYZDirectoryCacheOverlay) cache);
+    public OverlayOnMapManager.OverlayOnMap createOverlayOnMapFromCache(MapLayerDescriptor cache, OverlayOnMapManager mapManager) {
+        return new OnMap(mapManager, (XYZDirectoryLayerDescriptor) cache);
     }
 
     /**
      * TODO: this was originally in TileOverlayPreferenceActivity - delete should be function of the provider
      */
-    private void deleteXYZCacheOverlay(XYZDirectoryCacheOverlay xyzCacheOverlay){
+    private void deleteXYZCacheOverlay(XYZDirectoryLayerDescriptor xyzCacheOverlay){
 
         File directory = xyzCacheOverlay.getDirectory();
 

@@ -10,7 +10,7 @@ import static org.junit.Assert.assertTrue;
 
 public class MapCacheTest {
 
-    static final Set<CacheOverlay> none = Collections.emptySet();
+    static final Set<MapLayerDescriptor> none = Collections.emptySet();
 
     @Test
     public void equalWhenNameAndTypeAreEqual() {
@@ -23,7 +23,7 @@ public class MapCacheTest {
     public void equalWhenOverlaysAreDifferent() {
         MapCache c1 = new MapCache("c1", CacheProvider.class, null, none);
         MapCache c2 = new MapCache("c1", CacheProvider.class, null,
-            Collections.<CacheOverlay>singleton(new CacheOverlayTest.TestCacheOverlay1("test", "c1", CacheProvider.class)));
+            Collections.<MapLayerDescriptor>singleton(new CacheOverlayTest.TestLayerDescriptor1("test", "c1", CacheProvider.class)));
 
         assertTrue(c1.equals(c2));
     }

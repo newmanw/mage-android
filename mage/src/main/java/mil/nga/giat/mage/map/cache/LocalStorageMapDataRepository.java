@@ -9,9 +9,11 @@ import android.os.Environment;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import mil.nga.geopackage.GeoPackageConstants;
 import mil.nga.geopackage.validate.GeoPackageValidate;
@@ -23,7 +25,7 @@ import mil.nga.giat.mage.sdk.utils.StorageUtility;
  * Find <code>/MapCache</code> directories in storage roots using {@link StorageUtility},
  * as well as the application cache directory.
  */
-public class DefaultCacheLocationProvider implements MapDataRepository {
+public class LocalStorageMapDataRepository implements MapDataRepository {
 
     private static final String CACHE_DIRECTORY = "caches";
 
@@ -111,7 +113,7 @@ public class DefaultCacheLocationProvider implements MapDataRepository {
         @Override
         protected void onPostExecute(String result) {
             if (result == null) {
-                CacheManager.getInstance().tryImportCacheFile(cacheFile.toURI());
+                MapDataManager.getInstance().tryImportCacheFile(cacheFile.toURI());
             }
         }
     }
@@ -150,10 +152,10 @@ public class DefaultCacheLocationProvider implements MapDataRepository {
                     cacheFile.delete();
                 }
                 String cacheName = MediaUtility.getFileNameWithoutExtension(cacheFile);
-                // TODO: dunno about this here - seems like CacheManager responsibility
-                // probably CacheOverlay should have a source file member and track files
+                // TODO: dunno about this here - seems like MapDataManager responsibility
+                // probably MapLayerDescriptor should have a source file member and track files
                 // and mod dates that way
-                CacheManager.getInstance().removeCacheOverlay(cacheName);
+                MapDataManager.getInstance().removeCacheOverlay(cacheName);
                 CopyCacheStreamTask task = new CopyCacheStreamTask(context, uri, cacheFile, cacheName);
                 task.execute();
             }
@@ -163,12 +165,12 @@ public class DefaultCacheLocationProvider implements MapDataRepository {
 
     private final Context context;
 
-    public DefaultCacheLocationProvider(Context context) {
+    public LocalStorageMapDataRepository(Context context) {
         this.context = context;
     }
 
     @Override
-    public List<File> getLocalSearchDirs() {
+    public Set<MapCache> retrieveMapDataResources() {
         List<File> dirs = new ArrayList<>();
         Map<StorageUtility.StorageType, File> storageLocations = StorageUtility.getReadableStorageLocations();
         for (File storageLocation : storageLocations.values()) {

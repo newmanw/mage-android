@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.support.multidex.MultiDexApplication;
@@ -28,8 +29,8 @@ import javax.net.ssl.TrustManagerFactory;
 import mil.nga.giat.mage.login.LoginActivity;
 import mil.nga.giat.mage.login.ServerUrlActivity;
 import mil.nga.giat.mage.login.SignupActivity;
-import mil.nga.giat.mage.map.cache.CacheManager;
-import mil.nga.giat.mage.map.cache.DefaultCacheLocationProvider;
+import mil.nga.giat.mage.map.cache.MapDataManager;
+import mil.nga.giat.mage.map.cache.LocalStorageMapDataRepository;
 import mil.nga.giat.mage.map.cache.GeoPackageCacheProvider;
 import mil.nga.giat.mage.map.cache.XYZDirectoryCacheProvider;
 import mil.nga.giat.mage.observation.ObservationNotificationListener;
@@ -70,8 +71,6 @@ public class MAGE extends MultiDexApplication implements ISessionEventListener, 
 	private ObservationNotificationListener observationNotificationListener = null;
 	private AttachmentPushService attachmentPushService = null;
 
-	private StaticFeatureServerFetch staticFeatureServerFetch = null;
-
 	private Activity runningActivity;
 
 	@Override
@@ -109,12 +108,14 @@ public class MAGE extends MultiDexApplication implements ISessionEventListener, 
 			}
 		});
 
-        CacheManager.initialize(new CacheManager.Config()
+        MapDataManager.initialize(new MapDataManager.Config()
 			.context(this)
 			.providers(new XYZDirectoryCacheProvider())
 			.providers(new GeoPackageCacheProvider(this))
-			.cacheLocations(new DefaultCacheLocationProvider(this))
-			.updatePermission(new CacheManager.CreateUpdatePermission(){}));
+			.cacheLocations(new LocalStorageMapDataRepository(this))
+			.updatePermission(new MapDataManager.CreateUpdatePermission(){}));
+
+        StaticFeatureServerFetch.initialize(this);
 
 		registerActivityLifecycleCallbacks(this);
 
@@ -138,25 +139,9 @@ public class MAGE extends MultiDexApplication implements ISessionEventListener, 
 		startPushing();
 
 		// Pull static layers and features just once
-		loadStaticFeatures(false, null);
+		StaticFeatureServerFetch.getInstance().refreshEventLayers(AsyncTask.THREAD_POOL_EXECUTOR);
 
 		InitializeMAGEWearBridge.startBridgeIfWearBuild(getApplicationContext());
-	}
-
-	public void loadStaticFeatures(final boolean force, final StaticFeatureServerFetch.OnStaticLayersListener listener) {
-		Runnable runnable = new Runnable() {
-			@Override
-			public void run() {
-				staticFeatureServerFetch = new StaticFeatureServerFetch(getApplicationContext());
-				try {
-					staticFeatureServerFetch.fetch(force, listener);
-				} catch (Exception e) {
-					e.printStackTrace();
-				}
-			}
-		};
-
-		new Thread(runnable).start();
 	}
 
 	public void onLogout(Boolean clearTokenInformationAndSendLogoutRequest, final OnLogoutListener logoutListener) {
@@ -285,10 +270,7 @@ public class MAGE extends MultiDexApplication implements ISessionEventListener, 
 	 * Stop Tasks responsible for fetching Observations and Locations from the server.
 	 */
 	private void destroyFetching() {
-		if (staticFeatureServerFetch != null) {
-			staticFeatureServerFetch.destroy();
-			staticFeatureServerFetch = null;
-		}
+		StaticFeatureServerFetch.getInstance().cancelSync();
 		if(locationFetchIntent != null) {
 			stopService(locationFetchIntent);
 			locationFetchIntent = null;

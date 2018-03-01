@@ -8,7 +8,7 @@ import mil.nga.giat.mage.R;
  *
  * @author osbornb
  */
-public class GeoPackageFeatureTableCacheOverlay extends GeoPackageTableCacheOverlay {
+public class GeoPackageFeatureTableDescriptor extends GeoPackageTableDescriptor {
 
     /**
      * Max zoom for features
@@ -23,7 +23,7 @@ public class GeoPackageFeatureTableCacheOverlay extends GeoPackageTableCacheOver
     /**
      * Linked tile table cache overlays
      */
-    private final List<GeoPackageTileTableCacheOverlay> linkedTiles;
+    private final List<GeoPackageTileTableDescriptor> linkedTiles;
 
     /**
      * Constructor
@@ -34,7 +34,7 @@ public class GeoPackageFeatureTableCacheOverlay extends GeoPackageTableCacheOver
      * @param minZoom      min zoom level
      * @param indexed      indexed flag
      */
-    GeoPackageFeatureTableCacheOverlay(String geoPackage, String tableName, int count, int minZoom, boolean indexed, List<GeoPackageTileTableCacheOverlay> linkedTiles) {
+    GeoPackageFeatureTableDescriptor(String geoPackage, String tableName, int count, int minZoom, boolean indexed, List<GeoPackageTileTableDescriptor> linkedTiles) {
         super(geoPackage, tableName, count, minZoom, MAX_ZOOM);
         this.indexed = indexed;
         this.linkedTiles = linkedTiles;
@@ -49,7 +49,7 @@ public class GeoPackageFeatureTableCacheOverlay extends GeoPackageTableCacheOver
     public String getInfo() {
         int minZoom = getMinZoom();
         int maxZoom = getMaxZoom();
-        for(GeoPackageTileTableCacheOverlay linkedTileTable: linkedTiles){
+        for(GeoPackageTileTableDescriptor linkedTileTable: linkedTiles){
             minZoom = Math.min(minZoom, linkedTileTable.getMinZoom());
             maxZoom = Math.max(maxZoom, linkedTileTable.getMaxZoom());
         }
@@ -70,7 +70,7 @@ public class GeoPackageFeatureTableCacheOverlay extends GeoPackageTableCacheOver
      *
      * @return linked tile table cache overlays
      */
-    public List<GeoPackageTileTableCacheOverlay> getLinkedTileTables(){
+    public List<GeoPackageTileTableDescriptor> getLinkedTileTables(){
         return linkedTiles;
     }
 }

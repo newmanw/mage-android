@@ -92,7 +92,7 @@ public class StaticFeatureLoadTask extends AsyncTask<Layer, Object, Layer> {
 					}
 				}
 
-				publishProgress(new Object[] { options, layerId, content.toString() });
+				publishProgress(options, layerId, content.toString());
 			} else if (type == GeometryType.LINESTRING) {
 				PolylineOptions options = new PolylineOptions();
 
@@ -105,7 +105,7 @@ public class StaticFeatureLoadTask extends AsyncTask<Layer, Object, Layer> {
 				for(Point point: lineString.getPoints()){
 					options.add(new LatLng(point.getY(), point.getX()));
 				}
-				publishProgress(new Object[] { options, layerId, content.toString() });
+				publishProgress(options, layerId, content.toString());
 			} else if (type == GeometryType.POLYGON) {
 				PolygonOptions options = new PolygonOptions();
 

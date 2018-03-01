@@ -23,7 +23,7 @@ import java.util.concurrent.Executor;
  * Created by wnewman on 2/11/16.
  */
 @MainThread
-public class CacheManager {
+public class MapDataManager {
 
     /**
      * Implement this interface and {@link #addUpdateListener(CacheOverlaysUpdateListener) register}
@@ -36,19 +36,19 @@ public class CacheManager {
     /**
      * The create update permission is an opaque interface that enforces only holders of
      * the the permission instance have the ability to create a {@link CacheOverlayUpdate}
-     * associated with a given instance of {@link CacheManager}.  This can simply be an
+     * associated with a given instance of {@link MapDataManager}.  This can simply be an
      * anonymous implementation created at the call site of the {@link Config#updatePermission(CreateUpdatePermission) configuration}.
      * For example:
      * <p>
      * <pre>
-     * new CacheManager(new CacheManager.Config()<br>
-     *     .updatePermission(new CacheManager.CreateUpdatePermission(){})
+     * new MapDataManager(new MapDataManager.Config()<br>
+     *     .updatePermission(new MapDataManager.CreateUpdatePermission(){})
      *     // other config items
      *     );
      * </pre>
      * </p>
      * This prevents the programmer error of creating update objects outside of the
-     * <code>CacheManager</code> instance to {@link CacheOverlaysUpdateListener#onCacheOverlaysUpdated(CacheOverlayUpdate) deliver}
+     * <code>MapDataManager</code> instance to {@link CacheOverlaysUpdateListener#onCacheOverlaysUpdated(CacheOverlayUpdate) deliver}
      * to listeners.
      */
     public interface CreateUpdatePermission {};
@@ -57,11 +57,11 @@ public class CacheManager {
         public final Set<MapCache> added;
         public final Set<MapCache> updated;
         public final Set<MapCache> removed;
-        public final CacheManager source = CacheManager.this;
+        public final MapDataManager source = MapDataManager.this;
 
         public CacheOverlayUpdate(CreateUpdatePermission updatePermission, Set<MapCache> added, Set<MapCache> updated, Set<MapCache> removed) {
             if (updatePermission != source.updatePermission) {
-                throw new Error("erroneous attempt to create update from cache manager instance " + CacheManager.this);
+                throw new Error("erroneous attempt to create update from cache manager instance " + MapDataManager.this);
             }
             this.added = added;
             this.updated = updated;
@@ -69,9 +69,9 @@ public class CacheManager {
         }
     }
 
-    private static final String LOG_NAME = CacheManager.class.getName();
+    private static final String LOG_NAME = MapDataManager.class.getName();
 
-    private static CacheManager instance = null;
+    private static MapDataManager instance = null;
 
     public static class Config {
         private Application context;
@@ -113,13 +113,13 @@ public class CacheManager {
 
     public static synchronized void initialize(Config config) {
         if (instance == null) {
-            instance = new CacheManager(config);
+            instance = new MapDataManager(config);
             return;
         }
-        throw new Error("attempt to initialize " + CacheManager.class + " singleton more than once");
+        throw new Error("attempt to initialize " + MapDataManager.class + " singleton more than once");
     }
 
-    public static CacheManager getInstance() {
+    public static MapDataManager getInstance() {
         return instance;
     }
 
@@ -133,7 +133,7 @@ public class CacheManager {
     private FindNewCacheFilesInProvidedLocationsTask findNewCacheFilesTask;
     private ImportCacheFileTask importCacheFilesForRefreshTask;
 
-    public CacheManager(Config config) {
+    public MapDataManager(Config config) {
         if (config.updatePermission == null) {
             throw new IllegalArgumentException("update permission object must be non-null");
         }
@@ -336,68 +336,6 @@ public class CacheManager {
                 caches.addAll(provider.refreshCaches(providerCaches));
             }
             return caches;
-
-            // TODO: move this to OverlayOnMapManager, or some such map-specific linkage
-            // but for now i think just save the set of cache files to preferences to re-create
-            // after next launch.  at some point switch to urls instead of file paths to maybe
-            // support more than local files for cached overlays, which at that point i suppose
-            // would not be cached.
-            // TODO: later maybe store to a Room database
-
-            // Set what should be enabled based on preferences.
-//            boolean update = false;
-//            SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
-//            Set<String> updatedEnabledOverlays = new HashSet<>();
-//            updatedEnabledOverlays.addAll(preferences.getStringSet(context.getString(R.string.tileOverlaysKey), Collections.<String>emptySet()));
-//            Set<String> enabledOverlays = new HashSet<>();
-//            enabledOverlays.addAll(updatedEnabledOverlays);
-//
-//            // Determine which caches are enabled
-//            for (CacheOverlay cacheOverlay : overlays) {
-//
-//                // Check and enable the cache
-//                String cacheName = cacheOverlay.getOverlayName();
-//                if (enabledOverlays.remove(cacheName)) {
-//                    cacheOverlay.setEnabled(true);
-//                }
-//
-//                // Check the child caches
-//                for (CacheOverlay childCache : cacheOverlay.getChildren()) {
-//                    if (enabledOverlays.remove(childCache.getOverlayName())) {
-//                        childCache.setEnabled(true);
-//                        cacheOverlay.setEnabled(true);
-//                    }
-//                }
-//
-//                // Check for new caches to enable in the overlays and preferences
-//                if (overlaysToEnable.contains(cacheName)) {
-//
-//                    update = true;
-//                    cacheOverlay.setEnabled(true);
-//                    cacheOverlay.setAdded(true);
-//                    if (cacheOverlay.isSupportsChildren()) {
-//                        for (CacheOverlay childCache : cacheOverlay.getChildren()) {
-//                            childCache.setEnabled(true);
-//                            updatedEnabledOverlays.add(childCache.getOverlayName());
-//                        }
-//                    } else {
-//                        updatedEnabledOverlays.add(cacheName);
-//                    }
-//                }
-//            }
-//
-//            // Remove overlays in the preferences that no longer exist
-//            if (!enabledOverlays.isEmpty()) {
-//                updatedEnabledOverlays.removeAll(enabledOverlays);
-//                update = true;
-//            }
-//
-//            // If new enabled cache overlays, update them in the preferences
-//            if (update) {
-//                SharedPreferences.Editor editor = preferences.edit();
-//                editor.putStringSet(context.getString(R.string.tileOverlaysKey), updatedEnabledOverlays);
-//                editor.apply();
-//            }
         }
 
         @Override
@@ -410,7 +348,7 @@ public class CacheManager {
 
         @Override
         protected URI[] doInBackground(Void... voids) {
-            List<File> searchDirs = cacheLocations.getLocalSearchDirs();
+            List<File> searchDirs = cacheLocations.retrieveMapDataResources();
             List<URI> potentialCaches = new ArrayList<>();
             for (File dir : searchDirs) {
                 File[] files = dir.listFiles();

@@ -42,7 +42,7 @@ import mil.nga.giat.mage.event.ChangeEventActivity;
 import mil.nga.giat.mage.help.HelpActivity;
 import mil.nga.giat.mage.login.LoginActivity;
 import mil.nga.giat.mage.map.MapFragment;
-import mil.nga.giat.mage.map.cache.CacheManager;
+import mil.nga.giat.mage.map.cache.MapDataManager;
 import mil.nga.giat.mage.newsfeed.ObservationFeedFragment;
 import mil.nga.giat.mage.newsfeed.PeopleFeedFragment;
 import mil.nga.giat.mage.preferences.GeneralPreferencesActivity;
@@ -99,7 +99,7 @@ public class LandingActivity extends AppCompatActivity implements NavigationView
         // i.e. after TokenExpiredActivity.
         ((MAGE) getApplication()).onLogin();
 
-        CacheManager.getInstance().refreshAvailableCaches();
+        MapDataManager.getInstance().refreshAvailableCaches();
 
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
@@ -258,7 +258,7 @@ public class LandingActivity extends AppCompatActivity implements NavigationView
             }
             case PERMISSIONS_REQUEST_ACCESS_STORAGE: {
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    CacheManager.getInstance().refreshAvailableCaches();
+                    MapDataManager.getInstance().refreshAvailableCaches();
                 }
 
                 break;
@@ -406,7 +406,7 @@ public class LandingActivity extends AppCompatActivity implements NavigationView
     private void handleOpenFilePath() {
 
         File cacheFile = new File(openPath);
-        CacheManager.getInstance().tryImportCacheFile(cacheFile.toURI());
+        MapDataManager.getInstance().tryImportCacheFile(cacheFile.toURI());
     }
 
     public static void deleteAllData(Context context) {
