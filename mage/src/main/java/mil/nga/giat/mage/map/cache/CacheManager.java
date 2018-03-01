@@ -7,6 +7,7 @@ import android.support.annotation.MainThread;
 import com.google.android.gms.maps.GoogleMap;
 
 import java.io.File;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -23,16 +24,6 @@ import java.util.concurrent.Executor;
  */
 @MainThread
 public class CacheManager {
-
-    /**
-     * Dynamically provide a list of standard locations to search for available caches.
-     * This is primarily intended to support changing external SD cards and refreshing
-     * caches from there, but the concept could be extended to remote URLs as well or
-     * other file sources.
-     */
-    public interface CacheLocationProvider {
-        List<File> getLocalSearchDirs();
-    }
 
     /**
      * Implement this interface and {@link #addUpdateListener(CacheOverlaysUpdateListener) register}
@@ -85,7 +76,7 @@ public class CacheManager {
     public static class Config {
         private Application context;
         private CreateUpdatePermission updatePermission;
-        private CacheLocationProvider cacheLocations;
+        private MapDataRepository cacheLocations;
         private List<CacheProvider> providers = new ArrayList<>();
         private Executor executor = AsyncTask.SERIAL_EXECUTOR;
 
@@ -104,7 +95,7 @@ public class CacheManager {
          * @param x
          * @return
          */
-        public Config cacheLocations(CacheLocationProvider x) {
+        public Config cacheLocations(MapDataRepository x) {
             cacheLocations = x;
             return this;
         }
@@ -133,9 +124,8 @@ public class CacheManager {
     }
 
     private final CreateUpdatePermission updatePermission;
-    private final Application context;
     private final Executor executor;
-    private final CacheLocationProvider cacheLocations;
+    private final MapDataRepository cacheLocations;
     private final List<CacheProvider> providers = new ArrayList<>();
     private final Collection<CacheOverlaysUpdateListener> cacheOverlayListeners = new ArrayList<>();
     private Set<MapCache> caches = Collections.emptySet();
@@ -148,7 +138,6 @@ public class CacheManager {
             throw new IllegalArgumentException("update permission object must be non-null");
         }
         updatePermission = config.updatePermission;
-        context = config.context;
         executor = config.executor;
         cacheLocations = config.cacheLocations;
         providers.addAll(config.providers);
@@ -162,7 +151,7 @@ public class CacheManager {
         cacheOverlayListeners.remove(listener);
     }
 
-    public void tryImportCacheFile(File cacheFile) {
+    public void tryImportCacheFile(URI cacheFile) {
         new ImportCacheFileTask().executeOnExecutor(executor, cacheFile);
     }
 
@@ -210,7 +199,7 @@ public class CacheManager {
             if (refreshTask == null) {
                 throw new IllegalStateException("import task for refresh finished but refresh task is null");
             }
-            refreshTask.executeOnExecutor(executor, caches);
+            refreshTask.executeOnExecutor(executor, caches.toArray(new MapCache[caches.size()]));
         }
         else {
             updateCaches(task, null);
@@ -285,25 +274,28 @@ public class CacheManager {
         }
     }
 
-    private class ImportCacheFileTask extends AsyncTask<File, Void, CacheImportResult> {
+    private class ImportCacheFileTask extends AsyncTask<URI, Void, CacheImportResult> {
 
-        private MapCache importFromFirstCapableProvider(File cacheFile) throws CacheImportException {
+        private MapCache importFromFirstCapableProvider(URI resource) throws CacheImportException {
             for (CacheProvider provider : providers) {
-                if (!cacheFile.canRead()) {
-                    throw new CacheImportException(cacheFile, "cache file is not readable or does not exist: " + cacheFile.getName());
+                if (resource.getScheme().equalsIgnoreCase("file")) {
+                    File cacheFile = new File(resource.getPath());
+                    if (!cacheFile.canRead()) {
+                        throw new CacheImportException(resource, "cache file is not readable or does not exist: " + cacheFile.getName());
+                    }
                 }
-                if (provider.isCacheFile(cacheFile)) {
-                    return provider.importCacheFromFile(cacheFile);
+                if (provider.isCacheFile(resource)) {
+                    return provider.importCacheFromFile(resource);
                 }
             }
-            throw new CacheImportException(cacheFile, "no cache provider could handle file " + cacheFile.getName());
+            throw new CacheImportException(resource, "no cache provider could handle file " + resource);
         }
 
         @Override
-        protected CacheImportResult doInBackground(File... files) {
+        protected CacheImportResult doInBackground(URI... files) {
             Set<MapCache> caches = new HashSet<>(files.length);
             List<CacheImportException> fails = new ArrayList<>(files.length);
-            for (File cacheFile : files) {
+            for (URI cacheFile : files) {
                 MapCache imported = null;
                 try {
                     imported = importFromFirstCapableProvider(cacheFile);
@@ -322,12 +314,11 @@ public class CacheManager {
         }
     }
 
-    private final class RefreshAvailableCachesTask extends AsyncTask<Set<MapCache>, Void, Set<MapCache>> {
+    private final class RefreshAvailableCachesTask extends AsyncTask<MapCache, Void, Set<MapCache>> {
 
         @Override
-        protected Set<MapCache> doInBackground(Set<MapCache>... params) {
+        protected final Set<MapCache> doInBackground(MapCache... existingCaches) {
             Map<Class<? extends CacheProvider>, Set<MapCache>> cachesByProvider = new HashMap<>(providers.size());
-            Set<MapCache> existingCaches = params[0];
             for (MapCache cache : existingCaches) {
                 Set<MapCache> providerCaches = cachesByProvider.get(cache.getType());
                 if (providerCaches == null) {
@@ -415,21 +406,23 @@ public class CacheManager {
         }
     }
 
-    private final class FindNewCacheFilesInProvidedLocationsTask extends AsyncTask<Void, Void, File[]> {
+    private final class FindNewCacheFilesInProvidedLocationsTask extends AsyncTask<Void, Void, URI[]> {
 
         @Override
-        protected File[] doInBackground(Void... voids) {
+        protected URI[] doInBackground(Void... voids) {
             List<File> searchDirs = cacheLocations.getLocalSearchDirs();
-            List<File> potentialCaches = new ArrayList<>();
+            List<URI> potentialCaches = new ArrayList<>();
             for (File dir : searchDirs) {
                 File[] files = dir.listFiles();
-                potentialCaches.addAll(Arrays.asList(files));
+                for (File file : files) {
+                    potentialCaches.add(file.toURI());
+                }
             }
-            return potentialCaches.toArray(new File[potentialCaches.size()]);
+            return potentialCaches.toArray(new URI[potentialCaches.size()]);
         }
 
         @Override
-        protected void onPostExecute(File[] files) {
+        protected void onPostExecute(URI[] result) {
             findNewCacheFilesFinished(this);
         }
     }

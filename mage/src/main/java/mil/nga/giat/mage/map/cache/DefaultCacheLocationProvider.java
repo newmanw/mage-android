@@ -23,9 +23,9 @@ import mil.nga.giat.mage.sdk.utils.StorageUtility;
  * Find <code>/MapCache</code> directories in storage roots using {@link StorageUtility},
  * as well as the application cache directory.
  */
-public class DefaultCacheLocationProvider implements CacheManager.CacheLocationProvider {
+public class DefaultCacheLocationProvider implements MapDataRepository {
 
-    public static final String CACHE_DIRECTORY = "caches";
+    private static final String CACHE_DIRECTORY = "caches";
 
     /**
      * Get a writeable cache directory for saving cache files
@@ -74,7 +74,7 @@ public class DefaultCacheLocationProvider implements CacheManager.CacheLocationP
          * @param cacheFile copy to cache file location
          * @param cacheName cache name
          */
-        public CopyCacheStreamTask(Context context, Uri uri, File cacheFile, String cacheName) {
+        CopyCacheStreamTask(Context context, Uri uri, File cacheFile, String cacheName) {
             this.context = context;
             this.uri = uri;
             this.cacheFile = cacheFile;
@@ -111,7 +111,7 @@ public class DefaultCacheLocationProvider implements CacheManager.CacheLocationP
         @Override
         protected void onPostExecute(String result) {
             if (result == null) {
-                CacheManager.getInstance().tryImportCacheFile(cacheFile);
+                CacheManager.getInstance().tryImportCacheFile(cacheFile.toURI());
             }
         }
     }

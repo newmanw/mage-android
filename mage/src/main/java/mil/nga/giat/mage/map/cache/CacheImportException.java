@@ -1,29 +1,29 @@
 package mil.nga.giat.mage.map.cache;
 
-import java.io.File;
+import java.net.URI;
 
 public class CacheImportException extends Exception {
 
-    private final File cacheFile;
+    private final URI cacheFile;
 
-    public CacheImportException(File cacheFile) {
-        this(cacheFile, "failed to import cache cacheFile " + cacheFile.getName());
+    public CacheImportException(URI cacheFile) {
+        this(cacheFile, "failed to import cache cacheFile " + cacheFile);
     }
 
-    public CacheImportException(File cacheFile, String message) {
+    public CacheImportException(URI cacheFile, String message) {
         this(cacheFile, message, null);
     }
 
-    public CacheImportException(File cacheFile, String message, Throwable cause) {
+    public CacheImportException(URI cacheFile, String message, Throwable cause) {
         super(message, cause);
         this.cacheFile = cacheFile;
     }
 
-    public CacheImportException(File cacheFile, Throwable cause) {
-        this(cacheFile, "failed to import cache cacheFile " + cacheFile.getName(), cause);
+    public CacheImportException(URI cacheFile, Throwable cause) {
+        this(cacheFile, "failed to import cache cacheFile " + cacheFile, cause);
     }
 
-    public File getCacheFile() {
+    public URI getCacheFile() {
         return cacheFile;
     }
 }

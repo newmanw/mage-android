@@ -2,7 +2,7 @@ package mil.nga.giat.mage.map.cache;
 
 import com.google.android.gms.maps.model.LatLngBounds;
 
-import java.io.File;
+import java.net.URI;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -13,15 +13,15 @@ public class MapCache {
 
     private final String name;
     private final Class<? extends CacheProvider> type;
-    private final File sourceFile;
+    private final URI sourceFile;
     private final Map<String, CacheOverlay> overlays;
     private long refreshTimestamp;
 
 
-    public MapCache(String name, Class<? extends CacheProvider> type, File sourceFile, Set<CacheOverlay> overlays) {
+    public MapCache(String name, Class<? extends CacheProvider> type, URI resource, Set<CacheOverlay> overlays) {
         this.name = name;
         this.type = type;
-        this.sourceFile = sourceFile;
+        this.sourceFile = resource;
         Map<String, CacheOverlay> overlayMap = new HashMap<>(overlays.size());
         for (CacheOverlay overlay : overlays) {
             overlayMap.put(overlay.getOverlayName(), overlay);
@@ -38,7 +38,7 @@ public class MapCache {
         return type;
     }
 
-    public File getSourceFile() {
+    public URI getSourceFile() {
         return sourceFile;
     }
 

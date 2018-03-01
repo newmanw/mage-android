@@ -3,6 +3,7 @@ package mil.nga.giat.mage.map.cache;
 import org.junit.Test;
 
 import java.io.File;
+import java.net.URI;
 import java.util.Set;
 
 import static org.junit.Assert.assertFalse;
@@ -13,12 +14,12 @@ public class CacheOverlayTest {
     static class TestCacheProvider1 implements CacheProvider {
 
         @Override
-        public boolean isCacheFile(File cacheFile) {
+        public boolean isCacheFile(URI cacheFile) {
             return false;
         }
 
         @Override
-        public MapCache importCacheFromFile(File cacheFile) throws CacheImportException {
+        public MapCache importCacheFromFile(URI cacheFile) throws CacheImportException {
             return null;
         }
 
@@ -36,12 +37,12 @@ public class CacheOverlayTest {
     static class TestCacheProvider2 implements CacheProvider {
 
         @Override
-        public boolean isCacheFile(File cacheFile) {
+        public boolean isCacheFile(URI cacheFile) {
             return false;
         }
 
         @Override
-        public MapCache importCacheFromFile(File cacheFile) throws CacheImportException {
+        public MapCache importCacheFromFile(URI cacheFile) throws CacheImportException {
             return null;
         }
 

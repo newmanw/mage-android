@@ -1,6 +1,7 @@
 package mil.nga.giat.mage.map.cache;
 
 import java.io.File;
+import java.net.URI;
 import java.util.Set;
 
 /**
@@ -17,7 +18,7 @@ public interface CacheProvider {
      * @param cacheFile
      * @return
      */
-    boolean isCacheFile(File cacheFile);
+    boolean isCacheFile(URI cacheFile);
 
     /**
      * Attempt to import the given file as this provider's type of cache and add
@@ -29,7 +30,7 @@ public interface CacheProvider {
      *
      * TODO: assumes one cache per file; child caches can get around this, but maybe that's not always the best model
      */
-    MapCache importCacheFromFile(File cacheFile) throws CacheImportException;
+    MapCache importCacheFromFile(URI cacheFile) throws CacheImportException;
 
     /**
      * Refresh the data in the given set of caches.  Return a new subset of the

@@ -16,6 +16,7 @@ import com.google.android.gms.maps.model.TileOverlay;
 import com.google.android.gms.maps.model.TileOverlayOptions;
 
 import java.io.File;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -38,10 +39,7 @@ import mil.nga.geopackage.map.geom.GoogleMapShape;
 import mil.nga.geopackage.map.geom.GoogleMapShapeConverter;
 import mil.nga.geopackage.map.geom.MultiMarker;
 import mil.nga.geopackage.map.geom.MultiPolygon;
-import mil.nga.geopackage.map.geom.MultiPolygonMarkers;
 import mil.nga.geopackage.map.geom.MultiPolyline;
-import mil.nga.geopackage.map.geom.MultiPolylineMarkers;
-import mil.nga.geopackage.map.geom.PolygonMarkers;
 import mil.nga.geopackage.map.geom.PolylineMarkers;
 import mil.nga.geopackage.map.tiles.overlay.BoundedOverlay;
 import mil.nga.geopackage.map.tiles.overlay.FeatureOverlay;
@@ -93,13 +91,16 @@ public class GeoPackageCacheProvider implements CacheProvider {
     }
 
     @Override
-    public boolean isCacheFile(File cacheFile) {
-        // Handle GeoPackage files by linking them to their current location
-        return GeoPackageValidate.hasGeoPackageExtension(cacheFile);
+    public boolean isCacheFile(URI resource) {
+        if (!"file".equalsIgnoreCase(resource.getScheme())) {
+            return false;
+        }
+        return GeoPackageValidate.hasGeoPackageExtension(new File(resource.getPath()));
     }
 
     @Override
-    public MapCache importCacheFromFile(File cacheFile) throws CacheImportException {
+    public MapCache importCacheFromFile(URI resource) throws CacheImportException {
+        File cacheFile = new File(resource.getPath());
         String cacheName = getOrImportGeoPackageDatabase(cacheFile);
         return createCache(cacheFile, cacheName);
     }
@@ -163,11 +164,11 @@ public class GeoPackageCacheProvider implements CacheProvider {
             if (geoPackageManager.importGeoPackageAsExternalLink(cacheFile, databaseName)) {
                 return databaseName;
             }
-            fail = new CacheImportException(cacheFile, "GeoPackage import failed: " + cacheFile.getName());
+            fail = new CacheImportException(cacheFile.toURI(), "GeoPackage import failed: " + cacheFile.getName());
         }
         catch (Exception e) {
             Log.e(LOG_NAME, "Failed to import file as GeoPackage. path: " + cacheFile.getAbsolutePath() + ", name: " + databaseName + ", error: " + e.getMessage());
-            fail = new CacheImportException(cacheFile, "GeoPackage import threw exception", e);
+            fail = new CacheImportException(cacheFile.toURI(), "GeoPackage import threw exception", e);
         }
 
         if (cacheFile.canWrite()) {
@@ -254,7 +255,7 @@ public class GeoPackageCacheProvider implements CacheProvider {
             // Add stand alone tile tables that were not linked to feature tables
             tables.addAll(tileCacheOverlays.values());
 
-            return new MapCache(database, this.getClass(), sourceFile, tables);
+            return new MapCache(database, this.getClass(), sourceFile.toURI(), tables);
         }
         catch (Exception e) {
             Log.e(LOG_NAME, "error creating GeoPackage cache", e);

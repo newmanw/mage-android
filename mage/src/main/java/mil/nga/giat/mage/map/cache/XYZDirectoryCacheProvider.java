@@ -7,9 +7,9 @@ import com.google.android.gms.maps.MapView;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.TileOverlay;
 import com.google.android.gms.maps.model.TileOverlayOptions;
-import com.google.android.gms.maps.model.TileProvider;
 
 import java.io.File;
+import java.net.URI;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
@@ -95,18 +95,23 @@ public class XYZDirectoryCacheProvider implements CacheProvider {
     }
 
     @Override
-    public boolean isCacheFile(File cacheFile) {
-        return cacheFile.isDirectory();
+    public boolean isCacheFile(URI resource) {
+        if ("file".equalsIgnoreCase(resource.getScheme())) {
+            return false;
+        }
+        File localPath = new File(resource);
+        return localPath.isDirectory();
     }
 
     @Override
-    public MapCache importCacheFromFile(File cacheFile) throws CacheImportException {
-        if (!cacheFile.isDirectory()) {
-            throw new CacheImportException(cacheFile, "cache file is not a directory: " + cacheFile.getName());
+    public MapCache importCacheFromFile(URI resource) throws CacheImportException {
+        File xyzDir = new File(resource);
+        if (!xyzDir.isDirectory()) {
+            throw new CacheImportException(resource, "resource is not a directory: " + resource);
         }
         Set<CacheOverlay> overlays = new HashSet<>();
-        overlays.add(new XYZDirectoryCacheOverlay(cacheFile.getName(), cacheFile.getName(), cacheFile));
-        return new MapCache(cacheFile.getName(), getClass(), cacheFile, Collections.unmodifiableSet(overlays));
+        overlays.add(new XYZDirectoryCacheOverlay(xyzDir.getName(), xyzDir.getName(), xyzDir));
+        return new MapCache(xyzDir.getName(), getClass(), resource, Collections.unmodifiableSet(overlays));
     }
 
     @Override
