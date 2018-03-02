@@ -60,6 +60,25 @@ public class MapDataManagerTest {
     static abstract class CatProvider implements MapDataProvider {}
     static abstract class DogProvider implements MapDataProvider {}
 
+    static class TestDirMapDataRepository implements MapDataRepository {
+
+        private final File dir;
+
+        TestDirMapDataRepository(File dir) {
+            this.dir = dir;
+        }
+
+        @Override
+        public Set<MapDataResource> retrieveMapDataResources() {
+            Set<MapDataResource> resources = new HashSet<>();
+            File[] files = dir.listFiles();
+            for (File file : files) {
+                resources.add(new MapDataResource(file.toURI()));
+            }
+            return resources;
+        }
+    }
+
     static class TestLayerDescriptor extends MapLayerDescriptor {
 
         TestLayerDescriptor(String overlayName, String cacheName, Class<? extends MapDataProvider> type) {
@@ -79,7 +98,6 @@ public class MapDataManagerTest {
 
     private File cacheDir1;
     private File cacheDir2;
-    private List<File> cacheDirs;
     private MapDataManager mapDataManager;
     private Executor executor;
     private MapDataProvider catProvider;
@@ -92,10 +110,13 @@ public class MapDataManagerTest {
 
         Application context = Mockito.mock(Application.class);
 
-        cacheDirs = Arrays.asList(
+        List<File> cacheDirs = Arrays.asList(
             cacheDir1 = testRoot.newFolder("cache1"),
             cacheDir2 = testRoot.newFolder("cache2")
         );
+
+        TestDirMapDataRepository repo1 = new TestDirMapDataRepository(cacheDir1);
+        TestDirMapDataRepository repo2 = new TestDirMapDataRepository(cacheDir2);
 
         assertTrue(cacheDir1.isDirectory());
         assertTrue(cacheDir2.isDirectory());
@@ -132,14 +153,8 @@ public class MapDataManagerTest {
             .context(context)
             .executor(executor)
             .providers(catProvider, dogProvider)
-            .cacheLocations(new MapDataRepository() {
-                @Override
-                public List<File> retrieveMapDataResources() {
-                    return cacheDirs;
-                }
-            })
+            .repositories(repo1, repo2)
             .updatePermission(new MapDataManager.CreateUpdatePermission(){});
-
 
         listener = mock(MapDataManager.CacheOverlaysUpdateListener.class);
         mapDataManager = new MapDataManager(config);
@@ -155,7 +170,7 @@ public class MapDataManagerTest {
     @Test(expected = IllegalArgumentException.class)
     public void requiresUpdatePermission() {
         MapDataManager manager = new MapDataManager(new MapDataManager.Config()
-            .cacheLocations(null)
+            .repositories()
             .executor(executor)
             .providers()
             .updatePermission(null));

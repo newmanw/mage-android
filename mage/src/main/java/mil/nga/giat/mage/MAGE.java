@@ -112,7 +112,7 @@ public class MAGE extends MultiDexApplication implements ISessionEventListener, 
 			.context(this)
 			.providers(new XYZDirectoryProvider())
 			.providers(new GeoPackageProvider(this))
-			.cacheLocations(new LocalStorageMapDataRepository(this))
+			.repositories(new LocalStorageMapDataRepository(this))
 			.updatePermission(new MapDataManager.CreateUpdatePermission(){}));
 
         StaticFeatureServerFetch.initialize(this);

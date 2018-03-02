@@ -76,8 +76,8 @@ public class MapDataManager {
     public static class Config {
         private Application context;
         private CreateUpdatePermission updatePermission;
-        private MapDataRepository cacheLocations;
-        private List<MapDataProvider> providers = new ArrayList<>();
+        private MapDataRepository[] repositories;
+        private MapDataProvider[] providers;
         private Executor executor = AsyncTask.SERIAL_EXECUTOR;
 
         public Config context(Application x) {
@@ -95,13 +95,13 @@ public class MapDataManager {
          * @param x
          * @return
          */
-        public Config cacheLocations(MapDataRepository x) {
-            cacheLocations = x;
+        public Config repositories(MapDataRepository... x) {
+            repositories = x;
             return this;
         }
 
         public Config providers(MapDataProvider... x) {
-            providers.addAll(Arrays.asList(x));
+            providers = x;
             return this;
         }
 
@@ -125,8 +125,8 @@ public class MapDataManager {
 
     private final CreateUpdatePermission updatePermission;
     private final Executor executor;
-    private final MapDataRepository cacheLocations;
-    private final List<MapDataProvider> providers = new ArrayList<>();
+    private final MapDataRepository[] repositories;
+    private final MapDataProvider[] providers;
     private final Collection<CacheOverlaysUpdateListener> cacheOverlayListeners = new ArrayList<>();
     private Set<MapDataResource> caches = Collections.emptySet();
     private RefreshAvailableCachesTask refreshTask;
@@ -139,8 +139,8 @@ public class MapDataManager {
         }
         updatePermission = config.updatePermission;
         executor = config.executor;
-        cacheLocations = config.cacheLocations;
-        providers.addAll(config.providers);
+        repositories = config.repositories;
+        providers = config.providers;
     }
 
     public void addUpdateListener(CacheOverlaysUpdateListener listener) {
@@ -165,7 +165,7 @@ public class MapDataManager {
     }
 
     /**
-     * Discover new caches available in standard {@link #cacheLocations locations}, then remove defunct caches.
+     * Discover new caches available in standard {@link MapDataRepository locations}, then remove defunct caches.
      * Asynchronous notifications to {@link #addUpdateListener(CacheOverlaysUpdateListener) listeners}
      * will result, one notification per refresh, per listener.  Only one refresh can be active at any moment.
      */
@@ -180,7 +180,7 @@ public class MapDataManager {
     }
 
     public OverlayOnMapManager createMapManager(GoogleMap map) {
-        return new OverlayOnMapManager(this, providers, map);
+        return new OverlayOnMapManager(this, Arrays.asList(providers), map);
     }
 
     private void findNewCacheFilesFinished(FindNewCacheFilesInProvidedLocationsTask task) {
@@ -320,7 +320,7 @@ public class MapDataManager {
 
         @Override
         protected final Set<MapDataResource> doInBackground(MapDataResource... existingCaches) {
-            Map<Class<? extends MapDataProvider>, Set<MapDataResource>> cachesByProvider = new HashMap<>(providers.size());
+            Map<Class<? extends MapDataProvider>, Set<MapDataResource>> cachesByProvider = new HashMap<>(providers.length);
             for (MapDataResource cache : existingCaches) {
                 Set<MapDataResource> providerCaches = cachesByProvider.get(cache.getType());
                 if (providerCaches == null) {
@@ -350,8 +350,12 @@ public class MapDataManager {
 
         @Override
         protected MapDataResource[] doInBackground(Void... voids) {
-            Set<MapDataResource> resources = cacheLocations.retrieveMapDataResources();
-            return resources.toArray(new MapDataResource[resources.size()]);
+            Set<MapDataResource> allResources = new HashSet<>();
+            for (MapDataRepository repo : repositories) {
+                Set<MapDataResource> resources = repo.retrieveMapDataResources();
+                allResources.addAll(resources);
+            }
+            return allResources.toArray(new MapDataResource[allResources.size()]);
         }
 
         @Override
