@@ -28,11 +28,11 @@ import java.util.Map;
 
 import mil.nga.giat.mage.R;
 import mil.nga.giat.mage.map.cache.MapLayerDescriptor;
-import mil.nga.giat.mage.map.cache.OverlayOnMapManager;
+import mil.nga.giat.mage.map.cache.MapLayerManager;
 
 import static android.support.v7.widget.RecyclerView.NO_ID;
 
-public class MapDataFragment extends Fragment implements OverlayOnMapManager.OverlayOnMapListener, DragListView.DragListListener, DragListView.DragListCallback {
+public class MapDataFragment extends Fragment implements MapLayerManager.MapLayerListener, DragListView.DragListListener, DragListView.DragListCallback {
 
     public interface MapDataListener {
         void onBaseMapChanged(BuiltinDataControlValues change);
@@ -331,14 +331,14 @@ public class MapDataFragment extends Fragment implements OverlayOnMapManager.Ove
 
     private DragListView mapControlList;
     private BuiltinDataControlValues builtinDataControlValues;
-    private OverlayOnMapManager overlayManager;
+    private MapLayerManager overlayManager;
     private ArrayAdapter<CharSequence> baseMapChoices;
     private MapDataListener listener;
 
     public MapDataFragment() {
     }
 
-    public void setDataSources(BuiltinDataControlValues builtinDataControlValues, OverlayOnMapManager overlayManager) {
+    public void setDataSources(BuiltinDataControlValues builtinDataControlValues, MapLayerManager overlayManager) {
         this.builtinDataControlValues = builtinDataControlValues;
         this.overlayManager = overlayManager;
     }
@@ -371,7 +371,7 @@ public class MapDataFragment extends Fragment implements OverlayOnMapManager.Ove
         mapControlList.setDragListListener(this);
         mapControlList.setDragListCallback(this);
         mapControlList.setSnapDragItemToTouch(false);
-        // TODO: add loading status getter to OverlayOnMapManager
+        // TODO: add loading status getter to MapLayerManager
         overlayManager.addOverlayOnMapListener(this);
         syncDataList();
         return root;
@@ -396,7 +396,7 @@ public class MapDataFragment extends Fragment implements OverlayOnMapManager.Ove
     }
 
     @Override
-    public void overlaysChanged() {
+    public void layersChanged() {
         syncDataList();
     }
 

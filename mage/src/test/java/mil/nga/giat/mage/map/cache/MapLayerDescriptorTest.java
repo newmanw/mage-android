@@ -28,7 +28,7 @@ public class MapLayerDescriptorTest {
         }
 
         @Override
-        public OverlayOnMapManager.OverlayOnMap createMapLayerFromDescriptor(MapLayerDescriptor layerDescriptor, OverlayOnMapManager map) {
+        public MapLayerManager.MapLayer createMapLayerFromDescriptor(MapLayerDescriptor layerDescriptor, MapLayerManager map) {
             return null;
         }
     }
@@ -51,7 +51,7 @@ public class MapLayerDescriptorTest {
         }
 
         @Override
-        public OverlayOnMapManager.OverlayOnMap createMapLayerFromDescriptor(MapLayerDescriptor layerDescriptor, OverlayOnMapManager map) {
+        public MapLayerManager.MapLayer createMapLayerFromDescriptor(MapLayerDescriptor layerDescriptor, MapLayerManager map) {
             return null;
         }
     }

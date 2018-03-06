@@ -41,5 +41,5 @@ public interface MapDataProvider {
     Set<MapDataResource> refreshResources(Set<MapDataResource> existingResources);
 
 
-    OverlayOnMapManager.OverlayOnMap createMapLayerFromDescriptor(MapLayerDescriptor layerDescriptor, OverlayOnMapManager map);
+    MapLayerManager.MapLayer createMapLayerFromDescriptor(MapLayerDescriptor layerDescriptor, MapLayerManager map);
 }

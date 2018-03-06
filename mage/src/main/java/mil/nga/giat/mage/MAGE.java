@@ -41,7 +41,7 @@ import mil.nga.giat.mage.sdk.event.ISessionEventListener;
 import mil.nga.giat.mage.sdk.exceptions.UserException;
 import mil.nga.giat.mage.sdk.fetch.LocationFetchIntentService;
 import mil.nga.giat.mage.sdk.fetch.ObservationFetchIntentService;
-import mil.nga.giat.mage.sdk.fetch.StaticFeatureServerFetch;
+import mil.nga.giat.mage.map.cache.MAGEStaticFeatureLayerRepository;
 import mil.nga.giat.mage.sdk.http.HttpClientManager;
 import mil.nga.giat.mage.sdk.http.resource.UserResource;
 import mil.nga.giat.mage.sdk.location.LocationService;
@@ -115,7 +115,7 @@ public class MAGE extends MultiDexApplication implements ISessionEventListener, 
 			.repositories(new LocalStorageMapDataRepository(this))
 			.updatePermission(new MapDataManager.CreateUpdatePermission(){}));
 
-        StaticFeatureServerFetch.initialize(this);
+        MAGEStaticFeatureLayerRepository.initialize(this);
 
 		registerActivityLifecycleCallbacks(this);
 
@@ -139,7 +139,7 @@ public class MAGE extends MultiDexApplication implements ISessionEventListener, 
 		startPushing();
 
 		// Pull static layers and features just once
-		StaticFeatureServerFetch.getInstance().refreshEventLayers(AsyncTask.THREAD_POOL_EXECUTOR);
+		MAGEStaticFeatureLayerRepository.getInstance().syncEventLayers(AsyncTask.THREAD_POOL_EXECUTOR);
 
 		InitializeMAGEWearBridge.startBridgeIfWearBuild(getApplicationContext());
 	}
@@ -270,7 +270,7 @@ public class MAGE extends MultiDexApplication implements ISessionEventListener, 
 	 * Stop Tasks responsible for fetching Observations and Locations from the server.
 	 */
 	private void destroyFetching() {
-		StaticFeatureServerFetch.getInstance().cancelSync();
+		MAGEStaticFeatureLayerRepository.getInstance().cancelSync();
 		if(locationFetchIntent != null) {
 			stopService(locationFetchIntent);
 			locationFetchIntent = null;

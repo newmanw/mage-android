@@ -89,10 +89,10 @@ import mil.nga.giat.mage.filter.DateTimeFilter;
 import mil.nga.giat.mage.filter.Filter;
 import mil.nga.giat.mage.filter.FilterActivity;
 import mil.nga.giat.mage.map.cache.MapDataManager;
-import mil.nga.giat.mage.map.cache.MapDataManager.CacheOverlaysUpdateListener;
+import mil.nga.giat.mage.map.cache.MapDataManager.MapDataListener;
 import mil.nga.giat.mage.map.cache.MapLayerDescriptor;
 import mil.nga.giat.mage.map.cache.MapDataResource;
-import mil.nga.giat.mage.map.cache.OverlayOnMapManager;
+import mil.nga.giat.mage.map.cache.MapLayerManager;
 import mil.nga.giat.mage.map.marker.LocationMarkerCollection;
 import mil.nga.giat.mage.map.marker.MyHistoricalLocationMarkerCollection;
 import mil.nga.giat.mage.map.marker.ObservationMarkerCollection;
@@ -119,7 +119,6 @@ import mil.nga.giat.mage.sdk.event.IObservationEventListener;
 import mil.nga.giat.mage.sdk.event.IUserEventListener;
 import mil.nga.giat.mage.sdk.exceptions.LayerException;
 import mil.nga.giat.mage.sdk.exceptions.UserException;
-import mil.nga.giat.mage.sdk.fetch.StaticFeatureServerFetch;
 import mil.nga.giat.mage.sdk.location.LocationService;
 import mil.nga.mgrs.MGRS;
 import mil.nga.mgrs.gzd.MGRSTileProvider;
@@ -137,8 +136,7 @@ public class MapFragment extends Fragment implements
         OnClickListener,
         LocationSource,
         LocationListener,
-        CacheOverlaysUpdateListener,
-		StaticFeatureServerFetch.OnStaticLayersListener,
+    	MapDataListener,
         SearchView.OnQueryTextListener,
         IObservationEventListener,
         ILocationEventListener,
@@ -189,7 +187,7 @@ public class MapFragment extends Fragment implements
 	private ConstraintLayout constraintLayout;
 	private ConstraintSet layoutOverlaysCollapsed = new ConstraintSet();
 	private ConstraintSet layoutOverlaysExpanded = new ConstraintSet();
-	private OverlayOnMapManager mapOverlayManager;
+	private MapLayerManager mapOverlayManager;
 
 	private boolean layersPanelVisible = false;
 	private boolean searchInputVisible = false;
@@ -1211,21 +1209,6 @@ public class MapFragment extends Fragment implements
 				staticGeometryCollection.removeLayer(layerId);
 			}
 		}
-	}
-
-	@Override
-	public void onLayersLoaded(Set<Layer> layers) {
-
-	}
-
-	@Override
-	public void onFeaturesLoaded(final Layer layer) {
-		new Handler(Looper.getMainLooper()).post(new Runnable() {
-			@Override
-			public void run() {
-				onStaticFeatureLayer(layer);
-			}
-		});
 	}
 
 	/**

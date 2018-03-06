@@ -174,8 +174,8 @@ public class MapDataManager {
         findNewResourcesTask.executeOnExecutor(executor);
     }
 
-    public OverlayOnMapManager createMapManager(GoogleMap map) {
-        return new OverlayOnMapManager(this, Arrays.asList(providers), map);
+    public MapLayerManager createMapManager(GoogleMap map) {
+        return new MapLayerManager(this, Arrays.asList(providers), map);
     }
 
     private void findNewCacheFilesFinished(FindNewResourcesTask task) {

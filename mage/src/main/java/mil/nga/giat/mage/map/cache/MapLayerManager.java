@@ -14,20 +14,34 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * A {@code MapLayerManager} binds {@link MapLayerDescriptor layer data} from various
+ * {@link MapDataRepository sources} to visual objects on a {@link GoogleMap}.
+ */
 @MainThread
-public class OverlayOnMapManager implements MapDataManager.MapDataListener {
+public class MapLayerManager implements MapDataManager.MapDataListener {
 
-    public interface OverlayOnMapListener {
+    public interface MapLayerListener {
 
         /**
          * Notify the listener that the {@link MapDataManager} has updated the {@link #getOverlaysInZOrder() cache list}.
-         * {@link OverlayOnMapManager} will not invoke this method as result of its own on-map interactions,
+         * {@link MapLayerManager} will not invoke this method as result of its own on-map interactions,
          * such as adding, removing, showing, and hiding overlays.
          */
-        void overlaysChanged();
+        void layersChanged();
     }
 
-    public abstract class OverlayOnMap {
+    /**
+     * A {@code MapLayer} is the visual representation on a {@link GoogleMap} of the data
+     * a {@link MapLayerDescriptor} describes.  A {@link MapDataProvider} creates instances
+     * of this class from the data it provides to be added to a map.  Instances of this
+     * class comprise visual objects from the Google Maps API, such as
+     * {@link com.google.android.gms.maps.model.TileProvider tiles},
+     * {@link com.google.android.gms.maps.model.Marker markers},
+     * {@link com.google.android.gms.maps.model.Polygon polygons},
+     * etc.
+     */
+    public abstract class MapLayer {
 
         /**
          * Add this overlay's objects to the map, e.g. {@link com.google.android.gms.maps.model.TileOverlay}s,
@@ -45,7 +59,7 @@ public class OverlayOnMapManager implements MapDataManager.MapDataListener {
         abstract protected void setZIndex(int z);
 
         /**
-         * TODO: change to MapLayerDescriptor.getBoundingBox() instead so OverlayOnMapManager can do the zoom
+         * TODO: change to MapLayerDescriptor.getBoundingBox() instead so MapLayerManager can do the zoom
          */
         abstract protected void zoomMapToBoundingBox();
 
@@ -70,16 +84,16 @@ public class OverlayOnMapManager implements MapDataManager.MapDataListener {
     /**
      * Compute the fractional step necessary to stack {@code count} map objects
      * within a single integral zoom level.  This is a convenience for {@link MapDataProvider}
-     * implementations of {@link OverlayOnMap} to use when setting the integer
-     * {@link OverlayOnMap#setZIndex(int) z-index}.  The implementation can use the
+     * implementations of {@link MapLayer} to use when setting the integer
+     * {@link MapLayer#setZIndex(int) z-index}.  The implementation can use the
      * return value to increment the float z-index of {@code count} {@link GoogleMap} objects
      * logically contained in a single overlay.  For example, if an overlay contains 5 map
      * objects, such as {@link com.google.android.gms.maps.model.TileOverlay tiles} and
      * {@link com.google.android.gms.maps.model.Polygon polygons}, and the integer z-index
      * to set on the overlay is 6, this method will return 1 / (5 + 1), ~= 0.167, and map
      * objects can have fractional zoom levels (6 + 1 * 0.167), (6 + 2 * 0.167), etc.,
-     * without intruding on the next integral zoom level, 7, which {@link OverlayOnMapManager}
-     * will assign to the next {@link MapLayerDescriptor}/{@link OverlayOnMap} in the
+     * without intruding on the next integral zoom level, 7, which {@link MapLayerManager}
+     * will assign to the next {@link MapLayerDescriptor}/{@link MapLayer} in the
      * {@link #getOverlaysInZOrder() z-order}.
      * @param count
      * @return
@@ -99,11 +113,11 @@ public class OverlayOnMapManager implements MapDataManager.MapDataListener {
     private final MapDataManager mapDataManager;
     private final GoogleMap map;
     private final Map<Class<? extends MapDataProvider>, MapDataProvider> providers = new HashMap<>();
-    private final Map<MapLayerDescriptor, OverlayOnMap> overlaysOnMap = new HashMap<>();
-    private final List<OverlayOnMapListener> listeners = new ArrayList<>();
+    private final Map<MapLayerDescriptor, MapLayer> overlaysOnMap = new HashMap<>();
+    private final List<MapLayerListener> listeners = new ArrayList<>();
     private List<MapLayerDescriptor> overlaysInZOrder = new ArrayList<>();
 
-    public OverlayOnMapManager(MapDataManager mapDataManager, List<MapDataProvider> providers, GoogleMap map) {
+    public MapLayerManager(MapDataManager mapDataManager, List<MapDataProvider> providers, GoogleMap map) {
         this.mapDataManager = mapDataManager;
         this.map = map;
         for (MapDataProvider provider : providers) {
@@ -162,16 +176,16 @@ public class OverlayOnMapManager implements MapDataManager.MapDataListener {
             overlaysInZOrder.addAll(added.getLayers().values());
         }
 
-        for (OverlayOnMapListener listener : listeners) {
-		    listener.overlaysChanged();
+        for (MapLayerListener listener : listeners) {
+		    listener.layersChanged();
         }
     }
 
-    public void addOverlayOnMapListener(OverlayOnMapListener x) {
+    public void addOverlayOnMapListener(MapLayerListener x) {
         listeners.add(x);
     }
 
-    public void removeOverlayOnMapListener(OverlayOnMapListener x) {
+    public void removeOverlayOnMapListener(MapLayerListener x) {
         listeners.remove(x);
     }
 
@@ -192,7 +206,7 @@ public class OverlayOnMapManager implements MapDataManager.MapDataListener {
     }
 
     public void hideOverlay(MapLayerDescriptor layerDesc) {
-        OverlayOnMap onMap = overlaysOnMap.get(layerDesc);
+        MapLayer onMap = overlaysOnMap.get(layerDesc);
         if (onMap == null || !onMap.isVisible()) {
             return;
         }
@@ -200,13 +214,13 @@ public class OverlayOnMapManager implements MapDataManager.MapDataListener {
     }
 
     public boolean isOverlayVisible(MapLayerDescriptor layerDesc) {
-        OverlayOnMap onMap = overlaysOnMap.get(layerDesc);
+        MapLayer onMap = overlaysOnMap.get(layerDesc);
         return onMap != null && onMap.isVisible();
     }
 
     public void onMapClick(LatLng latLng, MapView mapView) {
         for (MapLayerDescriptor overlay : overlaysInZOrder) {
-            OverlayOnMap onMap = overlaysOnMap.get(overlay);
+            MapLayer onMap = overlaysOnMap.get(overlay);
             if (onMap != null) {
                 onMap.onMapClick(latLng, mapView);
             }
@@ -235,7 +249,7 @@ public class OverlayOnMapManager implements MapDataManager.MapDataListener {
         overlaysInZOrder = targetOrder;
         int zIndex = 0;
         for (MapLayerDescriptor overlay : overlaysInZOrder) {
-            OverlayOnMap onMap = overlaysOnMap.get(overlay);
+            MapLayer onMap = overlaysOnMap.get(overlay);
             if (onMap != null) {
                 onMap.setZIndex(zIndex);
             }
@@ -254,9 +268,9 @@ public class OverlayOnMapManager implements MapDataManager.MapDataListener {
     public void dispose() {
         // TODO: remove and dispose all overlays/notify providers
         mapDataManager.removeUpdateListener(this);
-        Iterator<Map.Entry<MapLayerDescriptor, OverlayOnMap>> entries = overlaysOnMap.entrySet().iterator();
+        Iterator<Map.Entry<MapLayerDescriptor, MapLayer>> entries = overlaysOnMap.entrySet().iterator();
         while (entries.hasNext()) {
-            OverlayOnMap onMap = entries.next().getValue();
+            MapLayer onMap = entries.next().getValue();
             onMap.removeFromMap();
             onMap.dispose();
             entries.remove();
@@ -265,7 +279,7 @@ public class OverlayOnMapManager implements MapDataManager.MapDataListener {
 
     private boolean removeFromMapReturningVisibility(MapLayerDescriptor overlay) {
         boolean wasVisible = false;
-        OverlayOnMap onMap = overlaysOnMap.remove(overlay);
+        MapLayer onMap = overlaysOnMap.remove(overlay);
         if (onMap != null) {
             wasVisible = onMap.isVisible();
             onMap.removeFromMap();
@@ -297,7 +311,7 @@ public class OverlayOnMapManager implements MapDataManager.MapDataListener {
 
     private void addOverlayToMapAtPosition(int position) {
         MapLayerDescriptor overlay = overlaysInZOrder.get(position);
-        OverlayOnMap onMap = overlaysOnMap.remove(overlay);
+        MapLayer onMap = overlaysOnMap.remove(overlay);
         if (onMap == null) {
             MapDataProvider provider = providers.get(overlay.getCacheType());
             onMap = provider.createMapLayerFromDescriptor(overlay, this);

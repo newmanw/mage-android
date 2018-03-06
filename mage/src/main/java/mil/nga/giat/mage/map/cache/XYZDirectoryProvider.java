@@ -18,14 +18,14 @@ import mil.nga.giat.mage.map.FileSystemTileProvider;
 
 public class XYZDirectoryProvider implements MapDataProvider {
 
-    static class OnMap extends OverlayOnMapManager.OverlayOnMap {
+    static class MapLayer extends MapLayerManager.MapLayer {
 
         private final GoogleMap map;
         private final XYZDirectoryLayerDescriptor cache;
         private final TileOverlayOptions overlayOptions;
         private TileOverlay overlay;
 
-        OnMap(OverlayOnMapManager manager, XYZDirectoryLayerDescriptor cache) {
+        MapLayer(MapLayerManager manager, XYZDirectoryLayerDescriptor cache) {
             manager.super();
             this.map = manager.getMap();
             this.cache = cache;
@@ -121,8 +121,8 @@ public class XYZDirectoryProvider implements MapDataProvider {
     }
 
     @Override
-    public OverlayOnMapManager.OverlayOnMap createMapLayerFromDescriptor(MapLayerDescriptor layerDescriptor, OverlayOnMapManager mapManager) {
-        return new OnMap(mapManager, (XYZDirectoryLayerDescriptor) layerDescriptor);
+    public MapLayerManager.MapLayer createMapLayerFromDescriptor(MapLayerDescriptor layerDescriptor, MapLayerManager mapManager) {
+        return new MapLayer(mapManager, (XYZDirectoryLayerDescriptor) layerDescriptor);
     }
 
     /**

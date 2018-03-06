@@ -312,7 +312,7 @@ public class GeoPackageProvider implements MapDataProvider {
         return null;
     }
 
-    class TileTableOnMap extends OverlayOnMapManager.OverlayOnMap {
+    class TileTableLayer extends MapLayerManager.MapLayer {
 
         private final GoogleMap map;
         private final GeoPackageTileTableDescriptor cache;
@@ -324,7 +324,7 @@ public class GeoPackageProvider implements MapDataProvider {
         private TileOverlay tileOverlay;
 
 
-        private TileTableOnMap(OverlayOnMapManager manager, GeoPackageTileTableDescriptor cache, TileOverlayOptions overlayOptions) {
+        private TileTableLayer(MapLayerManager manager, GeoPackageTileTableDescriptor cache, TileOverlayOptions overlayOptions) {
             manager.super();
             this.map = manager.getMap();
             this.cache = cache;
@@ -419,10 +419,10 @@ public class GeoPackageProvider implements MapDataProvider {
         }
     }
 
-    class FeatureTableOnMap extends OverlayOnMapManager.OverlayOnMap {
+    class FeatureTableLayer extends MapLayerManager.MapLayer {
 
         private final GoogleMap map;
-        private final List<TileTableOnMap> linkedTiles;
+        private final List<TileTableLayer> linkedTiles;
         private final TileOverlayOptions tileOptions;
         private final FeatureOverlayQuery query;
         /**
@@ -436,7 +436,7 @@ public class GeoPackageProvider implements MapDataProvider {
         private boolean visible;
         private int zIndex;
 
-        FeatureTableOnMap(OverlayOnMapManager manager, List<TileTableOnMap> linkedTiles, TileOverlayOptions tileOptions, FeatureOverlayQuery query) {
+        FeatureTableLayer(MapLayerManager manager, List<TileTableLayer> linkedTiles, TileOverlayOptions tileOptions, FeatureOverlayQuery query) {
             manager.super();
             this.map = manager.getMap();
             this.linkedTiles = linkedTiles;
@@ -446,7 +446,7 @@ public class GeoPackageProvider implements MapDataProvider {
             shapesOnMap = new LongSparseArray<>(0);
         }
 
-        FeatureTableOnMap(OverlayOnMapManager manager, List<TileTableOnMap> linkedTiles, LongSparseArray<GoogleMapShape> shapeOptions) {
+        FeatureTableLayer(MapLayerManager manager, List<TileTableLayer> linkedTiles, LongSparseArray<GoogleMapShape> shapeOptions) {
             manager.super();
             this.map = manager.getMap();
             this.linkedTiles = linkedTiles;
@@ -458,7 +458,7 @@ public class GeoPackageProvider implements MapDataProvider {
 
         @Override
         protected void addToMap() {
-            for (TileTableOnMap linkedTileTable : linkedTiles) {
+            for (TileTableLayer linkedTileTable : linkedTiles) {
                 if (isVisible()) {
                     linkedTileTable.show();
                 }
@@ -486,7 +486,7 @@ public class GeoPackageProvider implements MapDataProvider {
                 overlay.remove();
                 overlay = null;
             }
-            for (TileTableOnMap linkedTileTable : linkedTiles){
+            for (TileTableLayer linkedTileTable : linkedTiles){
                 linkedTileTable.removeFromMap();
             }
             onMap = false;
@@ -502,7 +502,7 @@ public class GeoPackageProvider implements MapDataProvider {
             if (visible) {
                 return;
             }
-            for (TileTableOnMap linkedTileTable : linkedTiles) {
+            for (TileTableLayer linkedTileTable : linkedTiles) {
                 linkedTileTable.show();
             }
             if (overlay != null) {
@@ -520,7 +520,7 @@ public class GeoPackageProvider implements MapDataProvider {
             if (!visible) {
                 return;
             }
-            for (TileTableOnMap linkedTileTable : linkedTiles) {
+            for (TileTableLayer linkedTileTable : linkedTiles) {
                 linkedTileTable.hide();
             }
             if (overlay != null) {
@@ -535,7 +535,7 @@ public class GeoPackageProvider implements MapDataProvider {
         @Override
         protected void setZIndex(int z) {
             zIndex = z;
-            for (TileTableOnMap linkedTileTable : linkedTiles) {
+            for (TileTableLayer linkedTileTable : linkedTiles) {
                 linkedTileTable.setZIndex(z);
             }
             if (overlay != null) {
@@ -570,7 +570,7 @@ public class GeoPackageProvider implements MapDataProvider {
         @Override
         protected void dispose() {
             removeFromMap();
-            for (TileTableOnMap tilesOnMap : linkedTiles) {
+            for (TileTableLayer tilesOnMap : linkedTiles) {
                 tilesOnMap.dispose();
             }
             if (query != null) {
@@ -598,7 +598,7 @@ public class GeoPackageProvider implements MapDataProvider {
     }
 
     @Override
-    public OverlayOnMapManager.OverlayOnMap createMapLayerFromDescriptor(MapLayerDescriptor layerDescriptor, OverlayOnMapManager mapManager) {
+    public MapLayerManager.MapLayer createMapLayerFromDescriptor(MapLayerDescriptor layerDescriptor, MapLayerManager mapManager) {
         if (layerDescriptor instanceof GeoPackageTileTableDescriptor) {
             return createOverlayOnMap((GeoPackageTileTableDescriptor) layerDescriptor, mapManager);
         }
@@ -609,14 +609,14 @@ public class GeoPackageProvider implements MapDataProvider {
         throw new IllegalArgumentException(getClass().getSimpleName() + " does not support " + layerDescriptor + " of type " + layerDescriptor.getCacheType() );
     }
 
-    private TileTableOnMap createOverlayOnMap(GeoPackageTileTableDescriptor tableCache, OverlayOnMapManager mapManager) {
+    private TileTableLayer createOverlayOnMap(GeoPackageTileTableDescriptor tableCache, MapLayerManager mapManager) {
         GeoPackage geoPackage = geoPackageCache.getOrOpen(tableCache.getGeoPackage());
         TileDao tileDao = geoPackage.getTileDao(tableCache.getTableName());
         BoundedOverlay geoPackageTileProvider = GeoPackageOverlayFactory.getBoundedOverlay(tileDao);
         TileOverlayOptions overlayOptions = new TileOverlayOptions()
             .tileProvider(geoPackageTileProvider)
             .zIndex(Z_INDEX_TILE_TABLE);
-        TileTableOnMap onMap = new TileTableOnMap(mapManager, tableCache, overlayOptions);
+        TileTableLayer onMap = new TileTableLayer(mapManager, tableCache, overlayOptions);
         // Check for linked feature tables
         FeatureTileTableLinker linker = new FeatureTileTableLinker(geoPackage);
         List<FeatureDao> featureDaos = linker.getFeatureDaosForTileTable(tileDao.getTableName());
@@ -630,10 +630,10 @@ public class GeoPackageProvider implements MapDataProvider {
         return onMap;
     }
 
-    private FeatureTableOnMap createOverlayOnMap(GeoPackageFeatureTableDescriptor featureTableCache, OverlayOnMapManager mapManager) {
-        List<TileTableOnMap> linkedTiles = new ArrayList<>(featureTableCache.getLinkedTileTables().size());
+    private FeatureTableLayer createOverlayOnMap(GeoPackageFeatureTableDescriptor featureTableCache, MapLayerManager mapManager) {
+        List<TileTableLayer> linkedTiles = new ArrayList<>(featureTableCache.getLinkedTileTables().size());
         for (GeoPackageTileTableDescriptor linkedTileTable : featureTableCache.getLinkedTileTables()) {
-            TileTableOnMap tiles = createOverlayOnMap(linkedTileTable, mapManager);
+            TileTableLayer tiles = createOverlayOnMap(linkedTileTable, mapManager);
             linkedTiles.add(tiles);
         }
 
@@ -667,7 +667,7 @@ public class GeoPackageProvider implements MapDataProvider {
                 .zIndex(Z_INDEX_FEATURE_TABLE)
                 .tileProvider(tileProvider);
             FeatureOverlayQuery featureQuery = new FeatureOverlayQuery(context, tileProvider);
-            return new FeatureTableOnMap(mapManager, linkedTiles, overlayOptions, featureQuery);
+            return new FeatureTableLayer(mapManager, linkedTiles, overlayOptions, featureQuery);
         }
         // Not indexed, add the features to the map
         else {
@@ -708,7 +708,7 @@ public class GeoPackageProvider implements MapDataProvider {
                     + "- added " + shapes.size() + " of " + numFeaturesInTable, Toast.LENGTH_LONG).show();
             }
 
-            return new FeatureTableOnMap(mapManager, linkedTiles, shapes);
+            return new FeatureTableLayer(mapManager, linkedTiles, shapes);
         }
     }
 
