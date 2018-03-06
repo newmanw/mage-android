@@ -80,6 +80,49 @@ public class GeoPackageProvider implements MapDataProvider {
         return cacheName;
     }
 
+    private static void setZIndexOfShape(GoogleMapShape shape, int zIndex) {
+        switch(shape.getShapeType()) {
+            case MARKER:
+                ((Marker)shape.getShape()).setZIndex(zIndex);
+                break;
+            case POLYGON:
+                ((Polygon)shape.getShape()).setZIndex(zIndex);
+                break;
+            case POLYLINE:
+                ((Polyline)shape.getShape()).setZIndex(zIndex);
+                break;
+            case MULTI_MARKER:
+                for (Marker x : ((MultiMarker)shape.getShape()).getMarkers()) {
+                    x.setZIndex(zIndex);
+                }
+                break;
+            case MULTI_POLYLINE:
+                for (Polyline x : ((MultiPolyline)shape.getShape()).getPolylines()) {
+                    x.setZIndex(zIndex);
+                }
+                break;
+            case MULTI_POLYGON:
+                for (Polygon x : ((MultiPolygon)shape.getShape()).getPolygons()) {
+                    x.setZIndex(zIndex);
+                }
+                break;
+            case POLYLINE_MARKERS:
+                ((PolylineMarkers) shape.getShape()).getPolyline().setZIndex(zIndex);
+                for (Marker x : ((PolylineMarkers) shape.getShape()).getMarkers()) {
+                    x.setZIndex(zIndex);
+                }
+                break;
+            case POLYGON_MARKERS:
+                break;
+            case MULTI_POLYLINE_MARKERS:
+                break;
+            case MULTI_POLYGON_MARKERS:
+                break;
+            case COLLECTION:
+                break;
+        }
+    }
+
     private final Context context;
     private final GeoPackageManager geoPackageManager;
     private final GeoPackageCache geoPackageCache;
@@ -421,7 +464,6 @@ public class GeoPackageProvider implements MapDataProvider {
                 }
                 linkedTileTable.setZIndex(zIndex);
                 linkedTileTable.addToMap();
-
             }
             if (tileOptions != null) {
                 if (overlay == null) {
@@ -502,47 +544,7 @@ public class GeoPackageProvider implements MapDataProvider {
             // TODO: GoogleMapShape needs z-index support
             for (int i = 0; i < shapesOnMap.size(); i++) {
                 GoogleMapShape shape = shapesOnMap.valueAt(i);
-                Object nativeShape = shape.getShape();
-                switch(shape.getShapeType()) {
-                    case MARKER:
-                        ((Marker)shape.getShape()).setZIndex(zIndex);
-                        break;
-                    case POLYGON:
-                        ((Polygon)shape.getShape()).setZIndex(zIndex);
-                        break;
-                    case POLYLINE:
-                        ((Polyline)shape.getShape()).setZIndex(zIndex);
-                        break;
-                    case MULTI_MARKER:
-                        for (Marker x : ((MultiMarker)shape.getShape()).getMarkers()) {
-                            x.setZIndex(zIndex);
-                        }
-                        break;
-                    case MULTI_POLYLINE:
-                        for (Polyline x : ((MultiPolyline)shape.getShape()).getPolylines()) {
-                            x.setZIndex(zIndex);
-                        }
-                        break;
-                    case MULTI_POLYGON:
-                        for (Polygon x : ((MultiPolygon)shape.getShape()).getPolygons()) {
-                            x.setZIndex(zIndex);
-                        }
-                        break;
-                    case POLYLINE_MARKERS:
-                        ((PolylineMarkers) shape.getShape()).getPolyline().setZIndex(zIndex);
-                        for (Marker x : ((PolylineMarkers) shape.getShape()).getMarkers()) {
-                            x.setZIndex(zIndex);
-                        }
-                        break;
-                    case POLYGON_MARKERS:
-                        break;
-                    case MULTI_POLYLINE_MARKERS:
-                        break;
-                    case MULTI_POLYGON_MARKERS:
-                        break;
-                    case COLLECTION:
-                        break;
-                }
+                setZIndexOfShape(shape, z);
             }
         }
 
@@ -581,6 +583,7 @@ public class GeoPackageProvider implements MapDataProvider {
             for (int i = 0; i < shapeOptions.size(); i++) {
                 GoogleMapShape shape = shapeOptions.valueAt(i);
                 GoogleMapShape shapeOnMap = GoogleMapShapeConverter.addShapeToMap(map, shape);
+                setZIndexOfShape(shapeOnMap, zIndex);
                 shapesOnMap.put(shapeOptions.keyAt(i), shapeOnMap);
             }
         }
