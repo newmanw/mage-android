@@ -95,34 +95,34 @@ public class XYZDirectoryProvider implements MapDataProvider {
     }
 
     @Override
-    public boolean isCacheFile(URI resource) {
-        if ("file".equalsIgnoreCase(resource.getScheme())) {
+    public boolean canHandleResource(URI resourceUri) {
+        if ("file".equalsIgnoreCase(resourceUri.getScheme())) {
             return false;
         }
-        File localPath = new File(resource);
+        File localPath = new File(resourceUri);
         return localPath.isDirectory();
     }
 
     @Override
-    public MapDataResource importCacheFromFile(URI resource) throws CacheImportException {
-        File xyzDir = new File(resource);
+    public MapDataResource importResource(URI resourceUri) throws CacheImportException {
+        File xyzDir = new File(resourceUri);
         if (!xyzDir.isDirectory()) {
-            throw new CacheImportException(resource, "resource is not a directory: " + resource);
+            throw new CacheImportException(resourceUri, "resource is not a directory: " + resourceUri);
         }
         Set<MapLayerDescriptor> overlays = new HashSet<>();
         overlays.add(new XYZDirectoryLayerDescriptor(xyzDir.getName(), xyzDir.getName(), xyzDir));
-        return new MapDataResource(resource, xyzDir.getName(), getClass(), Collections.unmodifiableSet(overlays));
+        return new MapDataResource(resourceUri, xyzDir.getName(), getClass(), Collections.unmodifiableSet(overlays));
     }
 
     @Override
-    public Set<MapDataResource> refreshCaches(Set<MapDataResource> existingCaches) {
+    public Set<MapDataResource> refreshResources(Set<MapDataResource> existingResources) {
         // TODO
         return Collections.emptySet();
     }
 
     @Override
-    public OverlayOnMapManager.OverlayOnMap createOverlayOnMapFromCache(MapLayerDescriptor cache, OverlayOnMapManager mapManager) {
-        return new OnMap(mapManager, (XYZDirectoryLayerDescriptor) cache);
+    public OverlayOnMapManager.OverlayOnMap createMapLayerFromDescriptor(MapLayerDescriptor layerDescriptor, OverlayOnMapManager mapManager) {
+        return new OnMap(mapManager, (XYZDirectoryLayerDescriptor) layerDescriptor);
     }
 
     /**

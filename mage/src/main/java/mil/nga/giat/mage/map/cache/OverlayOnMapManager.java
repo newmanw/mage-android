@@ -300,7 +300,7 @@ public class OverlayOnMapManager implements MapDataManager.CacheOverlaysUpdateLi
         OverlayOnMap onMap = overlaysOnMap.remove(overlay);
         if (onMap == null) {
             MapDataProvider provider = providers.get(overlay.getCacheType());
-            onMap = provider.createOverlayOnMapFromCache(overlay, this);
+            onMap = provider.createMapLayerFromDescriptor(overlay, this);
             onMap.setZIndex(position);
         }
         overlaysOnMap.put(overlay, onMap);

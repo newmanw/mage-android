@@ -134,24 +134,24 @@ public class GeoPackageProvider implements MapDataProvider {
     }
 
     @Override
-    public boolean isCacheFile(URI resource) {
-        if (!"file".equalsIgnoreCase(resource.getScheme())) {
+    public boolean canHandleResource(URI resourceUri) {
+        if (!"file".equalsIgnoreCase(resourceUri.getScheme())) {
             return false;
         }
-        return GeoPackageValidate.hasGeoPackageExtension(new File(resource.getPath()));
+        return GeoPackageValidate.hasGeoPackageExtension(new File(resourceUri.getPath()));
     }
 
     @Override
-    public MapDataResource importCacheFromFile(URI resource) throws CacheImportException {
-        File cacheFile = new File(resource.getPath());
+    public MapDataResource importResource(URI resourceUri) throws CacheImportException {
+        File cacheFile = new File(resourceUri.getPath());
         String cacheName = getOrImportGeoPackageDatabase(cacheFile);
         return createCache(cacheFile, cacheName);
     }
 
     @Override
-    public Set<MapDataResource> refreshCaches(Set<MapDataResource> existingCaches) {
-        Set<MapDataResource> refreshed = new HashSet<>(existingCaches.size());
-        for (MapDataResource cache : existingCaches) {
+    public Set<MapDataResource> refreshResources(Set<MapDataResource> existingResources) {
+        Set<MapDataResource> refreshed = new HashSet<>(existingResources.size());
+        for (MapDataResource cache : existingResources) {
             File dbFile = geoPackageManager.getFile(cache.getName());
             if (!dbFile.exists() || !dbFile.canRead()) {
                 cache = null;
@@ -598,15 +598,15 @@ public class GeoPackageProvider implements MapDataProvider {
     }
 
     @Override
-    public OverlayOnMapManager.OverlayOnMap createOverlayOnMapFromCache(MapLayerDescriptor cache, OverlayOnMapManager mapManager) {
-        if (cache instanceof GeoPackageTileTableDescriptor) {
-            return createOverlayOnMap((GeoPackageTileTableDescriptor) cache, mapManager);
+    public OverlayOnMapManager.OverlayOnMap createMapLayerFromDescriptor(MapLayerDescriptor layerDescriptor, OverlayOnMapManager mapManager) {
+        if (layerDescriptor instanceof GeoPackageTileTableDescriptor) {
+            return createOverlayOnMap((GeoPackageTileTableDescriptor) layerDescriptor, mapManager);
         }
-        else if (cache instanceof GeoPackageFeatureTableDescriptor) {
-            return createOverlayOnMap((GeoPackageFeatureTableDescriptor) cache, mapManager);
+        else if (layerDescriptor instanceof GeoPackageFeatureTableDescriptor) {
+            return createOverlayOnMap((GeoPackageFeatureTableDescriptor) layerDescriptor, mapManager);
         }
 
-        throw new IllegalArgumentException(getClass().getSimpleName() + " does not support " + cache + " of type " + cache.getCacheType() );
+        throw new IllegalArgumentException(getClass().getSimpleName() + " does not support " + layerDescriptor + " of type " + layerDescriptor.getCacheType() );
     }
 
     private TileTableOnMap createOverlayOnMap(GeoPackageTileTableDescriptor tableCache, OverlayOnMapManager mapManager) {

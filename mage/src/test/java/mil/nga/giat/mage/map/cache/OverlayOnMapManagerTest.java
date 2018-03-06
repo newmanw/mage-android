@@ -184,8 +184,8 @@ public class OverlayOnMapManagerTest implements MapDataManager.CreateUpdatePermi
         Set<MapDataResource> added = setOf(mapDataResource);
         MapDataManager.CacheOverlayUpdate update = mapDataManager.new CacheOverlayUpdate(this, added, Collections.<MapDataResource>emptySet(), Collections.<MapDataResource>emptySet());
 
-        when(provider1.createOverlayOnMapFromCache(overlay1, overlayManager)).thenReturn(mockOverlayOnMap(overlayManager));
-        when(provider1.createOverlayOnMapFromCache(overlay2, overlayManager)).thenReturn(mockOverlayOnMap(overlayManager));
+        when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(mockOverlayOnMap(overlayManager));
+        when(provider1.createMapLayerFromDescriptor(overlay2, overlayManager)).thenReturn(mockOverlayOnMap(overlayManager));
 
         overlayManager.onCacheOverlaysUpdated(update);
 
@@ -234,7 +234,7 @@ public class OverlayOnMapManagerTest implements MapDataManager.CreateUpdatePermi
         MapDataManager.CacheOverlayUpdate update = mapDataManager.new CacheOverlayUpdate(this,
             Collections.<MapDataResource>emptySet(), updated, Collections.<MapDataResource>emptySet());
 
-        when(provider1.createOverlayOnMapFromCache(overlay2, overlayManager)).thenReturn(mockOverlayOnMap(overlayManager));
+        when(provider1.createMapLayerFromDescriptor(overlay2, overlayManager)).thenReturn(mockOverlayOnMap(overlayManager));
 
         overlayManager.onCacheOverlaysUpdated(update);
 
@@ -329,14 +329,14 @@ public class OverlayOnMapManagerTest implements MapDataManager.CreateUpdatePermi
         assertThat(overlayManager.getOverlaysInZOrder().size(), is(1));
         assertThat(overlayManager.getOverlaysInZOrder(), hasItems(overlay1));
         assertFalse(overlayManager.isOverlayVisible(overlay1));
-        verify(provider1, never()).createOverlayOnMapFromCache(any(MapLayerDescriptor.class), Mockito.same(overlayManager));
+        verify(provider1, never()).createMapLayerFromDescriptor(any(MapLayerDescriptor.class), Mockito.same(overlayManager));
 
-        when(provider1.createOverlayOnMapFromCache(overlay1, overlayManager)).thenReturn(new TestOverlayOnMap(overlayManager));
+        when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(new TestOverlayOnMap(overlayManager));
 
         overlayManager.showOverlay(overlay1);
 
         assertTrue(overlayManager.isOverlayVisible(overlay1));
-        verify(provider1).createOverlayOnMapFromCache(overlay1, overlayManager);
+        verify(provider1).createMapLayerFromDescriptor(overlay1, overlayManager);
     }
 
 
@@ -355,11 +355,11 @@ public class OverlayOnMapManagerTest implements MapDataManager.CreateUpdatePermi
         assertFalse(overlayManager.isOverlayVisible(overlay1));
 
         OverlayOnMapManager.OverlayOnMap onMap =  mockOverlayOnMap(overlayManager);
-        when(provider1.createOverlayOnMapFromCache(overlay1, overlayManager)).thenReturn(onMap);
+        when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(onMap);
 
         overlayManager.showOverlay(overlay1);
 
-        verify(provider1).createOverlayOnMapFromCache(overlay1, overlayManager);
+        verify(provider1).createMapLayerFromDescriptor(overlay1, overlayManager);
         verify(onMap).addToMap();
 
         overlay1 = new MapLayerDescriptorTest.TestLayerDescriptor1(overlay1.getOverlayName(), overlay1.getCacheName(), overlay1.getCacheType());
@@ -367,14 +367,14 @@ public class OverlayOnMapManagerTest implements MapDataManager.CreateUpdatePermi
         MapDataManager.CacheOverlayUpdate update = mapDataManager.new CacheOverlayUpdate(this, Collections.<MapDataResource>emptySet(), setOf(cache), Collections.<MapDataResource>emptySet());
 
         OverlayOnMapManager.OverlayOnMap onMapUpdated = mockOverlayOnMap(overlayManager);
-        when(provider1.createOverlayOnMapFromCache(overlay1, overlayManager)).thenReturn(onMapUpdated);
+        when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(onMapUpdated);
         when(onMap.isOnMap()).thenReturn(true);
         when(onMap.isVisible()).thenReturn(true);
 
         overlayManager.onCacheOverlaysUpdated(update);
 
         verify(onMap).removeFromMap();
-        verify(provider1).createOverlayOnMapFromCache(Mockito.same(overlay1), Mockito.same(overlayManager));
+        verify(provider1).createMapLayerFromDescriptor(Mockito.same(overlay1), Mockito.same(overlayManager));
         verify(onMapUpdated).addToMap();
     }
 
@@ -393,11 +393,11 @@ public class OverlayOnMapManagerTest implements MapDataManager.CreateUpdatePermi
         assertFalse(overlayManager.isOverlayVisible(overlay1));
 
         OverlayOnMapManager.OverlayOnMap onMap =  mockOverlayOnMap(overlayManager);
-        when(provider1.createOverlayOnMapFromCache(overlay1, overlayManager)).thenReturn(onMap);
+        when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(onMap);
 
         overlayManager.showOverlay(overlay1);
 
-        verify(provider1).createOverlayOnMapFromCache(overlay1, overlayManager);
+        verify(provider1).createMapLayerFromDescriptor(overlay1, overlayManager);
         verify(onMap).addToMap();
 
         overlay1 = new MapLayerDescriptorTest.TestLayerDescriptor1(overlay1.getOverlayName(), overlay1.getCacheName(), overlay1.getCacheType());
@@ -405,14 +405,14 @@ public class OverlayOnMapManagerTest implements MapDataManager.CreateUpdatePermi
         MapDataManager.CacheOverlayUpdate update = mapDataManager.new CacheOverlayUpdate(this, Collections.<MapDataResource>emptySet(), setOf(cache), Collections.<MapDataResource>emptySet());
 
         OverlayOnMapManager.OverlayOnMap onMapUpdated = mockOverlayOnMap(overlayManager);
-        when(provider1.createOverlayOnMapFromCache(overlay1, overlayManager)).thenReturn(onMapUpdated);
+        when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(onMapUpdated);
         when(onMap.isOnMap()).thenReturn(true);
         when(onMap.isVisible()).thenReturn(false);
 
         overlayManager.onCacheOverlaysUpdated(update);
 
         verify(onMap).removeFromMap();
-        verify(provider1, never()).createOverlayOnMapFromCache(Mockito.same(overlay1), Mockito.same(overlayManager));
+        verify(provider1, never()).createMapLayerFromDescriptor(Mockito.same(overlay1), Mockito.same(overlayManager));
         verify(onMapUpdated, never()).addToMap();
     }
 
@@ -431,11 +431,11 @@ public class OverlayOnMapManagerTest implements MapDataManager.CreateUpdatePermi
         assertFalse(overlayManager.isOverlayVisible(overlay1));
 
         OverlayOnMapManager.OverlayOnMap onMap =  mockOverlayOnMap(overlayManager);
-        when(provider1.createOverlayOnMapFromCache(overlay1, overlayManager)).thenReturn(onMap);
+        when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(onMap);
 
         overlayManager.showOverlay(overlay1);
 
-        verify(provider1).createOverlayOnMapFromCache(overlay1, overlayManager);
+        verify(provider1).createMapLayerFromDescriptor(overlay1, overlayManager);
         verify(onMap).addToMap();
 
         MapLayerDescriptor overlay2 = new MapLayerDescriptorTest.TestLayerDescriptor1("overlay 2", cache.getName(), cache.getType());
@@ -447,7 +447,7 @@ public class OverlayOnMapManagerTest implements MapDataManager.CreateUpdatePermi
         overlayManager.onCacheOverlaysUpdated(update);
 
         verify(onMap, never()).removeFromMap();
-        verify(provider1, times(1)).createOverlayOnMapFromCache(Mockito.same(overlay1), Mockito.same(overlayManager));
+        verify(provider1, times(1)).createMapLayerFromDescriptor(Mockito.same(overlay1), Mockito.same(overlayManager));
         verify(onMapUpdated, never()).addToMap();
     }
 
@@ -466,11 +466,11 @@ public class OverlayOnMapManagerTest implements MapDataManager.CreateUpdatePermi
         assertThat(overlayManager.getOverlaysInZOrder(), hasItems(overlay1, overlay2));
 
         OverlayOnMapManager.OverlayOnMap onMap =  mockOverlayOnMap(overlayManager);
-        when(provider1.createOverlayOnMapFromCache(overlay1, overlayManager)).thenReturn(onMap);
+        when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(onMap);
 
         overlayManager.showOverlay(overlay1);
 
-        verify(provider1).createOverlayOnMapFromCache(overlay1, overlayManager);
+        verify(provider1).createMapLayerFromDescriptor(overlay1, overlayManager);
         verify(onMap).addToMap();
 
         cache = new MapDataResource(makeUri(), cache.getName(), cache.getType(), setOf(overlay2));
@@ -496,11 +496,11 @@ public class OverlayOnMapManagerTest implements MapDataManager.CreateUpdatePermi
         assertThat(overlayManager.getOverlaysInZOrder(), hasItems(overlay1, overlay2));
 
         OverlayOnMapManager.OverlayOnMap onMap =  mockOverlayOnMap(overlayManager);
-        when(provider1.createOverlayOnMapFromCache(overlay1, overlayManager)).thenReturn(onMap);
+        when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(onMap);
 
         overlayManager.showOverlay(overlay1);
 
-        verify(provider1).createOverlayOnMapFromCache(overlay1, overlayManager);
+        verify(provider1).createMapLayerFromDescriptor(overlay1, overlayManager);
         verify(onMap).addToMap();
 
         MapDataManager.CacheOverlayUpdate update = mapDataManager.new CacheOverlayUpdate(this, Collections.<MapDataResource>emptySet(), Collections.<MapDataResource>emptySet(), setOf(cache));
@@ -523,7 +523,7 @@ public class OverlayOnMapManagerTest implements MapDataManager.CreateUpdatePermi
         assertFalse(overlayManager.isOverlayVisible(overlay1));
 
         TestOverlayOnMap onMap =  new TestOverlayOnMap(overlayManager);
-        when(provider1.createOverlayOnMapFromCache(overlay1, overlayManager)).thenReturn(onMap);
+        when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(onMap);
 
         overlayManager.showOverlay(overlay1);
 
@@ -550,19 +550,19 @@ public class OverlayOnMapManagerTest implements MapDataManager.CreateUpdatePermi
 
         OverlayOnMapManager.OverlayOnMap onMap1 = mockOverlayOnMap(overlayManager);
         OverlayOnMapManager.OverlayOnMap onMap2 = mockOverlayOnMap(overlayManager);
-        when(provider1.createOverlayOnMapFromCache(overlay1, overlayManager)).thenReturn(onMap1);
-        when(provider1.createOverlayOnMapFromCache(overlay2, overlayManager)).thenReturn(onMap2);
+        when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(onMap1);
+        when(provider1.createMapLayerFromDescriptor(overlay2, overlayManager)).thenReturn(onMap2);
 
         overlayManager.showOverlay(overlay1);
 
-        verify(provider1).createOverlayOnMapFromCache(overlay1, overlayManager);
-        verify(provider1, never()).createOverlayOnMapFromCache(overlay2, overlayManager);
+        verify(provider1).createMapLayerFromDescriptor(overlay1, overlayManager);
+        verify(provider1, never()).createMapLayerFromDescriptor(overlay2, overlayManager);
         verify(onMap1).addToMap();
 
         overlayManager.showOverlay(overlay2);
 
-        verify(provider1).createOverlayOnMapFromCache(overlay1, overlayManager);
-        verify(provider1).createOverlayOnMapFromCache(overlay2, overlayManager);
+        verify(provider1).createMapLayerFromDescriptor(overlay1, overlayManager);
+        verify(provider1).createMapLayerFromDescriptor(overlay2, overlayManager);
         verify(onMap1).addToMap();
         verify(onMap2).addToMap();
 
@@ -630,9 +630,9 @@ public class OverlayOnMapManagerTest implements MapDataManager.CreateUpdatePermi
         OverlayOnMapManager.OverlayOnMap onMap2 = mockOverlayOnMap(overlayManager);
         OverlayOnMapManager.OverlayOnMap onMap3 = mockOverlayOnMap(overlayManager);
 
-        when(provider1.createOverlayOnMapFromCache(overlay1, overlayManager)).thenReturn(onMap1);
-        when(provider1.createOverlayOnMapFromCache(overlay2, overlayManager)).thenReturn(onMap2);
-        when(provider2.createOverlayOnMapFromCache(overlay3, overlayManager)).thenReturn(onMap3);
+        when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(onMap1);
+        when(provider1.createMapLayerFromDescriptor(overlay2, overlayManager)).thenReturn(onMap2);
+        when(provider2.createMapLayerFromDescriptor(overlay3, overlayManager)).thenReturn(onMap3);
 
         overlayManager.showOverlay(overlay1);
         overlayManager.showOverlay(overlay2);
@@ -700,8 +700,8 @@ public class OverlayOnMapManagerTest implements MapDataManager.CreateUpdatePermi
 
             TestOverlayOnMap c1o1OnMap = new TestOverlayOnMap(overlayManager);
             TestOverlayOnMap c2o1OnMap = new TestOverlayOnMap(overlayManager);
-            when(provider1.createOverlayOnMapFromCache(c1o1, overlayManager)).thenReturn(c1o1OnMap);
-            when(provider2.createOverlayOnMapFromCache(c2o1, overlayManager)).thenReturn(c2o1OnMap);
+            when(provider1.createMapLayerFromDescriptor(c1o1, overlayManager)).thenReturn(c1o1OnMap);
+            when(provider2.createMapLayerFromDescriptor(c2o1, overlayManager)).thenReturn(c2o1OnMap);
 
             overlayManager.showOverlay(c1o1);
             overlayManager.showOverlay(c2o1);
@@ -736,9 +736,9 @@ public class OverlayOnMapManagerTest implements MapDataManager.CreateUpdatePermi
             TestOverlayOnMap c2o1OnMap = new TestOverlayOnMap(overlayManager);
             TestOverlayOnMap c2o2OnMap = new TestOverlayOnMap(overlayManager);
 
-            when(provider1.createOverlayOnMapFromCache(c1o1, overlayManager)).thenReturn(c1o1OnMap);
-            when(provider2.createOverlayOnMapFromCache(c2o1, overlayManager)).thenReturn(c2o1OnMap);
-            when(provider2.createOverlayOnMapFromCache(c2o2, overlayManager)).thenReturn(c2o2OnMap);
+            when(provider1.createMapLayerFromDescriptor(c1o1, overlayManager)).thenReturn(c1o1OnMap);
+            when(provider2.createMapLayerFromDescriptor(c2o1, overlayManager)).thenReturn(c2o1OnMap);
+            when(provider2.createMapLayerFromDescriptor(c2o2, overlayManager)).thenReturn(c2o2OnMap);
 
             overlayManager.showOverlay(c1o1);
             overlayManager.showOverlay(c2o1);
@@ -778,8 +778,8 @@ public class OverlayOnMapManagerTest implements MapDataManager.CreateUpdatePermi
             TestOverlayOnMap c1o1OnMap = new TestOverlayOnMap(overlayManager);
             TestOverlayOnMap c2o1OnMap = new TestOverlayOnMap(overlayManager);
 
-            when(provider1.createOverlayOnMapFromCache(c1o1, overlayManager)).thenReturn(c1o1OnMap);
-            when(provider2.createOverlayOnMapFromCache(c2o1, overlayManager)).thenReturn(c2o1OnMap);
+            when(provider1.createMapLayerFromDescriptor(c1o1, overlayManager)).thenReturn(c1o1OnMap);
+            when(provider2.createMapLayerFromDescriptor(c2o1, overlayManager)).thenReturn(c2o1OnMap);
 
             overlayManager.showOverlay(c1o1);
             overlayManager.showOverlay(c2o1);
@@ -811,8 +811,8 @@ public class OverlayOnMapManagerTest implements MapDataManager.CreateUpdatePermi
             TestOverlayOnMap firstOnMap = new TestOverlayOnMap(overlayManager);
             MapLayerDescriptor first = invalidOrder.get(0);
 
-            when(provider1.createOverlayOnMapFromCache(first, overlayManager)).thenReturn(firstOnMap);
-            when(provider2.createOverlayOnMapFromCache(first, overlayManager)).thenReturn(firstOnMap);
+            when(provider1.createMapLayerFromDescriptor(first, overlayManager)).thenReturn(firstOnMap);
+            when(provider2.createMapLayerFromDescriptor(first, overlayManager)).thenReturn(firstOnMap);
 
             overlayManager.showOverlay(first);
 
@@ -838,8 +838,8 @@ public class OverlayOnMapManagerTest implements MapDataManager.CreateUpdatePermi
             int lastZIndex = invalidOrder.size() - 1;
             MapLayerDescriptor last = invalidOrder.get(lastZIndex);
 
-            when(provider1.createOverlayOnMapFromCache(last, overlayManager)).thenReturn(lastOnMap);
-            when(provider2.createOverlayOnMapFromCache(last, overlayManager)).thenReturn(lastOnMap);
+            when(provider1.createMapLayerFromDescriptor(last, overlayManager)).thenReturn(lastOnMap);
+            when(provider2.createMapLayerFromDescriptor(last, overlayManager)).thenReturn(lastOnMap);
 
             overlayManager.showOverlay(last);
 
@@ -883,10 +883,10 @@ public class OverlayOnMapManagerTest implements MapDataManager.CreateUpdatePermi
                     TestOverlayOnMap onMap = new TestOverlayOnMap(overlayManager);
                     overlaysOnMap.put(overlay, onMap);
                     if (overlay.getCacheType() == provider1.getClass()) {
-                        when(provider1.createOverlayOnMapFromCache(overlay, overlayManager)).thenReturn(onMap);
+                        when(provider1.createMapLayerFromDescriptor(overlay, overlayManager)).thenReturn(onMap);
                     }
                     else if (overlay.getCacheType() == provider2.getClass()) {
-                        when(provider2.createOverlayOnMapFromCache(overlay, overlayManager)).thenReturn(onMap);
+                        when(provider2.createMapLayerFromDescriptor(overlay, overlayManager)).thenReturn(onMap);
                     }
                     overlayManager.showOverlay(overlay);
                 }

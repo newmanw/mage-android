@@ -286,8 +286,8 @@ public class MapDataManager {
                         throw new CacheImportException(uri, "cache file is not readable or does not exist: " + cacheFile.getName());
                     }
                 }
-                if (provider.isCacheFile(uri)) {
-                    return provider.importCacheFromFile(uri);
+                if (provider.canHandleResource(uri)) {
+                    return provider.importResource(uri);
                 }
             }
             throw new CacheImportException(uri, "no cache provider could handle file " + resource);
@@ -335,7 +335,7 @@ public class MapDataManager {
                 if (providerCaches == null) {
                     providerCaches = Collections.emptySet();
                 }
-                caches.addAll(provider.refreshCaches(providerCaches));
+                caches.addAll(provider.refreshResources(providerCaches));
             }
             return caches;
         }

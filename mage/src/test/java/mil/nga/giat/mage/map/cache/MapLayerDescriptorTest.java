@@ -13,22 +13,22 @@ public class MapLayerDescriptorTest {
     static class TestMapDataProvider1 implements MapDataProvider {
 
         @Override
-        public boolean isCacheFile(URI cacheFile) {
+        public boolean canHandleResource(URI resourceUri) {
             return false;
         }
 
         @Override
-        public MapDataResource importCacheFromFile(URI cacheFile) throws CacheImportException {
+        public MapDataResource importResource(URI resourceUri) throws CacheImportException {
             return null;
         }
 
         @Override
-        public Set<MapDataResource> refreshCaches(Set<MapDataResource> existingCaches) {
+        public Set<MapDataResource> refreshResources(Set<MapDataResource> existingResources) {
             return null;
         }
 
         @Override
-        public OverlayOnMapManager.OverlayOnMap createOverlayOnMapFromCache(MapLayerDescriptor cache, OverlayOnMapManager map) {
+        public OverlayOnMapManager.OverlayOnMap createMapLayerFromDescriptor(MapLayerDescriptor layerDescriptor, OverlayOnMapManager map) {
             return null;
         }
     }
@@ -36,22 +36,22 @@ public class MapLayerDescriptorTest {
     static class TestMapDataProvider2 implements MapDataProvider {
 
         @Override
-        public boolean isCacheFile(URI cacheFile) {
+        public boolean canHandleResource(URI resourceUri) {
             return false;
         }
 
         @Override
-        public MapDataResource importCacheFromFile(URI cacheFile) throws CacheImportException {
+        public MapDataResource importResource(URI resourceUri) throws CacheImportException {
             return null;
         }
 
         @Override
-        public Set<MapDataResource> refreshCaches(Set<MapDataResource> existingCaches) {
+        public Set<MapDataResource> refreshResources(Set<MapDataResource> existingResources) {
             return null;
         }
 
         @Override
-        public OverlayOnMapManager.OverlayOnMap createOverlayOnMapFromCache(MapLayerDescriptor cache, OverlayOnMapManager map) {
+        public OverlayOnMapManager.OverlayOnMap createMapLayerFromDescriptor(MapLayerDescriptor layerDescriptor, OverlayOnMapManager map) {
             return null;
         }
     }
