@@ -1116,7 +1116,7 @@ public class MapFragment extends Fragment implements
 	}
 
 	@Override
-	public void onCacheOverlaysUpdated(MapDataManager.CacheOverlayUpdate update) {
+	public void onMapDataUpdated(MapDataManager.MapDataUpdate update) {
 		if (update.added.size() != 1) {
 			return;
 		}

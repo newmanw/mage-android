@@ -102,8 +102,8 @@ public class MapDataManagerTest {
     private Executor executor;
     private MapDataProvider catProvider;
     private MapDataProvider dogProvider;
-    private MapDataManager.CacheOverlaysUpdateListener listener;
-    private ArgumentCaptor<MapDataManager.CacheOverlayUpdate> updateCaptor = ArgumentCaptor.forClass(MapDataManager.CacheOverlayUpdate.class);
+    private MapDataManager.MapDataListener listener;
+    private ArgumentCaptor<MapDataManager.MapDataUpdate> updateCaptor = ArgumentCaptor.forClass(MapDataManager.MapDataUpdate.class);
 
     @Before
     public void configureCacheManager() throws Exception {
@@ -156,7 +156,7 @@ public class MapDataManagerTest {
             .repositories(repo1, repo2)
             .updatePermission(new MapDataManager.CreateUpdatePermission(){});
 
-        listener = mock(MapDataManager.CacheOverlaysUpdateListener.class);
+        listener = mock(MapDataManager.MapDataListener.class);
         mapDataManager = new MapDataManager(config);
         mapDataManager.addUpdateListener(listener);
     }
@@ -178,7 +178,7 @@ public class MapDataManagerTest {
 
     @Test(expected = Error.class)
     public void cannotCreateUpdateWithoutPermission() {
-        mapDataManager.new CacheOverlayUpdate(new MapDataManager.CreateUpdatePermission() {}, null, null, null);
+        mapDataManager.new MapDataUpdate(new MapDataManager.CreateUpdatePermission() {}, null, null, null);
     }
 
     @Test
@@ -203,9 +203,9 @@ public class MapDataManagerTest {
 
         mapDataManager.tryImportResource(cacheFile.toURI());
 
-        verify(listener, timeout(1000)).onCacheOverlaysUpdated(updateCaptor.capture());
+        verify(listener, timeout(1000)).onMapDataUpdated(updateCaptor.capture());
 
-        MapDataManager.CacheOverlayUpdate update = updateCaptor.getValue();
+        MapDataManager.MapDataUpdate update = updateCaptor.getValue();
         Set<MapDataResource> caches = mapDataManager.getCaches();
 
         assertThat(caches.size(), is(1));
@@ -231,9 +231,9 @@ public class MapDataManagerTest {
 
         mapDataManager.refreshAvailableCaches();
 
-        verify(listener, timeout(1000)).onCacheOverlaysUpdated(updateCaptor.capture());
+        verify(listener, timeout(1000)).onMapDataUpdated(updateCaptor.capture());
 
-        MapDataManager.CacheOverlayUpdate update = updateCaptor.getValue();
+        MapDataManager.MapDataUpdate update = updateCaptor.getValue();
         Set<MapDataResource> caches = mapDataManager.getCaches();
 
         assertThat(caches.size(), is(2));
@@ -256,11 +256,11 @@ public class MapDataManagerTest {
 
         mapDataManager.refreshAvailableCaches();
 
-        verify(listener, timeout(1000)).onCacheOverlaysUpdated(updateCaptor.capture());
+        verify(listener, timeout(1000)).onMapDataUpdated(updateCaptor.capture());
         verify(dogProvider).refreshResources(eq(Collections.<MapDataResource>emptySet()));
         verify(catProvider).refreshResources(eq(Collections.<MapDataResource>emptySet()));
 
-        MapDataManager.CacheOverlayUpdate update = updateCaptor.getValue();
+        MapDataManager.MapDataUpdate update = updateCaptor.getValue();
         Set<MapDataResource> caches = mapDataManager.getCaches();
 
         assertThat(caches.size(), is(3));
@@ -283,7 +283,7 @@ public class MapDataManagerTest {
 
         mapDataManager.refreshAvailableCaches();
 
-        verify(listener, timeout(1000)).onCacheOverlaysUpdated(updateCaptor.capture());
+        verify(listener, timeout(1000)).onMapDataUpdated(updateCaptor.capture());
         verify(dogProvider).refreshResources(eq(Collections.<MapDataResource>emptySet()));
         verify(catProvider).refreshResources(eq(Collections.<MapDataResource>emptySet()));
 
@@ -297,13 +297,13 @@ public class MapDataManagerTest {
 
         mapDataManager.refreshAvailableCaches();
 
-        verify(listener, timeout(1000).times(2)).onCacheOverlaysUpdated(updateCaptor.capture());
+        verify(listener, timeout(1000).times(2)).onMapDataUpdated(updateCaptor.capture());
 
         verify(dogProvider).refreshResources(eq(cacheSetWithCaches(dogCache1, dogCache2)));
         verify(catProvider).refreshResources(eq(cacheSetWithCaches(catCache)));
 
         caches = mapDataManager.getCaches();
-        MapDataManager.CacheOverlayUpdate update = updateCaptor.getValue();
+        MapDataManager.MapDataUpdate update = updateCaptor.getValue();
 
         assertThat(caches.size(), is(1));
         assertThat(caches, hasItem(dogCache2));
@@ -321,10 +321,10 @@ public class MapDataManagerTest {
 
         mapDataManager.refreshAvailableCaches();
 
-        verify(listener, timeout(1000)).onCacheOverlaysUpdated(updateCaptor.capture());
+        verify(listener, timeout(1000)).onMapDataUpdated(updateCaptor.capture());
 
         Set<MapDataResource> caches = mapDataManager.getCaches();
-        MapDataManager.CacheOverlayUpdate update = updateCaptor.getValue();
+        MapDataManager.MapDataUpdate update = updateCaptor.getValue();
 
         assertThat(caches.size(), is(1));
         assertThat(caches, hasItem(dogOrig));
@@ -339,7 +339,7 @@ public class MapDataManagerTest {
 
         mapDataManager.refreshAvailableCaches();
 
-        verify(listener, timeout(1000).times(2)).onCacheOverlaysUpdated(updateCaptor.capture());
+        verify(listener, timeout(1000).times(2)).onMapDataUpdated(updateCaptor.capture());
 
         Set<MapDataResource> overlaysRefreshed = mapDataManager.getCaches();
         update = updateCaptor.getValue();
@@ -422,6 +422,6 @@ public class MapDataManagerTest {
 
         taskCanProceed.await();
 
-        verify(listener, timeout(1000)).onCacheOverlaysUpdated(updateCaptor.capture());
+        verify(listener, timeout(1000)).onMapDataUpdated(updateCaptor.capture());
     }
 }

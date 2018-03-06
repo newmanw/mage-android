@@ -26,16 +26,16 @@ import java.util.concurrent.Executor;
 public class MapDataManager {
 
     /**
-     * Implement this interface and {@link #addUpdateListener(CacheOverlaysUpdateListener) register}
-     * an instance to receive {@link #onCacheOverlaysUpdated(CacheOverlayUpdate) notifications} when the set of caches changes.
+     * Implement this interface and {@link #addUpdateListener(MapDataListener) register}
+     * an instance to receive {@link #onMapDataUpdated(MapDataUpdate) notifications} when the set of caches changes.
      */
-    public interface CacheOverlaysUpdateListener {
-        void onCacheOverlaysUpdated(CacheOverlayUpdate update);
+    public interface MapDataListener {
+        void onMapDataUpdated(MapDataUpdate update);
     }
 
     /**
      * The create update permission is an opaque interface that enforces only holders of
-     * the the permission instance have the ability to create a {@link CacheOverlayUpdate}
+     * the the permission instance have the ability to create a {@link MapDataUpdate}
      * associated with a given instance of {@link MapDataManager}.  This can simply be an
      * anonymous implementation created at the call site of the {@link Config#updatePermission(CreateUpdatePermission) configuration}.
      * For example:
@@ -48,18 +48,18 @@ public class MapDataManager {
      * </pre>
      * </p>
      * This prevents the programmer error of creating update objects outside of the
-     * <code>MapDataManager</code> instance to {@link CacheOverlaysUpdateListener#onCacheOverlaysUpdated(CacheOverlayUpdate) deliver}
+     * <code>MapDataManager</code> instance to {@link MapDataListener#onMapDataUpdated(MapDataUpdate) deliver}
      * to listeners.
      */
     public interface CreateUpdatePermission {};
 
-    public final class CacheOverlayUpdate {
+    public final class MapDataUpdate {
         public final Set<MapDataResource> added;
         public final Set<MapDataResource> updated;
         public final Set<MapDataResource> removed;
         public final MapDataManager source = MapDataManager.this;
 
-        public CacheOverlayUpdate(CreateUpdatePermission updatePermission, Set<MapDataResource> added, Set<MapDataResource> updated, Set<MapDataResource> removed) {
+        public MapDataUpdate(CreateUpdatePermission updatePermission, Set<MapDataResource> added, Set<MapDataResource> updated, Set<MapDataResource> removed) {
             if (updatePermission != source.updatePermission) {
                 throw new Error("erroneous attempt to create update from cache manager instance " + MapDataManager.this);
             }
@@ -78,7 +78,7 @@ public class MapDataManager {
         private CreateUpdatePermission updatePermission;
         private MapDataRepository[] repositories;
         private MapDataProvider[] providers;
-        private Executor executor = AsyncTask.SERIAL_EXECUTOR;
+        private Executor executor = AsyncTask.THREAD_POOL_EXECUTOR;
 
         public Config context(Application x) {
             context = x;
@@ -90,11 +90,6 @@ public class MapDataManager {
             return this;
         }
 
-        /**
-         * Paths to directories to search for cache files
-         * @param x
-         * @return
-         */
         public Config repositories(MapDataRepository... x) {
             repositories = x;
             return this;
@@ -127,11 +122,11 @@ public class MapDataManager {
     private final Executor executor;
     private final MapDataRepository[] repositories;
     private final MapDataProvider[] providers;
-    private final Collection<CacheOverlaysUpdateListener> cacheOverlayListeners = new ArrayList<>();
+    private final Collection<MapDataListener> cacheOverlayListeners = new ArrayList<>();
     private Set<MapDataResource> caches = Collections.emptySet();
-    private RefreshAvailableCachesTask refreshTask;
-    private FindNewCacheFilesInProvidedLocationsTask findNewCacheFilesTask;
-    private ImportCacheFileTask importCacheFilesForRefreshTask;
+    private RefreshAvailableResourcesTask refreshTask;
+    private FindNewResourcesTask findNewResourcesTask;
+    private ImportResourcesTask importResourcesForRefreshTask;
 
     public MapDataManager(Config config) {
         if (config.updatePermission == null) {
@@ -143,17 +138,17 @@ public class MapDataManager {
         providers = config.providers;
     }
 
-    public void addUpdateListener(CacheOverlaysUpdateListener listener) {
+    public void addUpdateListener(MapDataListener listener) {
         cacheOverlayListeners.add(listener);
     }
 
-    public void removeUpdateListener(CacheOverlaysUpdateListener listener) {
+    public void removeUpdateListener(MapDataListener listener) {
         cacheOverlayListeners.remove(listener);
     }
 
     public void tryImportResource(URI cacheFile) {
         MapDataResource resource = new MapDataResource(cacheFile);
-        new ImportCacheFileTask().executeOnExecutor(executor, resource);
+        new ImportResourcesTask().executeOnExecutor(executor, resource);
     }
 
     public void removeCacheOverlay(String name) {
@@ -166,37 +161,37 @@ public class MapDataManager {
 
     /**
      * Discover new caches available in standard {@link MapDataRepository locations}, then remove defunct caches.
-     * Asynchronous notifications to {@link #addUpdateListener(CacheOverlaysUpdateListener) listeners}
+     * Asynchronous notifications to {@link #addUpdateListener(MapDataListener) listeners}
      * will result, one notification per refresh, per listener.  Only one refresh can be active at any moment.
      */
     public void refreshAvailableCaches() {
         if (refreshTask != null) {
             return;
         }
-        findNewCacheFilesTask = new FindNewCacheFilesInProvidedLocationsTask();
-        importCacheFilesForRefreshTask = new ImportCacheFileTask();
-        refreshTask = new RefreshAvailableCachesTask();
-        findNewCacheFilesTask.executeOnExecutor(executor);
+        findNewResourcesTask = new FindNewResourcesTask();
+        importResourcesForRefreshTask = new ImportResourcesTask();
+        refreshTask = new RefreshAvailableResourcesTask();
+        findNewResourcesTask.executeOnExecutor(executor);
     }
 
     public OverlayOnMapManager createMapManager(GoogleMap map) {
         return new OverlayOnMapManager(this, Arrays.asList(providers), map);
     }
 
-    private void findNewCacheFilesFinished(FindNewCacheFilesInProvidedLocationsTask task) {
-        if (task != findNewCacheFilesTask) {
-            throw new IllegalStateException(FindNewCacheFilesInProvidedLocationsTask.class.getSimpleName() + " task finished but did not match stored task");
+    private void findNewCacheFilesFinished(FindNewResourcesTask task) {
+        if (task != findNewResourcesTask) {
+            throw new IllegalStateException(FindNewResourcesTask.class.getSimpleName() + " task finished but did not match stored task");
         }
         try {
-            importCacheFilesForRefreshTask.executeOnExecutor(executor, task.get());
+            importResourcesForRefreshTask.executeOnExecutor(executor, task.get());
         }
         catch (Exception e) {
             throw new IllegalStateException("interrupted while retrieving new cache files to import");
         }
     }
 
-    private void cacheFileImportFinished(ImportCacheFileTask task) {
-        if (task == importCacheFilesForRefreshTask) {
+    private void cacheFileImportFinished(ImportResourcesTask task) {
+        if (task == importResourcesForRefreshTask) {
             if (refreshTask == null) {
                 throw new IllegalStateException("import task for refresh finished but refresh task is null");
             }
@@ -207,21 +202,21 @@ public class MapDataManager {
         }
     }
 
-    private void refreshFinished(RefreshAvailableCachesTask task) {
+    private void refreshFinished(RefreshAvailableResourcesTask task) {
         if (task != refreshTask) {
-            throw new IllegalStateException(RefreshAvailableCachesTask.class.getSimpleName() + " task completed but did not match stored task");
+            throw new IllegalStateException(RefreshAvailableResourcesTask.class.getSimpleName() + " task completed but did not match stored task");
         }
 
-        ImportCacheFileTask localImportTask = importCacheFilesForRefreshTask;
-        RefreshAvailableCachesTask localRefreshTask = refreshTask;
-        importCacheFilesForRefreshTask = null;
-        findNewCacheFilesTask = null;
+        ImportResourcesTask localImportTask = importResourcesForRefreshTask;
+        RefreshAvailableResourcesTask localRefreshTask = refreshTask;
+        importResourcesForRefreshTask = null;
+        findNewResourcesTask = null;
         refreshTask = null;
 
         updateCaches(localImportTask, localRefreshTask);
     }
 
-    private void updateCaches(ImportCacheFileTask importTask, RefreshAvailableCachesTask refreshTask) {
+    private void updateCaches(ImportResourcesTask importTask, RefreshAvailableResourcesTask refreshTask) {
         Set<MapDataResource> allIncoming;
         try {
             CacheImportResult importResult = importTask.get();
@@ -254,13 +249,13 @@ public class MapDataManager {
 
         caches = Collections.unmodifiableSet(new HashSet<>(incomingIndex.keySet()));
 
-        CacheOverlayUpdate update = new CacheOverlayUpdate(
+        MapDataUpdate update = new MapDataUpdate(
             updatePermission,
             Collections.unmodifiableSet(added),
             Collections.unmodifiableSet(updated),
             Collections.unmodifiableSet(removed));
-        for (CacheOverlaysUpdateListener listener : cacheOverlayListeners) {
-            listener.onCacheOverlaysUpdated(update);
+        for (MapDataListener listener : cacheOverlayListeners) {
+            listener.onMapDataUpdated(update);
         }
     }
 
@@ -275,7 +270,7 @@ public class MapDataManager {
         }
     }
 
-    private class ImportCacheFileTask extends AsyncTask<MapDataResource, Void, CacheImportResult> {
+    private class ImportResourcesTask extends AsyncTask<MapDataResource, Void, CacheImportResult> {
 
         private MapDataResource importFromFirstCapableProvider(MapDataResource resource) throws CacheImportException {
             URI uri = resource.getUri();
@@ -316,7 +311,7 @@ public class MapDataManager {
         }
     }
 
-    private final class RefreshAvailableCachesTask extends AsyncTask<MapDataResource, Void, Set<MapDataResource>> {
+    private final class RefreshAvailableResourcesTask extends AsyncTask<MapDataResource, Void, Set<MapDataResource>> {
 
         @Override
         protected final Set<MapDataResource> doInBackground(MapDataResource... existingCaches) {
@@ -346,7 +341,7 @@ public class MapDataManager {
         }
     }
 
-    private final class FindNewCacheFilesInProvidedLocationsTask extends AsyncTask<Void, Void, MapDataResource[]> {
+    private final class FindNewResourcesTask extends AsyncTask<Void, Void, MapDataResource[]> {
 
         @Override
         protected MapDataResource[] doInBackground(Void... voids) {

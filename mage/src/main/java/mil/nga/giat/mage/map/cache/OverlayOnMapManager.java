@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.Set;
 
 @MainThread
-public class OverlayOnMapManager implements MapDataManager.CacheOverlaysUpdateListener {
+public class OverlayOnMapManager implements MapDataManager.MapDataListener {
 
     public interface OverlayOnMapListener {
 
@@ -116,7 +116,7 @@ public class OverlayOnMapManager implements MapDataManager.CacheOverlaysUpdateLi
     }
 
     @Override
-    public void onCacheOverlaysUpdated(MapDataManager.CacheOverlayUpdate update) {
+    public void onMapDataUpdated(MapDataManager.MapDataUpdate update) {
         Set<String> removedCacheNames = new HashSet<>(update.removed.size());
         for (MapDataResource removed : update.removed) {
 			removedCacheNames.add(removed.getName());
