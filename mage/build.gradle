@@ -25,11 +25,13 @@ String pin = hasProperty('mage.pinned_cert') ? getProperty("mage.pinned_cert") :
 
 android {
     compileSdkVersion 25
-    buildToolsVersion "25.0.3"
+    buildToolsVersion '26.0.2'
 
     dexOptions {
         javaMaxHeapSize "4g"
     }
+
+    flavorDimensions "dimensionless"
 
     defaultConfig {
         applicationId "mil.nga.giat.mage"
@@ -38,6 +40,7 @@ android {
         minSdkVersion 19
         targetSdkVersion 25
         multiDexEnabled true
+        vectorDrawables.useSupportLibrary = true
         resValue "string", "serverURLDefaultValue", serverURL
         resValue "string", "recentMapXYZDefaultValue", "263.0,40.0,3"
         resValue "bool", "isWearBuildDefaultValue", "false"
@@ -69,8 +72,10 @@ android {
         defaults {
             // if you build without a flavor gradle will build all flavors
             // define this flavor to provide a flavor we can build with no overrides
+            dimension "dimensionless"
         }
         wear {
+            dimension "dimensionless"
             resValue "bool", "isWearBuildDefaultValue", "true"
         }
     }
@@ -156,7 +161,7 @@ repositories {
 }
 
 ext {
-    support_library_version = '25.3.1'
+    support_library_version = '25.4.0'
     google_play_services_version = '10.2.1'
 }
 
@@ -179,11 +184,11 @@ dependencies {
     compile "com.android.support:recyclerview-v7:${support_library_version}"
     compile "com.android.support:appcompat-v7:${support_library_version}"
     compile "com.android.support:design:${support_library_version}"
-    compile "com.android.support:cardview-v7:25.1.1"
+    compile "com.android.support:cardview-v7:${support_library_version}"
     compile "com.android.support:preference-v7:${support_library_version}"
     compile "com.android.support:preference-v14:${support_library_version}"
     compile "com.google.android.gms:play-services-maps:${google_play_services_version}"
-    compile 'com.android.support.constraint:constraint-layout:1.1.0-beta4'
+    compile 'com.android.support.constraint:constraint-layout:1.1.0-beta5'
 
     compile project(':sdk') // uncomment me to build locally, and see top-level build.gradle
 //    compile 'mil.nga.giat.mage:mage-android-sdk:6.0.3' // comment me to build locally
@@ -197,6 +202,7 @@ dependencies {
     compile 'com.nulab-inc:zxcvbn:1.2.3'
     compile (name:'mgrs-0.0.2-release', ext:'aar')
     compile files('libs/GeocoderPlus.jar')
+    compile "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
 
     testCompile 'junit:junit:4.12'
     testCompile 'org.hamcrest:hamcrest-library:1.3'
@@ -208,7 +214,6 @@ dependencies {
     androidTestCompile 'com.android.support.test:rules:0.5'
     androidTestCompile 'org.hamcrest:hamcrest-library:1.3'
     androidTestCompile 'org.mockito:mockito-android:2.13.0'
-    compile "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
 }
 
 task androidArtifactVersion {
