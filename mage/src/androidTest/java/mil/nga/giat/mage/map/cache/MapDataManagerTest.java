@@ -56,7 +56,7 @@ public class MapDataManagerTest {
     // had to do this to make Mockito generate a different class for
     // two mock providers, because it uses the same class for two
     // separate mock instances of MapDataProvider directly, which is
-    // a collision for MapLayerDescriptor.getCacheType()
+    // a collision for MapLayerDescriptor.getDataType()
     static abstract class CatProvider implements MapDataProvider {}
     static abstract class DogProvider implements MapDataProvider {}
 
@@ -206,7 +206,7 @@ public class MapDataManagerTest {
         verify(listener, timeout(1000)).onMapDataUpdated(updateCaptor.capture());
 
         MapDataManager.MapDataUpdate update = updateCaptor.getValue();
-        Set<MapDataResource> caches = mapDataManager.getCaches();
+        Set<MapDataResource> caches = mapDataManager.getMapData();
 
         assertThat(caches.size(), is(1));
         assertThat(caches, hasItem(catCache));
@@ -234,7 +234,7 @@ public class MapDataManagerTest {
         verify(listener, timeout(1000)).onMapDataUpdated(updateCaptor.capture());
 
         MapDataManager.MapDataUpdate update = updateCaptor.getValue();
-        Set<MapDataResource> caches = mapDataManager.getCaches();
+        Set<MapDataResource> caches = mapDataManager.getMapData();
 
         assertThat(caches.size(), is(2));
         assertThat(caches, hasItems(cache1, cache2));
@@ -261,7 +261,7 @@ public class MapDataManagerTest {
         verify(catProvider).refreshResources(eq(Collections.<MapDataResource>emptySet()));
 
         MapDataManager.MapDataUpdate update = updateCaptor.getValue();
-        Set<MapDataResource> caches = mapDataManager.getCaches();
+        Set<MapDataResource> caches = mapDataManager.getMapData();
 
         assertThat(caches.size(), is(3));
         assertThat(caches, hasItems(dogCache1, dogCache2, catCache));
@@ -287,7 +287,7 @@ public class MapDataManagerTest {
         verify(dogProvider).refreshResources(eq(Collections.<MapDataResource>emptySet()));
         verify(catProvider).refreshResources(eq(Collections.<MapDataResource>emptySet()));
 
-        Set<MapDataResource> caches = mapDataManager.getCaches();
+        Set<MapDataResource> caches = mapDataManager.getMapData();
 
         assertThat(caches.size(), is(3));
         assertThat(caches, hasItems(dogCache1, dogCache2, catCache));
@@ -302,7 +302,7 @@ public class MapDataManagerTest {
         verify(dogProvider).refreshResources(eq(cacheSetWithCaches(dogCache1, dogCache2)));
         verify(catProvider).refreshResources(eq(cacheSetWithCaches(catCache)));
 
-        caches = mapDataManager.getCaches();
+        caches = mapDataManager.getMapData();
         MapDataManager.MapDataUpdate update = updateCaptor.getValue();
 
         assertThat(caches.size(), is(1));
@@ -323,7 +323,7 @@ public class MapDataManagerTest {
 
         verify(listener, timeout(1000)).onMapDataUpdated(updateCaptor.capture());
 
-        Set<MapDataResource> caches = mapDataManager.getCaches();
+        Set<MapDataResource> caches = mapDataManager.getMapData();
         MapDataManager.MapDataUpdate update = updateCaptor.getValue();
 
         assertThat(caches.size(), is(1));
@@ -341,7 +341,7 @@ public class MapDataManagerTest {
 
         verify(listener, timeout(1000).times(2)).onMapDataUpdated(updateCaptor.capture());
 
-        Set<MapDataResource> overlaysRefreshed = mapDataManager.getCaches();
+        Set<MapDataResource> overlaysRefreshed = mapDataManager.getMapData();
         update = updateCaptor.getValue();
 
         assertThat(overlaysRefreshed, not(sameInstance(caches)));

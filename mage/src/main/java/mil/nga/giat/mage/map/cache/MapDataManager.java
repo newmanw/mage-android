@@ -1,8 +1,14 @@
 package mil.nga.giat.mage.map.cache;
 
 import android.app.Application;
+import android.arch.lifecycle.Lifecycle;
+import android.arch.lifecycle.LifecycleOwner;
+import android.arch.lifecycle.LifecycleRegistry;
+import android.arch.lifecycle.Observer;
 import android.os.AsyncTask;
 import android.support.annotation.MainThread;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 
 import com.google.android.gms.maps.GoogleMap;
 
@@ -19,15 +25,13 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executor;
 
-/**
- * Created by wnewman on 2/11/16.
- */
+
 @MainThread
-public class MapDataManager {
+public class MapDataManager implements LifecycleOwner {
 
     /**
      * Implement this interface and {@link #addUpdateListener(MapDataListener) register}
-     * an instance to receive {@link #onMapDataUpdated(MapDataUpdate) notifications} when the set of caches changes.
+     * an instance to receive {@link #onMapDataUpdated(MapDataUpdate) notifications} when the set of mapData changes.
      */
     public interface MapDataListener {
         void onMapDataUpdated(MapDataUpdate update);
@@ -123,9 +127,8 @@ public class MapDataManager {
     private final MapDataRepository[] repositories;
     private final MapDataProvider[] providers;
     private final Collection<MapDataListener> cacheOverlayListeners = new ArrayList<>();
-    private Set<MapDataResource> caches = Collections.emptySet();
-    private RefreshAvailableResourcesTask refreshTask;
-    private FindNewResourcesTask findNewResourcesTask;
+    private final LifecycleRegistry lifecycle = new LifecycleRegistry(this);
+    private Set<MapDataResource> mapData = Collections.emptySet();
     private ImportResourcesTask importResourcesForRefreshTask;
 
     public MapDataManager(Config config) {
@@ -136,6 +139,10 @@ public class MapDataManager {
         executor = config.executor;
         repositories = config.repositories;
         providers = config.providers;
+        lifecycle.markState(Lifecycle.State.CREATED);
+        for (MapDataRepository repo : repositories) {
+            repo.observe(this, new RepositoryObserver(repo));
+        }
     }
 
     public void addUpdateListener(MapDataListener listener) {
@@ -146,8 +153,7 @@ public class MapDataManager {
         cacheOverlayListeners.remove(listener);
     }
 
-    public void tryImportResource(URI cacheFile) {
-        MapDataResource resource = new MapDataResource(cacheFile);
+    public void tryImportResource(URI resourceUri) {
         new ImportResourcesTask().executeOnExecutor(executor, resource);
     }
 
@@ -155,39 +161,33 @@ public class MapDataManager {
         // TODO: rename to delete, implement MapDataProvider.deleteCache()
     }
 
-    public Set<MapDataResource> getCaches() {
-        return caches;
+    public Set<MapDataResource> getMapData() {
+        return mapData;
+    }
+
+    @NonNull
+    @Override
+    public Lifecycle getLifecycle() {
+        return lifecycle;
     }
 
     /**
-     * Discover new caches available in standard {@link MapDataRepository locations}, then remove defunct caches.
+     * Discover new mapData available in standard {@link MapDataRepository locations}, then remove defunct mapData.
      * Asynchronous notifications to {@link #addUpdateListener(MapDataListener) listeners}
      * will result, one notification per refresh, per listener.  Only one refresh can be active at any moment.
      */
     public void refreshAvailableCaches() {
-        if (refreshTask != null) {
-            return;
+        for (MapDataRepository repo : repositories) {
+            repo.refreshAvailableMapData(executor);
         }
-        findNewResourcesTask = new FindNewResourcesTask();
-        importResourcesForRefreshTask = new ImportResourcesTask();
-        refreshTask = new RefreshAvailableResourcesTask();
-        findNewResourcesTask.executeOnExecutor(executor);
     }
 
     public MapLayerManager createMapManager(GoogleMap map) {
         return new MapLayerManager(this, Arrays.asList(providers), map);
     }
 
-    private void findNewCacheFilesFinished(FindNewResourcesTask task) {
-        if (task != findNewResourcesTask) {
-            throw new IllegalStateException(FindNewResourcesTask.class.getSimpleName() + " task finished but did not match stored task");
-        }
-        try {
-            importResourcesForRefreshTask.executeOnExecutor(executor, task.get());
-        }
-        catch (Exception e) {
-            throw new IllegalStateException("interrupted while retrieving new cache files to import");
-        }
+    private void onMapDataChanged(Set<MapDataResource> data, MapDataRepository source) {
+
     }
 
     private void cacheFileImportFinished(ImportResourcesTask task) {
@@ -195,7 +195,7 @@ public class MapDataManager {
             if (refreshTask == null) {
                 throw new IllegalStateException("import task for refresh finished but refresh task is null");
             }
-            refreshTask.executeOnExecutor(executor, caches.toArray(new MapDataResource[caches.size()]));
+            refreshTask.executeOnExecutor(executor, mapData.toArray(new MapDataResource[mapData.size()]));
         }
         else {
             updateCaches(task, null);
@@ -210,7 +210,6 @@ public class MapDataManager {
         ImportResourcesTask localImportTask = importResourcesForRefreshTask;
         RefreshAvailableResourcesTask localRefreshTask = refreshTask;
         importResourcesForRefreshTask = null;
-        findNewResourcesTask = null;
         refreshTask = null;
 
         updateCaches(localImportTask, localRefreshTask);
@@ -234,10 +233,10 @@ public class MapDataManager {
             incomingIndex.put(cache, cache);
         }
         Set<MapDataResource> added = new HashSet<>(allIncoming);
-        added.removeAll(caches);
+        added.removeAll(mapData);
         Set<MapDataResource> removed = new HashSet<>();
         Set<MapDataResource> updated = new HashSet<>();
-        for (MapDataResource existing : caches) {
+        for (MapDataResource existing : mapData) {
             MapDataResource incoming = incomingIndex.get(existing);
             if (incoming == null) {
                 removed.add(existing);
@@ -247,7 +246,7 @@ public class MapDataManager {
             }
         }
 
-        caches = Collections.unmodifiableSet(new HashSet<>(incomingIndex.keySet()));
+        mapData = Collections.unmodifiableSet(new HashSet<>(incomingIndex.keySet()));
 
         MapDataUpdate update = new MapDataUpdate(
             updatePermission,
@@ -259,12 +258,26 @@ public class MapDataManager {
         }
     }
 
+    private class RepositoryObserver implements Observer<Set<MapDataResource>> {
+
+        private final MapDataRepository repo;
+
+        private RepositoryObserver(MapDataRepository repo) {
+            this.repo = repo;
+        }
+
+        @Override
+        public void onChanged(@Nullable Set<MapDataResource> data) {
+            onMapDataChanged(data, repo);
+        }
+    }
+
     private static class CacheImportResult {
         private final Set<MapDataResource> imported;
         // TODO: propagate failed imports to user somehow
-        private final List<CacheImportException> failed;
+        private final List<MapDataImportException> failed;
 
-        private CacheImportResult(Set<MapDataResource> imported, List<CacheImportException> failed) {
+        private CacheImportResult(Set<MapDataResource> imported, List<MapDataImportException> failed) {
             this.imported = imported;
             this.failed = failed;
         }
@@ -272,33 +285,33 @@ public class MapDataManager {
 
     private class ImportResourcesTask extends AsyncTask<MapDataResource, Void, CacheImportResult> {
 
-        private MapDataResource importFromFirstCapableProvider(MapDataResource resource) throws CacheImportException {
+        private MapDataResource importFromFirstCapableProvider(MapDataResource resource) throws MapDataImportException {
             URI uri = resource.getUri();
             for (MapDataProvider provider : providers) {
                 if (uri.getScheme().equalsIgnoreCase("file")) {
                     File cacheFile = new File(uri.getPath());
                     if (!cacheFile.canRead()) {
-                        throw new CacheImportException(uri, "cache file is not readable or does not exist: " + cacheFile.getName());
+                        throw new MapDataImportException(uri, "cache file is not readable or does not exist: " + cacheFile.getName());
                     }
                 }
                 if (provider.canHandleResource(uri)) {
                     return provider.importResource(uri);
                 }
             }
-            throw new CacheImportException(uri, "no cache provider could handle file " + resource);
+            throw new MapDataImportException(uri, "no cache provider could handle file " + resource);
         }
 
         @Override
         protected CacheImportResult doInBackground(MapDataResource... resources) {
             Set<MapDataResource> caches = new HashSet<>(resources.length);
-            List<CacheImportException> fails = new ArrayList<>(resources.length);
+            List<MapDataImportException> fails = new ArrayList<>(resources.length);
             for (MapDataResource resource : resources) {
                 MapDataResource imported;
                 try {
                     imported = importFromFirstCapableProvider(resource);
                     caches.add(imported);
                 }
-                catch (CacheImportException e) {
+                catch (MapDataImportException e) {
                     fails.add(e);
                 }
             }
@@ -308,54 +321,6 @@ public class MapDataManager {
         @Override
         protected void onPostExecute(CacheImportResult result) {
             cacheFileImportFinished(this);
-        }
-    }
-
-    private final class RefreshAvailableResourcesTask extends AsyncTask<MapDataResource, Void, Set<MapDataResource>> {
-
-        @Override
-        protected final Set<MapDataResource> doInBackground(MapDataResource... existingCaches) {
-            Map<Class<? extends MapDataProvider>, Set<MapDataResource>> cachesByProvider = new HashMap<>(providers.length);
-            for (MapDataResource cache : existingCaches) {
-                Set<MapDataResource> providerCaches = cachesByProvider.get(cache.getType());
-                if (providerCaches == null) {
-                    providerCaches = new HashSet<>();
-                    cachesByProvider.put(cache.getType(), providerCaches);
-                }
-                providerCaches.add(cache);
-            }
-            Set<MapDataResource> caches = new HashSet<>();
-            for (MapDataProvider provider : providers) {
-                Set<MapDataResource> providerCaches = cachesByProvider.get(provider.getClass());
-                if (providerCaches == null) {
-                    providerCaches = Collections.emptySet();
-                }
-                caches.addAll(provider.refreshResources(providerCaches));
-            }
-            return caches;
-        }
-
-        @Override
-        protected void onPostExecute(Set<MapDataResource> caches) {
-            refreshFinished(this);
-        }
-    }
-
-    private final class FindNewResourcesTask extends AsyncTask<Void, Void, MapDataResource[]> {
-
-        @Override
-        protected MapDataResource[] doInBackground(Void... voids) {
-            Set<MapDataResource> allResources = new HashSet<>();
-            for (MapDataRepository repo : repositories) {
-                Set<MapDataResource> resources = repo.retrieveMapDataResources();
-                allResources.addAll(resources);
-            }
-            return allResources.toArray(new MapDataResource[allResources.size()]);
-        }
-
-        @Override
-        protected void onPostExecute(MapDataResource[] result) {
-            findNewCacheFilesFinished(this);
         }
     }
 }

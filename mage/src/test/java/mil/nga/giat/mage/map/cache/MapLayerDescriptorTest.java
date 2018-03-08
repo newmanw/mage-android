@@ -18,7 +18,7 @@ public class MapLayerDescriptorTest {
         }
 
         @Override
-        public MapDataResource importResource(URI resourceUri) throws CacheImportException {
+        public MapDataResource importResource(URI resourceUri) throws MapDataImportException {
             return null;
         }
 
@@ -41,7 +41,7 @@ public class MapLayerDescriptorTest {
         }
 
         @Override
-        public MapDataResource importResource(URI resourceUri) throws CacheImportException {
+        public MapDataResource importResource(URI resourceUri) throws MapDataImportException {
             return null;
         }
 
@@ -90,8 +90,8 @@ public class MapLayerDescriptorTest {
     @Test
     public void notEqualWhenProviderTypesAreDifferent() {
         TestLayerDescriptor1 overlay1 = new TestLayerDescriptor1("test1", "cache1", TestMapDataProvider1.class);
-        TestLayerDescriptor1 overlay2 = new TestLayerDescriptor1(overlay1.getOverlayName(), overlay1.getCacheName(), TestMapDataProvider2.class);
-        TestLayerDescriptor2 overlay3 = new TestLayerDescriptor2(overlay1.getOverlayName(), overlay1.getCacheName(), TestMapDataProvider2.class);
+        TestLayerDescriptor1 overlay2 = new TestLayerDescriptor1(overlay1.getLayerName(), overlay1.getResourceName(), TestMapDataProvider2.class);
+        TestLayerDescriptor2 overlay3 = new TestLayerDescriptor2(overlay1.getLayerName(), overlay1.getResourceName(), TestMapDataProvider2.class);
 
         assertFalse(overlay1.equals(overlay2));
         assertFalse(overlay1.equals(overlay3));

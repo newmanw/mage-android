@@ -1,6 +1,6 @@
 package mil.nga.giat.mage.map.cache;
 
-import android.content.Context;
+import android.app.Application;
 import android.support.annotation.NonNull;
 import android.support.v4.util.LongSparseArray;
 import android.util.Log;
@@ -123,11 +123,11 @@ public class GeoPackageProvider implements MapDataProvider {
         }
     }
 
-    private final Context context;
+    private final Application context;
     private final GeoPackageManager geoPackageManager;
     private final GeoPackageCache geoPackageCache;
 
-    public GeoPackageProvider(Context context) {
+    public GeoPackageProvider(Application context) {
         this.context = context;
         geoPackageManager = GeoPackageFactory.getManager(context);
         geoPackageCache = new GeoPackageCache(geoPackageManager);
@@ -142,7 +142,7 @@ public class GeoPackageProvider implements MapDataProvider {
     }
 
     @Override
-    public MapDataResource importResource(URI resourceUri) throws CacheImportException {
+    public MapDataResource importResource(URI resourceUri) throws MapDataImportException {
         File cacheFile = new File(resourceUri.getPath());
         String cacheName = getOrImportGeoPackageDatabase(cacheFile);
         return createCache(cacheFile, cacheName);
@@ -194,24 +194,24 @@ public class GeoPackageProvider implements MapDataProvider {
      * @return cache name when imported, null when not imported
      */
     @NonNull
-    private String getOrImportGeoPackageDatabase(File cacheFile) throws CacheImportException {
+    private String getOrImportGeoPackageDatabase(File cacheFile) throws MapDataImportException {
         String databaseName = geoPackageManager.getDatabaseAtExternalFile(cacheFile);
         if (databaseName != null) {
             return databaseName;
         }
 
         databaseName = makeUniqueCacheName(geoPackageManager, cacheFile);
-        CacheImportException fail;
+        MapDataImportException fail;
         try {
             // import the GeoPackage as a linked file
             if (geoPackageManager.importGeoPackageAsExternalLink(cacheFile, databaseName)) {
                 return databaseName;
             }
-            fail = new CacheImportException(cacheFile.toURI(), "GeoPackage import failed: " + cacheFile.getName());
+            fail = new MapDataImportException(cacheFile.toURI(), "GeoPackage import failed: " + cacheFile.getName());
         }
         catch (Exception e) {
             Log.e(LOG_NAME, "Failed to import file as GeoPackage. path: " + cacheFile.getAbsolutePath() + ", name: " + databaseName + ", error: " + e.getMessage());
-            fail = new CacheImportException(cacheFile.toURI(), "GeoPackage import threw exception", e);
+            fail = new MapDataImportException(cacheFile.toURI(), "GeoPackage import threw exception", e);
         }
 
         if (cacheFile.canWrite()) {
@@ -606,7 +606,7 @@ public class GeoPackageProvider implements MapDataProvider {
             return createOverlayOnMap((GeoPackageFeatureTableDescriptor) layerDescriptor, mapManager);
         }
 
-        throw new IllegalArgumentException(getClass().getSimpleName() + " does not support " + layerDescriptor + " of type " + layerDescriptor.getCacheType() );
+        throw new IllegalArgumentException(getClass().getSimpleName() + " does not support " + layerDescriptor + " of type " + layerDescriptor.getDataType() );
     }
 
     private TileTableLayer createOverlayOnMap(GeoPackageTileTableDescriptor tableCache, MapLayerManager mapManager) {
@@ -718,7 +718,7 @@ public class GeoPackageProvider implements MapDataProvider {
      * TODO: this was originally in TileOverlayPreferenceActivity to handle deleting on long press
      * this logic to go searching through directories to delete the cache file should be reworked
      */
-    private void deleteGeoPackageCacheOverlay(MapDataResource cache){
+    private void deleteGeoPackageCacheOverlay(MapDataResource cache) {
 
         String database = cache.getName();
 

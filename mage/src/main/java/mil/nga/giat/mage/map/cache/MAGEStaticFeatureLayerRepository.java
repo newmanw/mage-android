@@ -8,12 +8,16 @@ import android.util.Log;
 
 import com.google.common.io.ByteStreams;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -41,21 +45,19 @@ import mil.nga.giat.mage.sdk.exceptions.LayerException;
 import mil.nga.giat.mage.sdk.http.resource.LayerResource;
 import mil.nga.giat.mage.sdk.login.LoginTaskFactory;
 
-public class MAGEStaticFeatureLayerRepository implements MapDataRepository, MapDataProvider {
-
-    public interface OnStaticLayersListener {
-        void onLayersSynced(Set<Layer> layers);
-        void onFeaturesLoaded(Layer layer);
-
-        /**
-         * Notify the listener that a requested {@link #cancelSync() cancellation} has
-         * finalized and a new {@link #syncEventLayers(Executor) sync} can begin, and/or
-         * a new {@link #loadFeaturesOfLayer(Layer, Executor) feature load}.
-         */
-        void onLayerSyncCancelled();
-    }
+public class MAGEStaticFeatureLayerRepository extends MapDataRepository implements MapDataProvider {
 
     private static final String LOG_NAME = MAGEStaticFeatureLayerRepository.class.getName();
+    private static final URI RESOURCE_URI;
+    static {
+        try {
+            RESOURCE_URI = new URI("mage", null, "/current_event/layers", null, null);
+        }
+        catch (URISyntaxException e) {
+            throw new Error("unexpected error initializing resource uri", e);
+        }
+    }
+    private static final String RESOURCE_NAME = "Event Layers";
 
     @SuppressLint("StaticFieldLeak")
     private static MAGEStaticFeatureLayerRepository instance = null;
@@ -70,7 +72,6 @@ public class MAGEStaticFeatureLayerRepository implements MapDataRepository, MapD
 
     private final Application context;
     private final LayerResource layerService;
-    private final List<OnStaticLayersListener> listeners = new ArrayList<>();
     private final Map<String, IconResolve> resolvedIcons = new HashMap<>();
     private Event currentEvent;
     private PurgeAllLayers pendingPurge;
@@ -84,19 +85,56 @@ public class MAGEStaticFeatureLayerRepository implements MapDataRepository, MapD
         this.layerService = new LayerResource(context);
     }
 
-    /**
-     * Begin syncing layers for the {@link EventHelper#getCurrentEvent() current event}.  Interested
-     * parties may then await the next layer sync {@link OnStaticLayersListener#onLayersSynced(Set) notification}.
-     *
-     * @param executor the executor that will execute the layer request and database sync operations
-     */
-    public void syncEventLayers(Executor executor) {
+    @NotNull
+    @Override
+    public Status getStatus() {
+        return null;
+    }
+
+    @Override
+    public int getStatusCode() {
+        return 0;
+    }
+
+    @Nullable
+    @Override
+    public String getStatusMessage() {
+        return null;
+    }
+
+    @Override
+    public boolean ownsResource(URI resourceUri) {
+        return false;
+    }
+
+    @Override
+    public void refreshAvailableMapData(Executor executor) {
         Event currentEventTest = EventHelper.getInstance(context).getCurrentEvent();
         if (currentEvent != null && currentEvent.equals(currentEventTest) && isSyncingLayers()) {
             return;
         }
         currentEvent = currentEventTest;
         cancelThenStartNewSync(executor);
+    }
+
+    @Override
+    public boolean canHandleResource(URI resourceUri) {
+        return false;
+    }
+
+    @Override
+    public MapDataResource importResource(URI resourceUri) throws MapDataImportException {
+        return null;
+    }
+
+    @Override
+    public Set<MapDataResource> refreshResources(Set<MapDataResource> existingResources) {
+        return null;
+    }
+
+    @Override
+    public MapLayerManager.MapLayer createMapLayerFromDescriptor(MapLayerDescriptor layerDescriptor, MapLayerManager map) {
+        return null;
     }
 
     public void purgeAndRefreshAllLayers(Executor executor) {
@@ -115,10 +153,6 @@ public class MAGEStaticFeatureLayerRepository implements MapDataRepository, MapD
         proceedIfReady();
     }
 
-    /**
-     * Cancel syncing {@link #syncEventLayers(Executor) layers} as well
-     * as any requests to fetch {@link #loadFeaturesOfLayer(Layer, Executor) features}.
-     */
     public void cancelSync() {
         cancelling = false;
         resolvedIcons.clear();
@@ -149,39 +183,6 @@ public class MAGEStaticFeatureLayerRepository implements MapDataRepository, MapD
         return pendingFeatureLoads.get(layer) != null;
     }
 
-    public void addListener(OnStaticLayersListener x) {
-        listeners.add(x);
-    }
-
-    public void removeListener(OnStaticLayersListener x) {
-        listeners.remove(x);
-    }
-
-    @Override
-    public Set<MapDataResource> retrieveMapDataResources() {
-        return null;
-    }
-
-    @Override
-    public boolean canHandleResource(URI resourceUri) {
-        return false;
-    }
-
-    @Override
-    public MapDataResource importResource(URI resourceUri) throws CacheImportException {
-        return null;
-    }
-
-    @Override
-    public Set<MapDataResource> refreshResources(Set<MapDataResource> existingResources) {
-        return null;
-    }
-
-    @Override
-    public MapLayerManager.MapLayer createMapLayerFromDescriptor(MapLayerDescriptor layerDescriptor, MapLayerManager map) {
-        return null;
-    }
-
     private void cancelThenStartNewSync(Executor executor) {
         cancelSync();
         currentSyncExecutor = executor;
@@ -202,11 +203,13 @@ public class MAGEStaticFeatureLayerRepository implements MapDataRepository, MapD
             updateCancellation();
         }
         else {
-            Set<Layer> layerSet;
-            layerSet = Collections.unmodifiableSet(new HashSet<>(layers));
-            for (OnStaticLayersListener listener : listeners) {
-                listener.onLayersSynced(layerSet);
+            Set<MapLayerDescriptor> descriptors = new HashSet<>();
+            for (Layer layer : layers) {
+                descriptors.add(new LayerDescriptor(layer));
             }
+            MapDataResource.Resolved resolved = new MapDataResource.Resolved(RESOURCE_NAME, getClass(), getClass(), descriptors);
+            MapDataResource resource = new MapDataResource(RESOURCE_URI, resolved);
+            setValue(Collections.singleton(resource));
         }
         proceedIfReady();
     }
@@ -217,9 +220,10 @@ public class MAGEStaticFeatureLayerRepository implements MapDataRepository, MapD
             updateCancellation();
         }
         else {
-            for (OnStaticLayersListener listener : listeners) {
-                listener.onFeaturesLoaded(layer);
-            }
+            // TODO: cancellation api
+//            for (OnStaticLayersListener listener : listeners) {
+//                listener.onFeaturesLoaded(layer);
+//            }
         }
         proceedIfReady();
     }
@@ -245,9 +249,6 @@ public class MAGEStaticFeatureLayerRepository implements MapDataRepository, MapD
     private void updateCancellation() {
         if (isLoadingFeatures()) {
             return;
-        }
-        for (OnStaticLayersListener listener : listeners) {
-            listener.onLayerSyncCancelled();
         }
         cancelling = false;
     }
@@ -479,6 +480,16 @@ public class MAGEStaticFeatureLayerRepository implements MapDataRepository, MapD
         private IconResolve(String iconFileName, String iconUrlStr) {
             this.iconFileName = iconFileName;
             this.iconUrlStr = iconUrlStr;
+        }
+    }
+
+    private static class LayerDescriptor extends MapLayerDescriptor {
+
+        private final Layer subject;
+
+        private LayerDescriptor(Layer subject) {
+            super(subject.getName(), RESOURCE_NAME, MAGEStaticFeatureLayerRepository.class);
+            this.subject = subject;
         }
     }
 }

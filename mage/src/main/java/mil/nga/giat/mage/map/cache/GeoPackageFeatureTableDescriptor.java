@@ -15,25 +15,10 @@ public class GeoPackageFeatureTableDescriptor extends GeoPackageTableDescriptor 
      */
     static final int MAX_ZOOM = 21;
 
-    /**
-     * Indexed flag, true when the feature table is indexed
-     */
     private final boolean indexed;
 
-    /**
-     * Linked tile table cache overlays
-     */
     private final List<GeoPackageTileTableDescriptor> linkedTiles;
 
-    /**
-     * Constructor
-     *
-     * @param geoPackage   GeoPackage name
-     * @param tableName    GeoPackage table name
-     * @param count        count
-     * @param minZoom      min zoom level
-     * @param indexed      indexed flag
-     */
     GeoPackageFeatureTableDescriptor(String geoPackage, String tableName, int count, int minZoom, boolean indexed, List<GeoPackageTileTableDescriptor> linkedTiles) {
         super(geoPackage, tableName, count, minZoom, MAX_ZOOM);
         this.indexed = indexed;
@@ -56,21 +41,11 @@ public class GeoPackageFeatureTableDescriptor extends GeoPackageTableDescriptor 
         return "features: " + getCount() + ", zoom: " + minZoom + " - " + maxZoom;
     }
 
-    /**
-     * Determine if the feature table is indexed
-     *
-     * @return true if indexed
-     */
-    public boolean isIndexed() {
+    boolean isIndexed() {
         return indexed;
     }
 
-    /**
-     * Get the linked tile table cache overlays
-     *
-     * @return linked tile table cache overlays
-     */
-    public List<GeoPackageTileTableDescriptor> getLinkedTileTables(){
+    List<GeoPackageTileTableDescriptor> getLinkedTileTables(){
         return linkedTiles;
     }
 }

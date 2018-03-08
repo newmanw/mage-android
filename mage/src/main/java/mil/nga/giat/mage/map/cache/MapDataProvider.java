@@ -25,17 +25,17 @@ public interface MapDataProvider {
      *
      * @param resourceUri
      * @return
-     * @throws CacheImportException
+     * @throws MapDataImportException
      */
-    MapDataResource importResource(URI resourceUri) throws CacheImportException;
+    MapDataResource importResource(URI resourceUri) throws MapDataImportException;
 
     /**
-     * Refresh the data in the given set of caches.  Return a new subset of the
-     * given set with new {@link MapLayerDescriptor} instances for updated caches, the
-     * same instances for unchanged caches, and without instances whose data is
+     * Refresh the data in the given set of resources.  Return a new subset of the
+     * given set with new {@link MapLayerDescriptor} instances for updated data, the
+     * same instances for unchanged data, and without instances whose data is
      * no longer available, such as that on a removed SD card.
      *
-     * @param existingResources a set of caches to refresh
+     * @param existingResources a set of data to refresh
      * @return a subset (possibly equal) to the given cache set
      */
     Set<MapDataResource> refreshResources(Set<MapDataResource> existingResources);

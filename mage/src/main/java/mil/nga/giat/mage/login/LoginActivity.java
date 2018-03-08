@@ -377,7 +377,7 @@ public class LoginActivity extends AppCompatActivity implements LoginFragment.Lo
 		// Cannot pass this to another activity to handle as the URI might
 		// become invalid between now and then.  Copy it now
 		if (openPath == null || MediaUtility.isTemporaryPath(openPath)) {
-			LocalStorageMapDataRepository.copyToCache(this, uri, openPath);
+			LocalStorageMapDataRepository.copyToCache(getApplication(), uri, openPath);
 		} else {
 			// Else, store the path to pass to further intents
 			mOpenFilePath = openPath;

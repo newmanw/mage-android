@@ -104,10 +104,10 @@ public class XYZDirectoryProvider implements MapDataProvider {
     }
 
     @Override
-    public MapDataResource importResource(URI resourceUri) throws CacheImportException {
+    public MapDataResource importResource(URI resourceUri) throws MapDataImportException {
         File xyzDir = new File(resourceUri);
         if (!xyzDir.isDirectory()) {
-            throw new CacheImportException(resourceUri, "resource is not a directory: " + resourceUri);
+            throw new MapDataImportException(resourceUri, "resource is not a directory: " + resourceUri);
         }
         Set<MapLayerDescriptor> overlays = new HashSet<>();
         overlays.add(new XYZDirectoryLayerDescriptor(xyzDir.getName(), xyzDir.getName(), xyzDir));

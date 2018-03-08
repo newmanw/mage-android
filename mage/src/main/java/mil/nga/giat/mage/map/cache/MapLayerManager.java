@@ -107,7 +107,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
     }
 
     private static String keyForCache(MapLayerDescriptor overlay) {
-        return overlay.getCacheName() + ":" + overlay.getCacheType().getName();
+        return overlay.getResourceName() + ":" + overlay.getDataType().getName();
     }
 
     private final MapDataManager mapDataManager;
@@ -123,7 +123,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
         for (MapDataProvider provider : providers) {
             this.providers.put(provider.getClass(), provider);
         }
-        for (MapDataResource cache : mapDataManager.getCaches()) {
+        for (MapDataResource cache : mapDataManager.getMapData()) {
             overlaysInZOrder.addAll(cache.getLayers().values());
         }
         mapDataManager.addUpdateListener(this);
@@ -145,7 +145,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
         Iterator<MapLayerDescriptor> orderIterator = overlaysInZOrder.iterator();
         while (orderIterator.hasNext()) {
             MapLayerDescriptor overlay = orderIterator.next();
-            if (removedCacheNames.contains(overlay.getCacheName())) {
+            if (removedCacheNames.contains(overlay.getResourceName())) {
                 removeFromMapReturningVisibility(overlay);
                 orderIterator.remove();
                 position--;
@@ -154,7 +154,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
                 String cacheKey = keyForCache(overlay);
                 Map<String, MapLayerDescriptor> updatedCacheOverlays = updatedCaches.get(cacheKey);
                 if (updatedCacheOverlays != null) {
-                    MapLayerDescriptor updatedOverlay = updatedCacheOverlays.remove(overlay.getOverlayName());
+                    MapLayerDescriptor updatedOverlay = updatedCacheOverlays.remove(overlay.getLayerName());
                     if (updatedOverlay != null) {
                         refreshOverlayAtPositionFromUpdatedCache(position, updatedOverlay);
                     }
@@ -313,7 +313,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
         MapLayerDescriptor overlay = overlaysInZOrder.get(position);
         MapLayer onMap = overlaysOnMap.remove(overlay);
         if (onMap == null) {
-            MapDataProvider provider = providers.get(overlay.getCacheType());
+            MapDataProvider provider = providers.get(overlay.getDataType());
             onMap = provider.createMapLayerFromDescriptor(overlay, this);
             onMap.setZIndex(position);
         }

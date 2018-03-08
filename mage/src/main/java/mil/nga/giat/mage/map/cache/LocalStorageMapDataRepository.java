@@ -1,20 +1,25 @@
 package mil.nga.giat.mage.map.cache;
 
+import android.annotation.SuppressLint;
+import android.app.Application;
 import android.content.ContentResolver;
-import android.content.Context;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Environment;
+import android.support.annotation.NonNull;
+
+import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Executor;
 
 import mil.nga.geopackage.GeoPackageConstants;
 import mil.nga.geopackage.validate.GeoPackageValidate;
@@ -26,7 +31,7 @@ import mil.nga.giat.mage.sdk.utils.StorageUtility;
  * Find <code>/MapDataResource</code> directories in storage roots using {@link StorageUtility},
  * as well as the application cache directory.
  */
-public class LocalStorageMapDataRepository implements MapDataRepository {
+public class LocalStorageMapDataRepository extends MapDataRepository {
 
     private static final String CACHE_DIRECTORY = "caches";
 
@@ -36,7 +41,7 @@ public class LocalStorageMapDataRepository implements MapDataRepository {
      * @param context
      * @return file directory or null
      */
-    public static File getApplicationCacheDirectory(Context context) {
+    public static File getApplicationCacheDirectory(Application context) {
         File directory = context.getFilesDir();
 
         String state = Environment.getExternalStorageState();
@@ -60,7 +65,8 @@ public class LocalStorageMapDataRepository implements MapDataRepository {
      */
     public static class CopyCacheStreamTask extends AsyncTask<Void, Void, String> {
 
-        private Context context;
+        @SuppressLint("StaticFieldLeak")
+        private Application context;
         /**
          * Intent Uri used to launch MAGE
          */
@@ -77,7 +83,7 @@ public class LocalStorageMapDataRepository implements MapDataRepository {
          * @param cacheFile copy to cache file location
          * @param cacheName cache name
          */
-        CopyCacheStreamTask(Context context, Uri uri, File cacheFile, String cacheName) {
+        CopyCacheStreamTask(Application context, Uri uri, File cacheFile, String cacheName) {
             this.context = context;
             this.uri = uri;
             this.cacheFile = cacheFile;
@@ -131,7 +137,7 @@ public class LocalStorageMapDataRepository implements MapDataRepository {
      * are really the only URI-streamable cache files mage currently supports,
      * so this just handles that very specific case
      */
-    public static void copyToCache(Context context, Uri uri, String path) {
+    public static void copyToCache(Application context, Uri uri, String path) {
 
         // Get a cache directory to write to
         File cacheDirectory = getApplicationCacheDirectory(context);
@@ -164,33 +170,80 @@ public class LocalStorageMapDataRepository implements MapDataRepository {
     }
 
 
-    private final Context context;
+    private final Application context;
+    private Status status = Status.Success;
 
-    public LocalStorageMapDataRepository(Context context) {
+    public LocalStorageMapDataRepository(Application context) {
         this.context = context;
     }
 
+    @NonNull
     @Override
-    public Set<MapDataResource> retrieveMapDataResources() {
-        List<File> dirs = new ArrayList<>();
-        Map<StorageUtility.StorageType, File> storageLocations = StorageUtility.getReadableStorageLocations();
-        for (File storageLocation : storageLocations.values()) {
-            File root = new File(storageLocation, context.getString(R.string.overlay_cache_directory));
-            if (root.exists() && root.isDirectory() && root.canRead()) {
-                dirs.add(root);
+    public Status getStatus() {
+        return status;
+    }
+
+    @Nullable
+    @Override
+    public String getStatusMessage() {
+        return null;
+    }
+
+    @Override
+    public int getStatusCode() {
+        return super.getStatusCode();
+    }
+
+    @Override
+    public boolean ownsResource(URI resourceUri) {
+        if (!"file".equals(resourceUri.getScheme())) {
+            return false;
+        }
+        File path = new File(resourceUri.getPath());
+        File cacheDir = getApplicationCacheDirectory(context);
+        return path.getParentFile() != null && path.getParentFile().equals(cacheDir);
+    }
+
+    @Override
+    public void refreshAvailableMapData(Executor executor) {
+        status = Status.Loading;
+        new RefreshTask().executeOnExecutor(executor);
+    }
+
+    private void onRefreshComplete(Set<MapDataResource> resources) {
+        status = Status.Success;
+        setValue(resources);
+    }
+
+    private class RefreshTask extends AsyncTask<Void, Void, Set<MapDataResource>> {
+
+        @Override
+        public Set<MapDataResource> doInBackground(Void... nothing) {
+            List<File> dirs = new ArrayList<>();
+            Map<StorageUtility.StorageType, File> storageLocations = StorageUtility.getReadableStorageLocations();
+            for (File storageLocation : storageLocations.values()) {
+                File root = new File(storageLocation, context.getString(R.string.overlay_cache_directory));
+                if (root.exists() && root.isDirectory() && root.canRead()) {
+                    dirs.add(root);
+                }
             }
-        }
-        File applicationCacheDirectory = getApplicationCacheDirectory(context);
-        if (applicationCacheDirectory != null && applicationCacheDirectory.exists()) {
-            dirs.add(applicationCacheDirectory);
-        }
-        Set<MapDataResource> potentialResources = new HashSet<>();
-        for (File dir : dirs) {
-            File[] files = dir.listFiles();
-            for (File file : files) {
-                potentialResources.add(new MapDataResource(file.toURI(), "", null, Collections.<MapLayerDescriptor>emptySet()));
+            File applicationCacheDirectory = getApplicationCacheDirectory(context);
+            if (applicationCacheDirectory != null && applicationCacheDirectory.exists()) {
+                dirs.add(applicationCacheDirectory);
             }
+            Set<MapDataResource> potentialResources = new HashSet<>();
+            for (File dir : dirs) {
+                File[] files = dir.listFiles();
+                for (File file : files) {
+                    potentialResources.add(new MapDataResource(file.toURI()));
+                }
+            }
+            return potentialResources;
         }
-        return potentialResources;
+
+        @Override
+        protected void onPostExecute(Set<MapDataResource> resources) {
+            onRefreshComplete(resources);
+        }
     }
 }

@@ -40,20 +40,20 @@ public abstract class GeoPackageTableDescriptor extends MapLayerDescriptor {
     }
 
     /**
-     * Get the GeoPackage name, which is also the {@link #getCacheName() cache name}.
+     * Get the GeoPackage name, which is also the {@link #getResourceName() cache name}.
      *
      * @return
      */
     String getGeoPackage() {
-        return getCacheName();
+        return getResourceName();
     }
 
     /**
-     * Get the name of the table that contains this overlay's data, which is also the {@link #getOverlayName() overlay name}.
+     * Get the name of the table that contains this overlay's data, which is also the {@link #getLayerName() overlay name}.
      * @return
      */
     String getTableName() {
-        return getOverlayName();
+        return getLayerName();
     }
 
     /**
