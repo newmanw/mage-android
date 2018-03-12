@@ -14,7 +14,7 @@ interface Resource<out T> {
 
     val status: Status
 
-    val statusCode: Int get() = UNKNOWN_STATUS_CODE
+    val statusCode: Int
 
     val statusMessage: String?
 }

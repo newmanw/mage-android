@@ -131,12 +131,12 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
 
     @Override
     public void onMapDataUpdated(MapDataManager.MapDataUpdate update) {
-        Set<String> removedCacheNames = new HashSet<>(update.removed.size());
-        for (MapDataResource removed : update.removed) {
+        Set<String> removedCacheNames = new HashSet<>(update.getRemoved().size());
+        for (MapDataResource removed : update.getRemoved()) {
 			removedCacheNames.add(removed.getName());
 		}
-		Map<String, Map<String, MapLayerDescriptor>> updatedCaches = new HashMap<>(update.updated.size());
-        for (MapDataResource cache : update.updated) {
+		Map<String, Map<String, MapLayerDescriptor>> updatedCaches = new HashMap<>(update.getUpdated().size());
+        for (MapDataResource cache : update.getUpdated()) {
             Map<String, MapLayerDescriptor> updatedOverlays = new HashMap<>(cache.getLayers());
             updatedCaches.put(keyForCache(cache), updatedOverlays);
         }
@@ -172,7 +172,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
             overlaysInZOrder.addAll(newOverlaysFromUpdatedCaches.values());
         }
 
-        for (MapDataResource added : update.added) {
+        for (MapDataResource added : update.getAdded()) {
             overlaysInZOrder.addAll(added.getLayers().values());
         }
 

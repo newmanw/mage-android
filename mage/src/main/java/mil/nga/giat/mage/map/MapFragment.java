@@ -488,7 +488,8 @@ public class MapFragment extends Fragment implements
 			map.setOnCameraMoveStartedListener(this);
 			map.setOnCameraIdleListener(this);
 
-			mapOverlayManager = MapDataManager.getInstance().createMapManager(map);
+			// TODO: can't wait for dagger
+			mapOverlayManager = MapDataManager.getInstance().createMapLayerManager(map);
 
 			observations = new ObservationMarkerCollection(mage, map);
 			locations = new LocationMarkerCollection(mage, map);
@@ -1115,10 +1116,10 @@ public class MapFragment extends Fragment implements
 
 	@Override
 	public void onMapDataUpdated(MapDataManager.MapDataUpdate update) {
-		if (update.added.size() != 1) {
+		if (update.getAdded().size() != 1) {
 			return;
 		}
-		MapDataResource explicitlyRequestedCache = update.added.iterator().next();
+		MapDataResource explicitlyRequestedCache = update.getAdded().iterator().next();
 		for (MapLayerDescriptor layerDesc : explicitlyRequestedCache.getLayers().values()) {
 			mapOverlayManager.showOverlay(layerDesc);
 		}

@@ -108,11 +108,13 @@ public class MAGE extends MultiDexApplication implements ISessionEventListener, 
 			}
 		});
 
+		LocalStorageMapDataRepository.initialize(this);
+
         MapDataManager.initialize(new MapDataManager.Config()
 			.context(this)
 			.providers(new XYZDirectoryProvider())
 			.providers(new GeoPackageProvider(this))
-			.repositories(new LocalStorageMapDataRepository(this))
+			.repositories(LocalStorageMapDataRepository.getInstance())
 			.updatePermission(new MapDataManager.CreateUpdatePermission(){}));
 
         MAGEStaticFeatureLayerRepository.initialize(this);
@@ -139,7 +141,8 @@ public class MAGE extends MultiDexApplication implements ISessionEventListener, 
 		startPushing();
 
 		// Pull static layers and features just once
-		MAGEStaticFeatureLayerRepository.getInstance().syncEventLayers(AsyncTask.THREAD_POOL_EXECUTOR);
+		// TODO: static feature powers activate
+//		MAGEStaticFeatureLayerRepository.getInstance().syncEventLayers(AsyncTask.THREAD_POOL_EXECUTOR);
 
 		InitializeMAGEWearBridge.startBridgeIfWearBuild(getApplicationContext());
 	}

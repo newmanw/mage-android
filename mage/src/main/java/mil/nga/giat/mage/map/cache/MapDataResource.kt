@@ -5,14 +5,14 @@ import com.google.android.gms.maps.model.LatLngBounds
 import java.net.URI
 
 
-class MapDataResource(val uri: URI, var resolved: Resolved?) {
+class MapDataResource(val uri: URI, val source: Class<out MapDataRepository>, val contentTimestamp: Long, val resolved: Resolved?) {
 
-    data class Resolved(val name: String, val source: Class<out MapDataRepository>, val type: Class<out MapDataProvider>) {
-        constructor(name: String, source: Class<out MapDataRepository>, type: Class<out MapDataProvider>, layerDescriptors: Set<MapLayerDescriptor>)
-                : this(name, source, type) {
-            this.layerDescriptors = layerDescriptors
+    data class Resolved(val name: String, val type: Class<out MapDataProvider>) {
+        constructor(name: String, type: Class<out MapDataProvider>, layerDescriptors: Set<MapLayerDescriptor>)
+                : this(name, type) {
+            this.layerDescriptors = layerDescriptors.associateBy({it.layerName})
         }
-        var layerDescriptors: Set<MapLayerDescriptor> = emptySet()
+        var layerDescriptors: Map<String, MapLayerDescriptor> = emptyMap()
             private set
     }
 
@@ -20,13 +20,13 @@ class MapDataResource(val uri: URI, var resolved: Resolved?) {
      * Create a new [MapDataResource] from the given URI that has not been resolved
      * and so has no type information.
      */
-    constructor(uri: URI) : this(uri, null)
+    constructor(uri: URI, source: Class<out MapDataRepository>, contentTimestamp: Long = System.currentTimeMillis()) : this(uri, source, contentTimestamp, null)
 
     /**
-     * Return a map of [layer descriptors][MapLayerDescriptor] keyed by their [names][MapLayerDescriptor.getLayerName].
+     * Return a map of [layer descriptors][MapLayerDescriptor] keyed by their [names][MapLayerDescriptor.layerName].
      * @return
      */
-    val layers: Map<String, MapLayerDescriptor> = resolved?.layerDescriptors?.associateBy({it.layerName}) ?: emptyMap()
+    val layers: Map<String, MapLayerDescriptor> = resolved?.layerDescriptors ?: emptyMap()
     var refreshTimestamp: Long = 0
         private set
     var bounds: LatLngBounds? = null
@@ -42,24 +42,24 @@ class MapDataResource(val uri: URI, var resolved: Resolved?) {
     }
 
     /**
-     * Two [MapDataResource] objects are equal if and only if their [URIs][.uri]
+     * Two [MapDataResource] objects are equal if and only if their [URIs][.uri] are equal.
      * @param other
      * @return
      */
     override fun equals(other: Any?): Boolean {
         if (other is MapDataResource) {
-            return uri == other.uri && resolved == other.resolved
+            return uri == other.uri
         }
         return false
     }
 
     override fun hashCode(): Int {
-        return resolved?.name?.hashCode() ?: 0
+        return uri.hashCode()
     }
 
     override fun toString(): String {
         if (resolved != null) {
-            return "${resolved?.name}: ${resolved?.type}"
+            return "${resolved.name}: ${resolved.type}"
         }
         return uri.toString()
     }

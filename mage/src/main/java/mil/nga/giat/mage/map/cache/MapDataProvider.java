@@ -1,7 +1,6 @@
 package mil.nga.giat.mage.map.cache;
 
-import java.net.URI;
-import java.util.Set;
+import android.support.annotation.WorkerThread;
 
 /**
  * A MapDataProvider represents a specific cache data format that can put overlays on a map.
@@ -9,37 +8,30 @@ import java.util.Set;
  * TODO: thread-safety coniderations - {@link MapDataManager} for now only invokes these methods serially
  * across all providers, but could be otherwise
  */
+@WorkerThread
 public interface MapDataProvider {
 
     /**
      * Does this provider recognize the given file as its type of cache?
      *
-     * @param resourceUri
+     * @param resource
      * @return
+     *
+     * TODO: add extra known information about the uri content, e.g., from a HEAD request
      */
-    boolean canHandleResource(URI resourceUri);
+    boolean canHandleResource(MapDataResource resource);
 
     /**
-     * Attempt to import the given file as this provider's type of cache and add
-     * it to the set of available caches.
+     * Attempt to import the given resource's content as this provider's data type and return the
+     * {@link mil.nga.giat.mage.map.cache.MapDataResource.Resolved resolved} resource.
      *
-     * @param resourceUri
-     * @return
-     * @throws MapDataImportException
-     */
-    MapDataResource importResource(URI resourceUri) throws MapDataImportException;
-
-    /**
-     * Refresh the data in the given set of resources.  Return a new subset of the
-     * given set with new {@link MapLayerDescriptor} instances for updated data, the
-     * same instances for unchanged data, and without instances whose data is
-     * no longer available, such as that on a removed SD card.
+     * @param resource a {@link MapDataResource} to resolve
+     * @return a resolved {@link MapDataResource resource}
+     * @throws MapDataResolveException if there is an error resolving the resource
      *
-     * @param existingResources a set of data to refresh
-     * @return a subset (possibly equal) to the given cache set
+     * TODO: an argument for the owning repository may be necessary at some point
      */
-    Set<MapDataResource> refreshResources(Set<MapDataResource> existingResources);
-
+    MapDataResource resolveResource(MapDataResource resource) throws MapDataResolveException;
 
     MapLayerManager.MapLayer createMapLayerFromDescriptor(MapLayerDescriptor layerDescriptor, MapLayerManager map);
 }

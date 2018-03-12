@@ -108,7 +108,7 @@ public class MAGEStaticFeatureLayerRepository extends MapDataRepository implemen
     }
 
     @Override
-    public void refreshAvailableMapData(Executor executor) {
+    public void refreshAvailableMapData(Map<URI, MapDataResource> resolvedResources, Executor executor) {
         Event currentEventTest = EventHelper.getInstance(context).getCurrentEvent();
         if (currentEvent != null && currentEvent.equals(currentEventTest) && isSyncingLayers()) {
             return;
@@ -118,17 +118,12 @@ public class MAGEStaticFeatureLayerRepository extends MapDataRepository implemen
     }
 
     @Override
-    public boolean canHandleResource(URI resourceUri) {
+    public boolean canHandleResource(MapDataResource resource) {
         return false;
     }
 
     @Override
-    public MapDataResource importResource(URI resourceUri) throws MapDataImportException {
-        return null;
-    }
-
-    @Override
-    public Set<MapDataResource> refreshResources(Set<MapDataResource> existingResources) {
+    public MapDataResource resolveResource(MapDataResource resource) throws MapDataResolveException {
         return null;
     }
 
@@ -207,8 +202,8 @@ public class MAGEStaticFeatureLayerRepository extends MapDataRepository implemen
             for (Layer layer : layers) {
                 descriptors.add(new LayerDescriptor(layer));
             }
-            MapDataResource.Resolved resolved = new MapDataResource.Resolved(RESOURCE_NAME, getClass(), getClass(), descriptors);
-            MapDataResource resource = new MapDataResource(RESOURCE_URI, resolved);
+            MapDataResource.Resolved resolved = new MapDataResource.Resolved(RESOURCE_NAME, getClass(), descriptors);
+            MapDataResource resource = new MapDataResource(RESOURCE_URI, getClass(), System.currentTimeMillis(), resolved);
             setValue(Collections.singleton(resource));
         }
         proceedIfReady();

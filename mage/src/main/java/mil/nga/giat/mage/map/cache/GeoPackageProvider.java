@@ -16,7 +16,6 @@ import com.google.android.gms.maps.model.TileOverlay;
 import com.google.android.gms.maps.model.TileOverlayOptions;
 
 import java.io.File;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -53,7 +52,6 @@ import mil.nga.geopackage.tiles.user.TileDao;
 import mil.nga.geopackage.validate.GeoPackageValidate;
 import mil.nga.giat.mage.R;
 import mil.nga.giat.mage.sdk.utils.MediaUtility;
-import mil.nga.giat.mage.sdk.utils.StorageUtility;
 import mil.nga.wkb.geom.Geometry;
 import mil.nga.wkb.geom.GeometryType;
 
@@ -134,41 +132,43 @@ public class GeoPackageProvider implements MapDataProvider {
     }
 
     @Override
-    public boolean canHandleResource(URI resourceUri) {
-        if (!"file".equalsIgnoreCase(resourceUri.getScheme())) {
+    public boolean canHandleResource(MapDataResource resource) {
+        if (!"file".equalsIgnoreCase(resource.getScheme())) {
             return false;
         }
-        return GeoPackageValidate.hasGeoPackageExtension(new File(resourceUri.getPath()));
+        return GeoPackageValidate.hasGeoPackageExtension(new File(resource));
     }
 
     @Override
-    public MapDataResource importResource(URI resourceUri) throws MapDataImportException {
-        File cacheFile = new File(resourceUri.getPath());
-        String cacheName = getOrImportGeoPackageDatabase(cacheFile);
-        return createCache(cacheFile, cacheName);
+    public MapDataResource resolveResource(MapDataResource resource) throws MapDataResolveException {
+        File cacheFile = new File(resource.getUri());
+        String resourceName = getOrImportGeoPackageDatabase(cacheFile);
+        return createCache(resource, resourceName);
     }
 
-    @Override
-    public Set<MapDataResource> refreshResources(Set<MapDataResource> existingResources) {
-        Set<MapDataResource> refreshed = new HashSet<>(existingResources.size());
-        for (MapDataResource cache : existingResources) {
-            File dbFile = geoPackageManager.getFile(cache.getName());
-            if (!dbFile.exists() || !dbFile.canRead()) {
-                cache = null;
-            }
-            else if (dbFile.lastModified() > cache.getRefreshTimestamp()) {
-                cache = createCache(dbFile, cache.getName());
-            }
-            else {
-                cache.updateRefreshTimestamp();
-            }
-
-            if (cache != null) {
-                refreshed.add(cache);
-            }
-        }
-
-        return refreshed;
+      // TODO: this is now in MapDataRepository - are we misisng anything moving it there?
+      // the repository should know when its resource have changed and need to be resolved
+      // again by the provider
+//    public Set<MapDataResource> refreshResources(Map<URI, MapDataResource> existingResources) {
+//        Set<MapDataResource> refreshed = new HashSet<>(existingResources.size());
+//        for (MapDataResource cache : existingResources.values()) {
+//            File dbFile = geoPackageManager.getFile(cache.getResolved().getName());
+//            if (!dbFile.exists() || !dbFile.canRead()) {
+//                cache = null;
+//            }
+//            else if (dbFile.lastModified() > cache.getRefreshTimestamp()) {
+//                cache = createCache(cache, cache.getResolved().getName());
+//            }
+//            else {
+//                cache.updateRefreshTimestamp();
+//            }
+//
+//            if (cache != null) {
+//                refreshed.add(cache);
+//            }
+//        }
+//
+//        return refreshed;
 
         // TODO: test getting rid of this in favor of above to keep records of
         // unavailable databases along with a persistent database name that
@@ -185,7 +185,7 @@ public class GeoPackageProvider implements MapDataProvider {
 //            }
 //        }
 //        return overlays;
-    }
+//    }
 
     /**
      * Import the GeoPackage file as an external link if it does not exist
@@ -194,24 +194,24 @@ public class GeoPackageProvider implements MapDataProvider {
      * @return cache name when imported, null when not imported
      */
     @NonNull
-    private String getOrImportGeoPackageDatabase(File cacheFile) throws MapDataImportException {
+    private String getOrImportGeoPackageDatabase(File cacheFile) throws MapDataResolveException {
         String databaseName = geoPackageManager.getDatabaseAtExternalFile(cacheFile);
         if (databaseName != null) {
             return databaseName;
         }
 
         databaseName = makeUniqueCacheName(geoPackageManager, cacheFile);
-        MapDataImportException fail;
+        MapDataResolveException fail;
         try {
             // import the GeoPackage as a linked file
             if (geoPackageManager.importGeoPackageAsExternalLink(cacheFile, databaseName)) {
                 return databaseName;
             }
-            fail = new MapDataImportException(cacheFile.toURI(), "GeoPackage import failed: " + cacheFile.getName());
+            fail = new MapDataResolveException(cacheFile.toURI(), "GeoPackage import failed: " + cacheFile.getName());
         }
         catch (Exception e) {
             Log.e(LOG_NAME, "Failed to import file as GeoPackage. path: " + cacheFile.getAbsolutePath() + ", name: " + databaseName + ", error: " + e.getMessage());
-            fail = new MapDataImportException(cacheFile.toURI(), "GeoPackage import threw exception", e);
+            fail = new MapDataResolveException(cacheFile.toURI(), "GeoPackage import threw exception", e);
         }
 
         if (cacheFile.canWrite()) {
@@ -232,7 +232,7 @@ public class GeoPackageProvider implements MapDataProvider {
      * @param database
      * @return cache overlay
      */
-    private MapDataResource createCache(File sourceFile, String database) {
+    private MapDataResource createCache(MapDataResource resource, String database) {
 
         GeoPackage geoPackage = null;
 
@@ -298,7 +298,7 @@ public class GeoPackageProvider implements MapDataProvider {
             // Add stand alone tile tables that were not linked to feature tables
             tables.addAll(tileCacheOverlays.values());
 
-            return new MapDataResource(sourceFile.toURI(), database, this.getClass(), tables);
+            return new MapDataResource(resource.getUri(), resource.getSource(), resource.getContentTimestamp(), new MapDataResource.Resolved(database, this.getClass(), tables));
         }
         catch (Exception e) {
             Log.e(LOG_NAME, "error creating GeoPackage cache", e);
@@ -720,38 +720,38 @@ public class GeoPackageProvider implements MapDataProvider {
      */
     private void deleteGeoPackageCacheOverlay(MapDataResource cache) {
 
-        String database = cache.getName();
-
-        // Get the GeoPackage file
-        GeoPackageManager manager = GeoPackageFactory.getManager(context);
-        File path = manager.getFile(database);
-
-        // Delete the cache from the GeoPackage manager
-        manager.delete(database);
-
-        // Attempt to delete the cache file if it is in the cache directory
-        File pathDirectory = path.getParentFile();
-        if (path.canWrite() && pathDirectory != null) {
-            // TODO: this should be in MapDataManager
-            Map<StorageUtility.StorageType, File> storageLocations = StorageUtility.getWritableStorageLocations();
-            for (File storageLocation : storageLocations.values()) {
-                File root = new File(storageLocation, context.getString(R.string.overlay_cache_directory));
-                if (root.equals(pathDirectory)) {
-                    path.delete();
-                    break;
-                }
-            }
-        }
-
-        // Check internal/external application storage
-        File applicationCacheDirectory = LocalStorageMapDataRepository.getApplicationCacheDirectory(context);
-        if (applicationCacheDirectory != null && applicationCacheDirectory.exists()) {
-            for (File cacheFile : applicationCacheDirectory.listFiles()) {
-                if (cacheFile.equals(path)) {
-                    path.delete();
-                    break;
-                }
-            }
-        }
+//        String database = cache.getName();
+//
+//        // Get the GeoPackage file
+//        GeoPackageManager manager = GeoPackageFactory.getManager(context);
+//        File path = manager.getFile(database);
+//
+//        // Delete the cache from the GeoPackage manager
+//        manager.delete(database);
+//
+//        // Attempt to delete the cache file if it is in the cache directory
+//        File pathDirectory = path.getParentFile();
+//        if (path.canWrite() && pathDirectory != null) {
+//            // TODO: this should be in MapDataManager
+//            Map<StorageUtility.StorageType, File> storageLocations = StorageUtility.getWritableStorageLocations();
+//            for (File storageLocation : storageLocations.values()) {
+//                File root = new File(storageLocation, context.getString(R.string.overlay_cache_directory));
+//                if (root.equals(pathDirectory)) {
+//                    path.delete();
+//                    break;
+//                }
+//            }
+//        }
+//
+//        // Check internal/external application storage
+//        File applicationCacheDirectory = LocalStorageMapDataRepository.getApplicationCacheDirectory(context);
+//        if (applicationCacheDirectory != null && applicationCacheDirectory.exists()) {
+//            for (File cacheFile : applicationCacheDirectory.listFiles()) {
+//                if (cacheFile.equals(path)) {
+//                    path.delete();
+//                    break;
+//                }
+//            }
+//        }
     }
 }

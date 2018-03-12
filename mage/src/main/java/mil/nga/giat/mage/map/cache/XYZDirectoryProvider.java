@@ -9,7 +9,6 @@ import com.google.android.gms.maps.model.TileOverlay;
 import com.google.android.gms.maps.model.TileOverlayOptions;
 
 import java.io.File;
-import java.net.URI;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
@@ -95,23 +94,23 @@ public class XYZDirectoryProvider implements MapDataProvider {
     }
 
     @Override
-    public boolean canHandleResource(URI resourceUri) {
-        if ("file".equalsIgnoreCase(resourceUri.getScheme())) {
+    public boolean canHandleResource(MapDataResource resource) {
+        if ("file".equalsIgnoreCase(resource.getScheme())) {
             return false;
         }
-        File localPath = new File(resourceUri);
+        File localPath = new File(resource);
         return localPath.isDirectory();
     }
 
     @Override
-    public MapDataResource importResource(URI resourceUri) throws MapDataImportException {
-        File xyzDir = new File(resourceUri);
+    public MapDataResource resolveResource(MapDataResource resource) throws MapDataResolveException {
+        File xyzDir = new File(resource);
         if (!xyzDir.isDirectory()) {
-            throw new MapDataImportException(resourceUri, "resource is not a directory: " + resourceUri);
+            throw new MapDataResolveException(resource, "resource is not a directory: " + resource);
         }
         Set<MapLayerDescriptor> overlays = new HashSet<>();
         overlays.add(new XYZDirectoryLayerDescriptor(xyzDir.getName(), xyzDir.getName(), xyzDir));
-        return new MapDataResource(resourceUri, xyzDir.getName(), getClass(), Collections.unmodifiableSet(overlays));
+        return new MapDataResource(resource, xyzDir.getName(), getClass(), Collections.unmodifiableSet(overlays));
     }
 
     @Override

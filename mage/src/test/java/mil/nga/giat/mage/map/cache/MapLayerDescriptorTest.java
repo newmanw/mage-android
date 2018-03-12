@@ -2,7 +2,6 @@ package mil.nga.giat.mage.map.cache;
 
 import org.junit.Test;
 
-import java.net.URI;
 import java.util.Set;
 
 import static org.junit.Assert.assertFalse;
@@ -13,12 +12,12 @@ public class MapLayerDescriptorTest {
     static class TestMapDataProvider1 implements MapDataProvider {
 
         @Override
-        public boolean canHandleResource(URI resourceUri) {
+        public boolean canHandleResource(MapDataResource resource) {
             return false;
         }
 
         @Override
-        public MapDataResource importResource(URI resourceUri) throws MapDataImportException {
+        public MapDataResource resolveResource(MapDataResource resource) throws MapDataResolveException {
             return null;
         }
 
@@ -36,12 +35,12 @@ public class MapLayerDescriptorTest {
     static class TestMapDataProvider2 implements MapDataProvider {
 
         @Override
-        public boolean canHandleResource(URI resourceUri) {
+        public boolean canHandleResource(MapDataResource resource) {
             return false;
         }
 
         @Override
-        public MapDataResource importResource(URI resourceUri) throws MapDataImportException {
+        public MapDataResource resolveResource(MapDataResource resource) throws MapDataResolveException {
             return null;
         }
 

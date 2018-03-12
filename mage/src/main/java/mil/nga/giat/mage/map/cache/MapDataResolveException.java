@@ -2,24 +2,24 @@ package mil.nga.giat.mage.map.cache;
 
 import java.net.URI;
 
-public class MapDataImportException extends Exception {
+public class MapDataResolveException extends Exception {
 
     private final URI resourceUri;
 
-    public MapDataImportException(URI resourceUri) {
+    public MapDataResolveException(URI resourceUri) {
         this(resourceUri, (Throwable) null);
     }
 
-    public MapDataImportException(URI resourceUri, String message) {
+    public MapDataResolveException(URI resourceUri, String message) {
         this(resourceUri, message, null);
     }
 
-    public MapDataImportException(URI resourceUri, String message, Throwable cause) {
+    public MapDataResolveException(URI resourceUri, String message, Throwable cause) {
         super(message, cause);
         this.resourceUri = resourceUri;
     }
 
-    public MapDataImportException(URI resourceUri, Throwable cause) {
+    public MapDataResolveException(URI resourceUri, Throwable cause) {
         this(resourceUri, "failed to import resource " + resourceUri, cause);
     }
 
