@@ -1,5 +1,7 @@
 package mil.nga.giat.mage.map.cache;
 
+import android.annotation.SuppressLint;
+import android.os.AsyncTask;
 import android.support.annotation.MainThread;
 
 import com.google.android.gms.maps.GoogleMap;
@@ -103,7 +105,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
     }
 
     private static String keyForCache(MapDataResource cache) {
-        return cache.getName() + ":" + cache.getType().getName();
+        return cache.getResolved().getName() + ":" + cache.getResolved().getType().getName();
     }
 
     private static String keyForCache(MapLayerDescriptor overlay) {
@@ -133,7 +135,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
     public void onMapDataUpdated(MapDataManager.MapDataUpdate update) {
         Set<String> removedCacheNames = new HashSet<>(update.getRemoved().size());
         for (MapDataResource removed : update.getRemoved()) {
-			removedCacheNames.add(removed.getName());
+			removedCacheNames.add(removed.getResolved().getName());
 		}
 		Map<String, Map<String, MapLayerDescriptor>> updatedCaches = new HashMap<>(update.getUpdated().size());
         for (MapDataResource cache : update.getUpdated()) {
@@ -314,13 +316,44 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
         MapLayer onMap = overlaysOnMap.remove(overlay);
         if (onMap == null) {
             MapDataProvider provider = providers.get(overlay.getDataType());
-            onMap = provider.createMapLayerFromDescriptor(overlay, this);
-            onMap.setZIndex(position);
+            new CreateLayerTask(overlay, provider, position).execute();
         }
-        overlaysOnMap.put(overlay, onMap);
-        if (!onMap.isOnMap()) {
-            onMap.addToMap();
+        else {
+            addAndShowLayer(overlay, onMap);
         }
-        onMap.show();
+    }
+
+    private void addAndShowLayer(MapLayerDescriptor desc, MapLayer layer) {
+        overlaysOnMap.put(desc, layer);
+        if (!layer.isOnMap()) {
+            layer.addToMap();
+        }
+        layer.show();
+    }
+
+    @SuppressLint("StaticFieldLeak")
+    private class CreateLayerTask extends AsyncTask<Void, Void, MapLayer> {
+
+        private final MapLayerDescriptor layerDesc;
+        private final MapDataProvider provider;
+        private final int zIndex;
+
+        private CreateLayerTask(MapLayerDescriptor layerDesc, MapDataProvider provider, int zIndex) {
+            this.layerDesc = layerDesc;
+            this.provider = provider;
+            this.zIndex = zIndex;
+        }
+
+        @Override
+        protected MapLayer doInBackground(Void... nothing) {
+            MapLayer layer = provider.createMapLayerFromDescriptor(layerDesc, MapLayerManager.this);
+            layer.setZIndex(zIndex);
+            return layer;
+        }
+
+        @Override
+        protected void onPostExecute(MapLayer mapLayer) {
+            addAndShowLayer(layerDesc, mapLayer);
+        }
     }
 }

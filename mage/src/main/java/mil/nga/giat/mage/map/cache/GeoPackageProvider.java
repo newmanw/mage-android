@@ -133,10 +133,10 @@ public class GeoPackageProvider implements MapDataProvider {
 
     @Override
     public boolean canHandleResource(MapDataResource resource) {
-        if (!"file".equalsIgnoreCase(resource.getScheme())) {
+        if (!"file".equalsIgnoreCase(resource.getUri().getScheme())) {
             return false;
         }
-        return GeoPackageValidate.hasGeoPackageExtension(new File(resource));
+        return GeoPackageValidate.hasGeoPackageExtension(new File(resource.getUri()));
     }
 
     @Override

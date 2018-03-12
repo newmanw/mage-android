@@ -10,8 +10,6 @@ import com.google.android.gms.maps.model.TileOverlayOptions;
 
 import java.io.File;
 import java.util.Collections;
-import java.util.HashSet;
-import java.util.Set;
 
 import mil.nga.giat.mage.map.FileSystemTileProvider;
 
@@ -95,28 +93,22 @@ public class XYZDirectoryProvider implements MapDataProvider {
 
     @Override
     public boolean canHandleResource(MapDataResource resource) {
-        if ("file".equalsIgnoreCase(resource.getScheme())) {
+        if ("file".equalsIgnoreCase(resource.getUri().getScheme())) {
             return false;
         }
-        File localPath = new File(resource);
+        File localPath = new File(resource.getUri());
         return localPath.isDirectory();
     }
 
     @Override
     public MapDataResource resolveResource(MapDataResource resource) throws MapDataResolveException {
-        File xyzDir = new File(resource);
+        File xyzDir = new File(resource.getUri());
         if (!xyzDir.isDirectory()) {
-            throw new MapDataResolveException(resource, "resource is not a directory: " + resource);
+            throw new MapDataResolveException(resource.getUri(), "resource is not a directory: " + resource.getUri());
         }
-        Set<MapLayerDescriptor> overlays = new HashSet<>();
-        overlays.add(new XYZDirectoryLayerDescriptor(xyzDir.getName(), xyzDir.getName(), xyzDir));
-        return new MapDataResource(resource, xyzDir.getName(), getClass(), Collections.unmodifiableSet(overlays));
-    }
-
-    @Override
-    public Set<MapDataResource> refreshResources(Set<MapDataResource> existingResources) {
-        // TODO
-        return Collections.emptySet();
+        MapLayerDescriptor desc = new XYZDirectoryLayerDescriptor(xyzDir.getName(), xyzDir.getName(), xyzDir);
+        return new MapDataResource(resource.getUri(), resource.getSource(), xyzDir.lastModified(),
+            new MapDataResource.Resolved(xyzDir.getName(), getClass(), Collections.singleton(desc)));
     }
 
     @Override

@@ -2,6 +2,7 @@ package mil.nga.giat.mage.map.cache;
 
 import org.junit.Test;
 
+import java.net.URI;
 import java.util.Collections;
 import java.util.Set;
 
@@ -12,41 +13,49 @@ public class MapDataResourceTest {
 
     static final Set<MapLayerDescriptor> none = Collections.emptySet();
 
-    @Test
-    public void equalWhenNameAndTypeAreEqual() {
-        MapDataResource c1 = new MapDataResource(null, "c1", MapDataProvider.class, none);
-        MapDataResource c2 = new MapDataResource(null, "c1", MapDataProvider.class, none);
+    private static abstract class Repo1 extends MapDataRepository {};
+    private static abstract class Repo2 extends MapDataRepository {};
+    private static abstract class Provider1 implements MapDataProvider {};
+    private static abstract class Provider2 implements MapDataProvider {};
 
-        assertTrue(c1.equals(c2));
+    @Test
+    public void equalWhenUrisAreEqual() {
+        MapDataResource r1 = new MapDataResource(URI.create("test:equals"), Repo1.class, 0);
+        MapDataResource r2 = new MapDataResource(URI.create("test:equals"), Repo2.class, 1);
+
+        assertTrue(r1.equals(r2));
     }
 
-    public void equalWhenOverlaysAreDifferent() {
-        MapDataResource c1 = new MapDataResource(null, "c1", MapDataProvider.class, none);
-        MapDataResource c2 = new MapDataResource(null, "c1", MapDataProvider.class,
-            Collections.<MapLayerDescriptor>singleton(new MapLayerDescriptorTest.TestLayerDescriptor1("test", "c1", MapDataProvider.class)));
+    @Test
+    public void equalWhenUrisAreEqualAndOneIsResolved() {
+        MapDataResource r1 = new MapDataResource(URI.create("test:equals"), Repo1.class, 0);
+        MapDataResource r2 = new MapDataResource(URI.create("test:equals"), Repo1.class, 0,
+            new MapDataResource.Resolved("Resolved", MapDataProvider.class));
 
-        assertTrue(c1.equals(c2));
+        assertTrue(r1.equals(r2));
+    }
+
+    @Test
+    public void equalWhenUrisAreEqualAndBothAreResolved() {
+        MapDataResource r1 = new MapDataResource(URI.create("test:equals"), Repo1.class, 0,
+            new MapDataResource.Resolved("Resolved A", Provider1.class));
+        MapDataResource r2 = new MapDataResource(URI.create("test:equals"), Repo1.class, 0,
+            new MapDataResource.Resolved("Resolved B", Provider2.class));
+
+        assertTrue(r1.equals(r2));
     }
 
     @Test
     public void notEqualWhenOtherIsNull() {
-        MapDataResource c1 = new MapDataResource(null, "c1", MapDataProvider.class, none);
+        MapDataResource c1 = new MapDataResource(URI.create("test:equals:null"), Repo1.class, 0);
 
         assertFalse(c1.equals(null));
     }
 
     @Test
-    public void notEqualWhenOtherIsNotMapCache() {
-        MapDataResource c1 = new MapDataResource(null, "c1", MapDataProvider.class, none);
+    public void notEqualWhenOtherIsNotResource() {
+        MapDataResource c1 = new MapDataResource(URI.create("test:equals:wrong_type"), Repo1.class, 0);
 
         assertFalse(c1.equals(new Object()));
-    }
-
-    @Test
-    public void notEqualWhenNamesAreDifferent() {
-        MapDataResource c1 = new MapDataResource(null, "c1", MapDataProvider.class, none);
-        MapDataResource c2 = new MapDataResource(null, "c2", MapDataProvider.class, none);
-
-        assertFalse(c1.equals(c2));
     }
 }

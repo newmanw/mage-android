@@ -2,58 +2,14 @@ package mil.nga.giat.mage.map.cache;
 
 import org.junit.Test;
 
-import java.util.Set;
-
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class MapLayerDescriptorTest {
 
-    static class TestMapDataProvider1 implements MapDataProvider {
+    static abstract class TestMapDataProvider1 implements MapDataProvider {}
 
-        @Override
-        public boolean canHandleResource(MapDataResource resource) {
-            return false;
-        }
-
-        @Override
-        public MapDataResource resolveResource(MapDataResource resource) throws MapDataResolveException {
-            return null;
-        }
-
-        @Override
-        public Set<MapDataResource> refreshResources(Set<MapDataResource> existingResources) {
-            return null;
-        }
-
-        @Override
-        public MapLayerManager.MapLayer createMapLayerFromDescriptor(MapLayerDescriptor layerDescriptor, MapLayerManager map) {
-            return null;
-        }
-    }
-
-    static class TestMapDataProvider2 implements MapDataProvider {
-
-        @Override
-        public boolean canHandleResource(MapDataResource resource) {
-            return false;
-        }
-
-        @Override
-        public MapDataResource resolveResource(MapDataResource resource) throws MapDataResolveException {
-            return null;
-        }
-
-        @Override
-        public Set<MapDataResource> refreshResources(Set<MapDataResource> existingResources) {
-            return null;
-        }
-
-        @Override
-        public MapLayerManager.MapLayer createMapLayerFromDescriptor(MapLayerDescriptor layerDescriptor, MapLayerManager map) {
-            return null;
-        }
-    }
+    static abstract class TestMapDataProvider2 implements MapDataProvider {}
 
     static class TestLayerDescriptor1 extends MapLayerDescriptor {
 
