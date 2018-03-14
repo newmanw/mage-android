@@ -9,6 +9,7 @@ import android.arch.lifecycle.Observer
 import android.os.AsyncTask
 import android.support.annotation.MainThread
 import com.google.android.gms.maps.GoogleMap
+import mil.nga.giat.mage.map.cache.MapDataManager.Companion.instance
 import java.io.File
 import java.net.URI
 import java.util.*
@@ -76,11 +77,11 @@ class MapDataManager(config: Config) : LifecycleOwner {
             private set
         var updatePermission: CreateUpdatePermission? = null
             private set
-        var repositories: Array<out MapDataRepository>? = null
+        var repositories: Array<out MapDataRepository>? = emptyArray()
             private set
-        var providers: Array<out MapDataProvider>? = null
+        var providers: Array<out MapDataProvider>? = emptyArray()
             private set
-        var executor: Executor = AsyncTask.THREAD_POOL_EXECUTOR
+        var executor: Executor? = AsyncTask.THREAD_POOL_EXECUTOR
             private set
 
         fun context(x: Application): Config {
@@ -111,7 +112,7 @@ class MapDataManager(config: Config) : LifecycleOwner {
 
     init {
         updatePermission = config.updatePermission!!
-        executor = config.executor
+        executor = config.executor!!
         repositories = config.repositories!!
         providers = config.providers!!
         lifecycle.markState(Lifecycle.State.CREATED)
@@ -238,13 +239,13 @@ class MapDataManager(config: Config) : LifecycleOwner {
     companion object {
 
         @JvmStatic
-        lateinit var instance: MapDataManager
+        var instance: MapDataManager? = null
             private set
 
         @Synchronized
         @JvmStatic
         fun initialize(config: Config) {
-            if (Companion::instance.isInitialized) {
+            if (MapDataManager.instance != null) {
                 throw Error("attempt to initialize " + MapDataManager::class.java + " singleton more than once")
             }
             instance = MapDataManager(config)

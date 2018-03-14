@@ -179,7 +179,7 @@ public class MapDataManagerTest {
         executor = mock(Executor.class);
         doAnswer(invocationOnMock -> {
             Runnable task = invocationOnMock.getArgument(0);
-            AsyncTask.SERIAL_EXECUTOR.execute(task);
+            AsyncTask.THREAD_POOL_EXECUTOR.execute(task);
             return null;
         }).when(executor).execute(any(Runnable.class));
 
