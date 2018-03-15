@@ -1,6 +1,13 @@
 package mil.nga.giat.mage.map.cache;
 
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TestName;
+import org.junit.rules.TestRule;
+
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.UUID;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -13,23 +20,35 @@ public class MapLayerDescriptorTest {
 
     static class TestLayerDescriptor1 extends MapLayerDescriptor {
 
-        protected TestLayerDescriptor1(String overlayName, String cacheName, Class<? extends MapDataProvider> cacheType) {
-            super(overlayName, cacheName, cacheType);
+        protected TestLayerDescriptor1(String overlayName, URI resourceUri, Class<? extends MapDataProvider> cacheType) {
+            super(overlayName, resourceUri, cacheType);
         }
     }
 
     static class TestLayerDescriptor2 extends MapLayerDescriptor {
 
-        protected TestLayerDescriptor2(String overlayName, String cacheName, Class<? extends MapDataProvider> cacheType) {
-            super(overlayName, cacheName, cacheType);
+        protected TestLayerDescriptor2(String overlayName, URI resourceUri, Class<? extends MapDataProvider> cacheType) {
+            super(overlayName, resourceUri, cacheType);
+        }
+    }
+
+    @Rule
+    public TestName testName = new TestName();
+
+    private URI makeUri() {
+        try {
+            return new URI(MapLayerDescriptorTest.class.getSimpleName(), testName.getMethodName(), UUID.randomUUID().toString(), null);
+        }
+        catch (URISyntaxException e) {
+            throw new Error(e);
         }
     }
 
     @Test
     public void equalWhenNamesAndTypeEqualRegardlessOfClass() {
-        TestLayerDescriptor1 overlay1 = new TestLayerDescriptor1("test1", "cache1", TestMapDataProvider1.class);
-        TestLayerDescriptor1 overlay2 = new TestLayerDescriptor1("test1", "cache1", TestMapDataProvider1.class);
-        TestLayerDescriptor2 overlay3 = new TestLayerDescriptor2("test1", "cache1", TestMapDataProvider1.class);
+        TestLayerDescriptor1 overlay1 = new TestLayerDescriptor1("test1", makeUri(), TestMapDataProvider1.class);
+        TestLayerDescriptor1 overlay2 = new TestLayerDescriptor1("test1", overlay1.getResourceUri(), TestMapDataProvider1.class);
+        TestLayerDescriptor2 overlay3 = new TestLayerDescriptor2("test1", overlay1.getResourceUri(), TestMapDataProvider1.class);
 
         assertTrue(overlay1.equals(overlay2));
         assertTrue(overlay1.equals(overlay3));
@@ -37,26 +56,26 @@ public class MapLayerDescriptorTest {
 
     @Test
     public void notEqualWhenOtherIsNull() {
-        TestLayerDescriptor1 overlay = new TestLayerDescriptor1("testOverlay", "testCache", TestMapDataProvider1.class);
+        TestLayerDescriptor1 overlay = new TestLayerDescriptor1("testOverlay", makeUri(), TestMapDataProvider1.class);
 
         assertFalse(overlay.equals(null));
     }
 
     @Test
-    public void notEqualWhenProviderTypesAreDifferent() {
-        TestLayerDescriptor1 overlay1 = new TestLayerDescriptor1("test1", "cache1", TestMapDataProvider1.class);
-        TestLayerDescriptor1 overlay2 = new TestLayerDescriptor1(overlay1.getLayerName(), overlay1.getResourceName(), TestMapDataProvider2.class);
-        TestLayerDescriptor2 overlay3 = new TestLayerDescriptor2(overlay1.getLayerName(), overlay1.getResourceName(), TestMapDataProvider2.class);
+    public void equalWhenProviderTypesAreDifferent() {
+        TestLayerDescriptor1 overlay1 = new TestLayerDescriptor1("test1", makeUri(), TestMapDataProvider1.class);
+        TestLayerDescriptor1 overlay2 = new TestLayerDescriptor1(overlay1.getLayerName(), overlay1.getResourceUri(), TestMapDataProvider2.class);
+        TestLayerDescriptor2 overlay3 = new TestLayerDescriptor2(overlay1.getLayerName(), overlay1.getResourceUri(), TestMapDataProvider2.class);
 
-        assertFalse(overlay1.equals(overlay2));
-        assertFalse(overlay1.equals(overlay3));
+        assertTrue(overlay1.equals(overlay2));
+        assertTrue(overlay1.equals(overlay3));
     }
 
     @Test
     public void notEqualWhenNamesAreDifferent() {
-        TestLayerDescriptor1 overlay1 = new TestLayerDescriptor1("test1", "cache1", TestMapDataProvider1.class);
-        TestLayerDescriptor1 overlay2 = new TestLayerDescriptor1("test2", "cache1", TestMapDataProvider1.class);
-        TestLayerDescriptor1 overlay3 = new TestLayerDescriptor1("test1", "cache2", TestMapDataProvider1.class);
+        TestLayerDescriptor1 overlay1 = new TestLayerDescriptor1("test1", makeUri(), TestMapDataProvider1.class);
+        TestLayerDescriptor1 overlay2 = new TestLayerDescriptor1("test2", overlay1.getResourceUri(), TestMapDataProvider1.class);
+        TestLayerDescriptor1 overlay3 = new TestLayerDescriptor1("test1", makeUri(), TestMapDataProvider1.class);
 
         assertFalse(overlay1.equals(overlay2));
         assertFalse(overlay1.equals(overlay3));
@@ -64,10 +83,10 @@ public class MapLayerDescriptorTest {
 
     @Test
     public void notEqualWhenNamesAndProvidersAreDifferent() {
-        TestLayerDescriptor1 overlay1 = new TestLayerDescriptor1("test1", "cache1", TestMapDataProvider1.class);
-        TestLayerDescriptor1 overlay2 = new TestLayerDescriptor1("test2", "cache1", TestMapDataProvider2.class);
-        TestLayerDescriptor2 overlay3 = new TestLayerDescriptor2("test1", "cache2", TestMapDataProvider2.class);
-        TestLayerDescriptor1 overlay4 = new TestLayerDescriptor1("test2", "cache2", TestMapDataProvider2.class);
+        TestLayerDescriptor1 overlay1 = new TestLayerDescriptor1("test1", makeUri(), TestMapDataProvider1.class);
+        TestLayerDescriptor1 overlay2 = new TestLayerDescriptor1("test2", overlay1.getResourceUri(), TestMapDataProvider2.class);
+        TestLayerDescriptor2 overlay3 = new TestLayerDescriptor2("test1", makeUri(), TestMapDataProvider2.class);
+        TestLayerDescriptor1 overlay4 = new TestLayerDescriptor1("test2", overlay3.getResourceUri(), TestMapDataProvider2.class);
 
         assertFalse(overlay1.equals(overlay2));
         assertFalse(overlay1.equals(overlay3));

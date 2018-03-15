@@ -235,7 +235,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
         assertThat(overlays.size(), is(2));
         assertThat(overlays, hasItems(overlay1, overlay2));
 
-        overlay2 = new MapLayerDescriptorTest.TestLayerDescriptor1(overlay2.getLayerName(), overlay2.getResourceName(), overlay2.getDataType());
+        overlay2 = new MapLayerDescriptorTest.TestLayerDescriptor1(overlay2.getLayerName(), overlay2.getResourceUri(), overlay2.getDataType());
         mapDataResource = new MapDataResource(mapDataResource.getUri(), repo1.getClass(), 0,
             new MapDataResource.Resolved(mapDataResource.getResolved().getName(), mapDataResource.getResolved().getType(), setOf(overlay2)));
         Set<MapDataResource> updated = setOf(mapDataResource);
@@ -316,7 +316,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
         assertThat(overlayManager.getOverlaysInZOrder().size(), is(1));
         assertThat(overlayManager.getOverlaysInZOrder(), hasItem(overlay1));
 
-        MapLayerDescriptor overlay1Updated = new MapLayerDescriptorTest.TestLayerDescriptor1(overlay1.getLayerName(), overlay1.getResourceName(), overlay1.getDataType());
+        MapLayerDescriptor overlay1Updated = new MapLayerDescriptorTest.TestLayerDescriptor1(overlay1.getLayerName(), overlay1.getResourceUri(), overlay1.getDataType());
         cache = new MapDataResource(makeUri(), repo1.getClass(), 0,
             new MapDataResource.Resolved(cache.getResolved().getName(), cache.getResolved().getType(), setOf(overlay1Updated)));
         MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(
@@ -378,7 +378,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
         verify(provider1).createMapLayerFromDescriptor(overlay1, overlayManager);
         verify(onMap).addToMap();
 
-        overlay1 = new MapLayerDescriptorTest.TestLayerDescriptor1(overlay1.getLayerName(), overlay1.getResourceName(), overlay1.getDataType());
+        overlay1 = new MapLayerDescriptorTest.TestLayerDescriptor1(overlay1.getLayerName(), overlay1.getResourceUri(), overlay1.getDataType());
         cache = new MapDataResource(makeUri(), repo1.getClass(), 0,
             new MapDataResource.Resolved(cache.getResolved().getName(), cache.getResolved().getType(), setOf(overlay1)));
         MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(this, Collections.emptySet(), setOf(cache), Collections.emptySet());
@@ -418,7 +418,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
         verify(provider1).createMapLayerFromDescriptor(overlay1, overlayManager);
         verify(onMap).addToMap();
 
-        overlay1 = new MapLayerDescriptorTest.TestLayerDescriptor1(overlay1.getLayerName(), overlay1.getResourceName(), overlay1.getDataType());
+        overlay1 = new MapLayerDescriptorTest.TestLayerDescriptor1(overlay1.getLayerName(), overlay1.getResourceUri(), overlay1.getDataType());
         cache = new MapDataResource(makeUri(), repo1.getClass(), 0,
             new MapDataResource.Resolved(cache.getResolved().getName(), cache.getResolved().getType(), setOf(overlay1)));
         MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(this, Collections.emptySet(), setOf(cache), Collections.emptySet());
@@ -890,7 +890,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
         public class MovingSingleOverlayZIndex {
 
             private String qnameOf(MapLayerDescriptor overlay) {
-                return overlay.getResourceName() + ":" + overlay.getLayerName();
+                return overlay.getResourceUri() + ":" + overlay.getLayerName();
             }
 
             MapLayerManager overlayManager;

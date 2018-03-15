@@ -486,7 +486,7 @@ public class MAGEStaticFeatureLayerRepository extends MapDataRepository implemen
         private final Layer subject;
 
         private LayerDescriptor(Layer subject) {
-            super(subject.getName(), RESOURCE_NAME, MAGEStaticFeatureLayerRepository.class);
+            super(subject.getName(), RESOURCE_URI, MAGEStaticFeatureLayerRepository.class);
             this.subject = subject;
         }
     }

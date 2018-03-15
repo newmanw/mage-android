@@ -1,5 +1,7 @@
 package mil.nga.giat.mage.map.cache;
 
+import java.net.URI;
+
 import mil.nga.giat.mage.R;
 
 /**
@@ -18,8 +20,8 @@ public class GeoPackageTileTableDescriptor extends GeoPackageTableDescriptor {
      * @param minZoom    min zoom level
      * @param maxZoom    max zoom level
      */
-    GeoPackageTileTableDescriptor(String geoPackage, String tableName, int count, int minZoom, int maxZoom) {
-        super(geoPackage, tableName, count, minZoom, maxZoom);
+    GeoPackageTileTableDescriptor(URI resourceUri, String geoPackage, String tableName, int count, int minZoom, int maxZoom) {
+        super(resourceUri, geoPackage, tableName, count, minZoom, maxZoom);
     }
 
     @Override

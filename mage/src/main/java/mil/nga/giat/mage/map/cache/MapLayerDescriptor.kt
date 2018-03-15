@@ -1,9 +1,10 @@
 package mil.nga.giat.mage.map.cache
 
 import mil.nga.giat.mage.map.cache.MapDataResource.Resolved
+import java.net.URI
 
 /**
- * A `MapLayerDescriptor` represents logical grouping of data that appears on a
+ * A `MapLayerDescriptor` represents a logical grouping of data that appears on a
  * map as visual objects.  A [MapDataProvider] implementation will create instances
  * of its associated `MapLayerDescriptor` subclass.  Note that this class provides
  * default [.equals] and [.hashCode] implementations because [MapDataManager]
@@ -17,13 +18,22 @@ abstract class MapLayerDescriptor protected constructor(
          */
         val layerName: String,
         /**
-         * @return the name of the [Resolved.name] () cache} that contains this layer's data
+         * @return the URI of the [MapDataResource] that contains this layer's data
          */
-        val resourceName: String,
+        val resourceUri: URI,
         /**
          * @return the [type][MapDataProvider] of the [data resource][MapDataResource] that contains this layer's data
          */
         val dataType: Class<out MapDataProvider>) {
+
+    val layerUri: URI = resourceUri.resolve(URI(null, null, layerName, null))
+
+    /**
+     * Return an optional human-readable alternative to the [layerName].
+     * The default value is the [layerName].
+     */
+    open var layerTitle: String = layerName
+        protected set
 
     /**
      * Return the icon image resource ID for this layer.
@@ -48,9 +58,7 @@ abstract class MapLayerDescriptor protected constructor(
      */
     override fun equals(other: Any?): Boolean {
         if (other is MapLayerDescriptor) {
-            return dataType == other.dataType &&
-                resourceName == other.resourceName &&
-                layerName == other.layerName
+            return resourceUri == other.resourceUri && layerName == other.layerName
         }
         return false;
     }

@@ -295,7 +295,7 @@ public class MapDataFragment extends Fragment implements MapLayerManager.MapLaye
                 icon.setImageResource(iconResourceId);
             }
             name.setText(x.getLayerName());
-            detail.setText(x.getResourceName());
+            detail.setText(x.getLayerTitle());
             dataVisible.setChecked(overlayManager.isOverlayVisible(x));
         }
 

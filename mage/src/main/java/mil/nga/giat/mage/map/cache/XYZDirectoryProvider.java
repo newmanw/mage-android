@@ -106,7 +106,7 @@ public class XYZDirectoryProvider implements MapDataProvider {
         if (!xyzDir.isDirectory()) {
             throw new MapDataResolveException(resource.getUri(), "resource is not a directory: " + resource.getUri());
         }
-        MapLayerDescriptor desc = new XYZDirectoryLayerDescriptor(xyzDir.getName(), xyzDir.getName(), xyzDir);
+        MapLayerDescriptor desc = new XYZDirectoryLayerDescriptor(xyzDir);
         return resource.resolve(new MapDataResource.Resolved(xyzDir.getName(), getClass(), Collections.singleton(desc)), xyzDir.lastModified());
     }
 

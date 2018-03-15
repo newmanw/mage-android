@@ -249,7 +249,7 @@ public class GeoPackageProvider implements MapDataProvider {
                 int count = tileDao.count();
                 int minZoom = (int) tileDao.getMinZoom();
                 int maxZoom = (int) tileDao.getMaxZoom();
-                GeoPackageTileTableDescriptor tableCache = new GeoPackageTileTableDescriptor(database, tableName, count, minZoom, maxZoom);
+                GeoPackageTileTableDescriptor tableCache = new GeoPackageTileTableDescriptor(resource.getUri(), database, tableName, count, minZoom, maxZoom);
                 tileCacheOverlays.put(tableName, tableCache);
             }
 
@@ -291,7 +291,7 @@ public class GeoPackageProvider implements MapDataProvider {
                 }
 
                 GeoPackageFeatureTableDescriptor tableCache = new GeoPackageFeatureTableDescriptor(
-                    database, tableName, count, minZoom, indexed, linkedTileTableCaches);
+                    resource.getUri(), database, tableName, count, minZoom, indexed, linkedTileTableCaches);
                 tables.add(tableCache);
             }
 

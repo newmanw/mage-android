@@ -19,11 +19,10 @@ public class XYZDirectoryLayerDescriptor extends MapLayerDescriptor {
     /**
      * Constructor
      *
-     * @param cacheName cache name
      * @param directory tile directory
      */
-    public XYZDirectoryLayerDescriptor(String overlayName, String cacheName, File directory) {
-        super(overlayName, cacheName, XYZDirectoryProvider.class);
+    public XYZDirectoryLayerDescriptor(File directory) {
+        super(directory.getName(), directory.toURI(), XYZDirectoryProvider.class);
         this.directory = directory;
     }
 

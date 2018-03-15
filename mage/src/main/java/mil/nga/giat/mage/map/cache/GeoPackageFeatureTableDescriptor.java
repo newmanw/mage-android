@@ -1,5 +1,6 @@
 package mil.nga.giat.mage.map.cache;
 
+import java.net.URI;
 import java.util.List;
 
 import mil.nga.giat.mage.R;
@@ -19,8 +20,8 @@ public class GeoPackageFeatureTableDescriptor extends GeoPackageTableDescriptor 
 
     private final List<GeoPackageTileTableDescriptor> linkedTiles;
 
-    GeoPackageFeatureTableDescriptor(String geoPackage, String tableName, int count, int minZoom, boolean indexed, List<GeoPackageTileTableDescriptor> linkedTiles) {
-        super(geoPackage, tableName, count, minZoom, MAX_ZOOM);
+    GeoPackageFeatureTableDescriptor(URI resourceUri, String geoPackage, String tableName, int count, int minZoom, boolean indexed, List<GeoPackageTileTableDescriptor> linkedTiles) {
+        super(resourceUri, geoPackage, tableName, count, minZoom, MAX_ZOOM);
         this.indexed = indexed;
         this.linkedTiles = linkedTiles;
     }

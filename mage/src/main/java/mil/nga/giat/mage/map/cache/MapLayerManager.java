@@ -109,7 +109,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
     }
 
     private static String keyForCache(MapLayerDescriptor overlay) {
-        return overlay.getResourceName() + ":" + overlay.getDataType().getName();
+        return overlay.getResourceUri() + ":" + overlay.getDataType().getName();
     }
 
     private final MapDataManager mapDataManager;
@@ -170,7 +170,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
         Iterator<MapLayerDescriptor> orderIterator = overlaysInZOrder.iterator();
         while (orderIterator.hasNext()) {
             MapLayerDescriptor overlay = orderIterator.next();
-            if (removedCacheNames.contains(overlay.getResourceName())) {
+            if (removedCacheNames.contains(overlay.getResourceUri())) {
                 removeFromMapReturningVisibility(overlay);
                 orderIterator.remove();
                 position--;

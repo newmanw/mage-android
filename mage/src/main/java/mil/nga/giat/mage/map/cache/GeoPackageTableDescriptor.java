@@ -1,5 +1,7 @@
 package mil.nga.giat.mage.map.cache;
 
+import java.net.URI;
+
 /**
  * This class is a {@link MapLayerDescriptor} subclass corresponding to the data
  * in a single table within a GeoPackage.
@@ -8,6 +10,10 @@ package mil.nga.giat.mage.map.cache;
  */
 public abstract class GeoPackageTableDescriptor extends MapLayerDescriptor {
 
+    /**
+     * the GeoPackage name
+     */
+    private final String geoPackage;
     /**
      * Count of data in the table
      */
@@ -32,25 +38,23 @@ public abstract class GeoPackageTableDescriptor extends MapLayerDescriptor {
      * @param minZoom    min zoom level
      * @param maxZoom    max zoom level
      */
-    GeoPackageTableDescriptor(String geoPackage, String tableName, int count, int minZoom, Integer maxZoom) {
-        super(tableName, geoPackage, GeoPackageProvider.class);
+    GeoPackageTableDescriptor(URI resourceUri, String geoPackage, String tableName, int count, int minZoom, Integer maxZoom) {
+        super(tableName, resourceUri, GeoPackageProvider.class);
+        this.geoPackage = geoPackage;
         this.count = count;
         this.minZoom = minZoom;
         this.maxZoom = maxZoom;
     }
 
     /**
-     * Get the GeoPackage name, which is also the {@link #getResourceName() cache name}.
-     *
-     * @return
+     * Get the GeoPackage name
      */
     String getGeoPackage() {
-        return getResourceName();
+        return geoPackage;
     }
 
     /**
-     * Get the name of the table that contains this overlay's data, which is also the {@link #getLayerName() overlay name}.
-     * @return
+     * Get the name of the table that contains this overlay's data, which is also the {@link #getLayerName() layer name}.
      */
     String getTableName() {
         return getLayerName();
@@ -58,8 +62,6 @@ public abstract class GeoPackageTableDescriptor extends MapLayerDescriptor {
 
     /**
      * Get the count
-     *
-     * @return
      */
     int getCount() {
         return count;
@@ -67,8 +69,6 @@ public abstract class GeoPackageTableDescriptor extends MapLayerDescriptor {
 
     /**
      * Get the min zoom
-     *
-     * @return
      */
     int getMinZoom() {
         return minZoom;
@@ -76,8 +76,6 @@ public abstract class GeoPackageTableDescriptor extends MapLayerDescriptor {
 
     /**
      * Get the max zoom
-     *
-     * @return
      */
     int getMaxZoom() {
         return maxZoom;
