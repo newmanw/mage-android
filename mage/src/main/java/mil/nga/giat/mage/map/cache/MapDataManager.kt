@@ -9,7 +9,6 @@ import android.arch.lifecycle.Observer
 import android.os.AsyncTask
 import android.support.annotation.MainThread
 import com.google.android.gms.maps.GoogleMap
-import mil.nga.giat.mage.map.cache.MapDataManager.Companion.instance
 import java.io.File
 import java.net.URI
 import java.util.*
@@ -26,16 +25,20 @@ class MapDataManager(config: Config) : LifecycleOwner {
     private val providers: Array<out MapDataProvider>
     private val listeners = ArrayList<MapDataListener>()
     private val lifecycle = LifecycleRegistry(this)
-    private val mapDataForRepository = HashMap<Class<out MapDataRepository>, Set<MapDataResource>>()
+    private val mapDataForRepository = HashMap<String, Set<MapDataResource>>()
     private val importResourcesForRefreshTask: ResolveResourcesTask? = null
 
-    val mapData: Set<MapDataResource> get() {
-        return mapDataForRepository.values.flatMapTo(HashSet(), { return it })
-    }
+    val resources: Set<MapDataResource>
+        get() {
+            return mapDataForRepository.values.flatMapTo(HashSet(), { return it })
+        }
+
+    var layers: Map<URI, MapLayerDescriptor> = emptyMap()
+        private set;
 
     /**
      * Implement this interface and [register][.addUpdateListener]
-     * an instance to receive [notifications][.onMapDataUpdated] when the set of mapData changes.
+     * an instance to receive [notifications][.onMapDataUpdated] when the set of resources changes.
      */
     interface MapDataListener {
         fun onMapDataUpdated(update: MapDataUpdate)
@@ -117,7 +120,7 @@ class MapDataManager(config: Config) : LifecycleOwner {
         providers = config.providers!!
         lifecycle.markState(Lifecycle.State.CREATED)
         for (repo in repositories) {
-            mapDataForRepository[repo::class.java] = HashSet()
+            mapDataForRepository[repo.id] = HashSet()
             repo.observe(this, RepositoryObserver(repo))
         }
     }
@@ -143,11 +146,11 @@ class MapDataManager(config: Config) : LifecycleOwner {
     }
 
     /**
-     * Discover new mapData available in standard [locations][MapDataRepository], then remove defunct mapData.
+     * Discover new resources available in standard [locations][MapDataRepository], then remove defunct resources.
      * Asynchronous notifications to [listeners][.addUpdateListener]
      * will result, one notification per refresh, per listener.  Only one refresh can be active at any moment.
      */
-    fun refreshAvailableCaches() {
+    fun refreshMapData() {
         for (repo in repositories) {
             repo.refreshAvailableMapData(resolvedResourcesForRepo(repo), executor)
         }
@@ -158,7 +161,7 @@ class MapDataManager(config: Config) : LifecycleOwner {
     }
 
     private fun resolvedResourcesForRepo(repo: MapDataRepository): Map<URI, MapDataResource>? {
-        return mapDataForRepository[repo.javaClass]?.associateBy({ it.uri })
+        return mapDataForRepository[repo.id]?.associateBy({ it.uri })
     }
 
     private fun onMapDataChanged(resources: Set<MapDataResource>?, source: MapDataRepository) {

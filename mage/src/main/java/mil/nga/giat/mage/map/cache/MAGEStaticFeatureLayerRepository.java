@@ -4,6 +4,7 @@ package mil.nga.giat.mage.map.cache;
 import android.annotation.SuppressLint;
 import android.app.Application;
 import android.os.AsyncTask;
+import android.support.annotation.MainThread;
 import android.util.Log;
 
 import com.google.common.io.ByteStreams;
@@ -45,6 +46,8 @@ import mil.nga.giat.mage.sdk.exceptions.LayerException;
 import mil.nga.giat.mage.sdk.http.resource.LayerResource;
 import mil.nga.giat.mage.sdk.login.LoginTaskFactory;
 
+
+@MainThread
 public class MAGEStaticFeatureLayerRepository extends MapDataRepository implements MapDataProvider {
 
     private static final String LOG_NAME = MAGEStaticFeatureLayerRepository.class.getName();
@@ -203,7 +206,7 @@ public class MAGEStaticFeatureLayerRepository extends MapDataRepository implemen
                 descriptors.add(new LayerDescriptor(layer));
             }
             MapDataResource.Resolved resolved = new MapDataResource.Resolved(RESOURCE_NAME, getClass(), descriptors);
-            MapDataResource resource = new MapDataResource(RESOURCE_URI, getClass(), System.currentTimeMillis(), resolved);
+            MapDataResource resource = new MapDataResource(RESOURCE_URI, this, System.currentTimeMillis(), resolved);
             setValue(Collections.singleton(resource));
         }
         proceedIfReady();

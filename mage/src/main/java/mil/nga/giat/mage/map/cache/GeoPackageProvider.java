@@ -298,7 +298,7 @@ public class GeoPackageProvider implements MapDataProvider {
             // Add stand alone tile tables that were not linked to feature tables
             tables.addAll(tileCacheOverlays.values());
 
-            return new MapDataResource(resource.getUri(), resource.getSource(), resource.getContentTimestamp(), new MapDataResource.Resolved(database, this.getClass(), tables));
+            return resource.resolve(new MapDataResource.Resolved(database, this.getClass(), tables));
         }
         catch (Exception e) {
             Log.e(LOG_NAME, "error creating GeoPackage cache", e);

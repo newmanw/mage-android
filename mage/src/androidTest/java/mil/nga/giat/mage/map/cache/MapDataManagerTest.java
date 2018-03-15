@@ -23,6 +23,7 @@ import org.mockito.stubbing.Answer;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -101,7 +102,7 @@ public class MapDataManagerTest {
                     URI uri = file.toURI();
                     MapDataResource resolved = existingResolved.get(uri);
                     if (resolved == null) {
-                        resources.add(new MapDataResource(uri, TestDirRepository.class, file.lastModified()));
+                        resources.add(new MapDataResource(uri, this, file.lastModified()));
                     }
                     else {
                         resources.add(resolved);
@@ -129,7 +130,7 @@ public class MapDataManagerTest {
 
         private MapDataResource createResourceWithFileName(String name, MapDataResource.Resolved resolved) {
             File file = createFile(name);
-            return new MapDataResource(file.toURI(), getClass(), file.lastModified(), resolved);
+            return new MapDataResource(file.toURI(), this, file.lastModified(), resolved);
         }
     }
 
@@ -217,8 +218,8 @@ public class MapDataManagerTest {
     public void requiresUpdatePermission() {
         MapDataManager manager = new MapDataManager(new MapDataManager.Config()
             .repositories()
-            .executor(executor)
             .providers()
+            .executor(executor)
             .updatePermission(null));
     }
 
@@ -228,7 +229,7 @@ public class MapDataManagerTest {
     }
 
     @Test
-    public void addsInitialAvailableResourcesFromRepositories() {
+    public void addsInitialAvailableLayersFromRepositories() throws URISyntaxException {
         MapDataResource initial1 = repo1.createResourceWithFileName("a.dog", null);
         MapDataResource initial2 = repo2.createResourceWithFileName("a.cat", null);
         MapDataResource initial3 = repo2.createResourceWithFileName("b.cat", null);
@@ -236,9 +237,9 @@ public class MapDataManagerTest {
         repo2.setValue(setOfResources(initial2, initial3));
 
         mapDataManager = new MapDataManager(config);
-        Set<MapDataResource> resources = mapDataManager.getMapData();
+        Map<URI, MapLayerDescriptor> layers = mapDataManager.getLayers();
 
-        assertThat(resources, equalTo(setOfResources(initial1, initial2, initial3)));
+        assertThat(layers.values(), equalTo(setOfResources(initial1, initial2, initial3)));
     }
 
     @Test
@@ -286,7 +287,7 @@ public class MapDataManagerTest {
         verify(listener, timeout(1000)).onMapDataUpdated(updateCaptor.capture());
 
         MapDataManager.MapDataUpdate update = updateCaptor.getValue();
-        Set<MapDataResource> caches = mapDataManager.getMapData();
+        Set<MapDataResource> caches = mapDataManager.getResources();
 
         assertThat(caches, equalTo(setOfResources(resolved)));
         assertThat(update.getAdded(), equalTo(setOfResources(resolved)));
@@ -305,14 +306,14 @@ public class MapDataManagerTest {
         when(dogProvider.resolveResource(resourceWithUri(res1.getUri()))).thenReturn(res1);
         when(catProvider.resolveResource(resourceWithUri(res2.getUri()))).thenReturn(res2);
 
-        assertTrue(mapDataManager.getMapData().isEmpty());
+        assertTrue(mapDataManager.getResources().isEmpty());
 
-        mapDataManager.refreshAvailableCaches();
+        mapDataManager.refreshMapData();
 
         verify(listener, timeout(1000)).onMapDataUpdated(updateCaptor.capture());
 
         MapDataManager.MapDataUpdate update = updateCaptor.getValue();
-        Set<MapDataResource> resources = mapDataManager.getMapData();
+        Set<MapDataResource> resources = mapDataManager.getResources();
 
         assertThat(resources.size(), is(2));
         assertThat(resources, hasItems(res1, res2));
@@ -335,14 +336,14 @@ public class MapDataManagerTest {
 //        when(dogProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet(), any(Executor.class))).thenReturn(setOfResources(dogCache1, dogCache2));
 //        when(catProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(setOfResources(catCache));
 //
-//        mapDataManager.refreshAvailableCaches();
+//        mapDataManager.refreshMapData();
 //
 //        verify(listener, timeout(1000)).onMapDataUpdated(updateCaptor.capture());
 //        verify(dogProvider).refreshResources(eq(Collections.<MapDataResource>emptySet()));
 //        verify(catProvider).refreshResources(eq(Collections.<MapDataResource>emptySet()));
 //
 //        MapDataManager.MapDataUpdate update = updateCaptor.getValue();
-//        Set<MapDataResource> caches = mapDataManager.getMapData();
+//        Set<MapDataResource> caches = mapDataManager.getResources();
 //
 //        assertThat(caches.size(), is(3));
 //        assertThat(caches, hasItems(dogCache1, dogCache2, catCache));
@@ -362,13 +363,13 @@ public class MapDataManagerTest {
 //        when(dogProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(setOfResources(dogCache1, dogCache2));
 //        when(catProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(setOfResources(catCache));
 //
-//        mapDataManager.refreshAvailableCaches();
+//        mapDataManager.refreshMapData();
 //
 //        verify(listener, timeout(1000)).onMapDataUpdated(updateCaptor.capture());
 //        verify(dogProvider).refreshResources(eq(Collections.<MapDataResource>emptySet()));
 //        verify(catProvider).refreshResources(eq(Collections.<MapDataResource>emptySet()));
 //
-//        Set<MapDataResource> caches = mapDataManager.getMapData();
+//        Set<MapDataResource> caches = mapDataManager.getResources();
 //
 //        assertThat(caches.size(), is(3));
 //        assertThat(caches, hasItems(dogCache1, dogCache2, catCache));
@@ -376,14 +377,14 @@ public class MapDataManagerTest {
 //        when(dogProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(setOfResources(dogCache2));
 //        when(catProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(Collections.<MapDataResource>emptySet());
 //
-//        mapDataManager.refreshAvailableCaches();
+//        mapDataManager.refreshMapData();
 //
 //        verify(listener, timeout(1000).times(2)).onMapDataUpdated(updateCaptor.capture());
 //
 //        verify(dogProvider).refreshResources(eq(setOfResources(dogCache1, dogCache2)));
 //        verify(catProvider).refreshResources(eq(setOfResources(catCache)));
 //
-//        caches = mapDataManager.getMapData();
+//        caches = mapDataManager.getResources();
 //        MapDataManager.MapDataUpdate update = updateCaptor.getValue();
 //
 //        assertThat(caches.size(), is(1));
@@ -400,11 +401,11 @@ public class MapDataManagerTest {
 //
 //        when(dogProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(setOfResources(dogOrig));
 //
-//        mapDataManager.refreshAvailableCaches();
+//        mapDataManager.refreshMapData();
 //
 //        verify(listener, timeout(1000)).onMapDataUpdated(updateCaptor.capture());
 //
-//        Set<MapDataResource> caches = mapDataManager.getMapData();
+//        Set<MapDataResource> caches = mapDataManager.getResources();
 //        MapDataManager.MapDataUpdate update = updateCaptor.getValue();
 //
 //        assertThat(caches.size(), is(1));
@@ -418,11 +419,11 @@ public class MapDataManagerTest {
 //
 //        when(dogProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(setOfResources(dogUpdated));
 //
-//        mapDataManager.refreshAvailableCaches();
+//        mapDataManager.refreshMapData();
 //
 //        verify(listener, timeout(1000).times(2)).onMapDataUpdated(updateCaptor.capture());
 //
-//        Set<MapDataResource> overlaysRefreshed = mapDataManager.getMapData();
+//        Set<MapDataResource> overlaysRefreshed = mapDataManager.getResources();
 //        update = updateCaptor.getValue();
 //
 //        assertThat(overlaysRefreshed, not(sameInstance(caches)));
@@ -448,7 +449,7 @@ public class MapDataManagerTest {
             }
         }).when(executor).execute(any(Runnable.class));
 
-        mapDataManager.refreshAvailableCaches();
+        mapDataManager.refreshMapData();
 
         verify(executor).execute(any(Runnable.class));
         assertTrue(overrodeMock[0]);
@@ -489,7 +490,7 @@ public class MapDataManagerTest {
 //        when(catProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(Collections.<MapDataResource>emptySet());
 //        when(dogProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(Collections.<MapDataResource>emptySet());
 
-        mapDataManager.refreshAvailableCaches();
+        mapDataManager.refreshMapData();
 
         verify(executor, times(1)).execute(any(Runnable.class));
 
@@ -497,7 +498,7 @@ public class MapDataManagerTest {
         // and verify no new tasks were submitted to executor
         taskBegan.await();
 
-        mapDataManager.refreshAvailableCaches();
+        mapDataManager.refreshMapData();
 
         verify(executor, times(1)).execute(any(Runnable.class));
 
@@ -506,7 +507,7 @@ public class MapDataManagerTest {
         verify(listener, timeout(1000)).onMapDataUpdated(updateCaptor.capture());
     }
 
-    private static final MapDataResource MATCHER_RESOURCE = new MapDataResource(URI.create("test:matcher_resource"), MapDataRepository.class, 0);
+    private static final MapDataResource MATCHER_RESOURCE = new MapDataResource(URI.create("test:matcher_resource"), mock(MapDataRepository.class), 0);
 
     private static MapDataResource resourceWithUri(URI expected) {
         MapDataResourceUriMatcher matcher = new MapDataResourceUriMatcher(expected);

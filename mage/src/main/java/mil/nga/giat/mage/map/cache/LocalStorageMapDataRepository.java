@@ -182,7 +182,7 @@ public class LocalStorageMapDataRepository extends MapDataRepository {
     }
 
     private void onResourceCopyComplete(File file) {
-        MapDataResource newResource = new MapDataResource(file.toURI(), getClass(), file.lastModified());
+        MapDataResource newResource = new MapDataResource(file.toURI(), this, file.lastModified());
         Set<MapDataResource> updated = getValue();
         if (updated == null) {
             updated = Collections.singleton(newResource);
@@ -214,7 +214,7 @@ public class LocalStorageMapDataRepository extends MapDataRepository {
                     URI uri = file.toURI();
                     MapDataResource existing = existingResolved.get(uri);
                     if (existing == null || file.lastModified() > existing.getContentTimestamp()) {
-                        potentialResources.add(new MapDataResource(uri, LocalStorageMapDataRepository.class, file.lastModified()));
+                        potentialResources.add(new MapDataResource(uri, LocalStorageMapDataRepository.this, file.lastModified()));
                     }
                 }
             }

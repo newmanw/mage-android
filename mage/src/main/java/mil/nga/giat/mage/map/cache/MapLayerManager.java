@@ -125,10 +125,33 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
         for (MapDataProvider provider : providers) {
             this.providers.put(provider.getClass(), provider);
         }
-        for (MapDataResource cache : mapDataManager.getMapData()) {
+        for (MapDataResource cache : mapDataManager.getResources()) {
             overlaysInZOrder.addAll(cache.getLayers().values());
         }
         mapDataManager.addUpdateListener(this);
+    }
+
+    void onMapDataUpdated(Set<MapLayerDescriptor> descriptors) {
+        Map<String, MapLayerDescriptor> updateIndex = new HashMap<>(descriptors.size());
+        for (MapLayerDescriptor desc : descriptors) {
+            updateIndex.put(keyForCache(desc), desc);
+        }
+        int position = 0;
+        Iterator<MapLayerDescriptor> orderIterator = overlaysInZOrder.iterator();
+        while (orderIterator.hasNext()) {
+            MapLayerDescriptor overlay = orderIterator.next();
+            String cacheKey = keyForCache(overlay);
+            MapLayerDescriptor updated = updateIndex.get(cacheKey);
+            if (updated == null) {
+                removeFromMapReturningVisibility(overlay);
+                orderIterator.remove();
+                position--;
+            }
+            else if (updated != overlay) {
+                refreshOverlayAtPositionFromUpdatedCache(position, updated);
+            }
+            position++;
+        }
     }
 
     @Override
@@ -315,6 +338,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
         MapLayerDescriptor overlay = overlaysInZOrder.get(position);
         MapLayer onMap = overlaysOnMap.remove(overlay);
         if (onMap == null) {
+            // TODO: create a PendingLayer MapLayer implementation with a reference to the CreateLayer task
             MapDataProvider provider = providers.get(overlay.getDataType());
             new CreateLayerTask(overlay, provider, position).execute();
         }
@@ -354,6 +378,66 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
         @Override
         protected void onPostExecute(MapLayer mapLayer) {
             addAndShowLayer(layerDesc, mapLayer);
+        }
+    }
+
+    // TODO: finish and use this
+    private class PendingLayer extends MapLayer {
+
+        private final CreateLayerTask creating;
+
+        private PendingLayer(MapLayerDescriptor desc, MapDataProvider provider, int zIndex) {
+            this.creating = new CreateLayerTask(desc, provider, zIndex);
+        }
+
+        @Override
+        protected void addToMap() {
+
+        }
+
+        @Override
+        protected void removeFromMap() {
+
+        }
+
+        @Override
+        protected void show() {
+
+        }
+
+        @Override
+        protected void hide() {
+
+        }
+
+        @Override
+        protected void setZIndex(int z) {
+
+        }
+
+        @Override
+        protected void zoomMapToBoundingBox() {
+
+        }
+
+        @Override
+        protected boolean isOnMap() {
+            return false;
+        }
+
+        @Override
+        protected boolean isVisible() {
+            return false;
+        }
+
+        @Override
+        protected String onMapClick(LatLng latLng, MapView mapView) {
+            return null;
+        }
+
+        @Override
+        protected void dispose() {
+
         }
     }
 }
