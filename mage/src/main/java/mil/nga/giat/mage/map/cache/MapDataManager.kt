@@ -25,16 +25,15 @@ class MapDataManager(config: Config) : LifecycleOwner {
     private val providers: Array<out MapDataProvider>
     private val listeners = ArrayList<MapDataListener>()
     private val lifecycle = LifecycleRegistry(this)
-    private val mapDataForRepository = HashMap<String, Set<MapDataResource>>()
+    private val repositoryResources = HashMap<String, Set<MapDataResource>>()
     private val importResourcesForRefreshTask: ResolveResourcesTask? = null
 
-    val resources: Set<MapDataResource>
-        get() {
-            return mapDataForRepository.values.flatMapTo(HashSet(), { return it })
-        }
+    val resources: Map<URI, MapDataResource>
+        get() = repositoryResources.flatMap({ it.value }).associateBy({ it.uri })
 
     var layers: Map<URI, MapLayerDescriptor> = emptyMap()
-        private set;
+        get() = repositoryResources.asSequence().flatMap({ it.value.asSequence() }).flatMap({ it.layers.asSequence() }).map({ it.value }).associateBy({ it.layerUri })
+        private set
 
     /**
      * Implement this interface and [register][.addUpdateListener]
@@ -115,14 +114,15 @@ class MapDataManager(config: Config) : LifecycleOwner {
 
     init {
         updatePermission = config.updatePermission!!
-        executor = config.executor!!
         repositories = config.repositories!!
         providers = config.providers!!
-        lifecycle.markState(Lifecycle.State.CREATED)
+        executor = config.executor!!
         for (repo in repositories) {
-            mapDataForRepository[repo.id] = HashSet()
+            val resources = repo.value ?: HashSet()
+            repositoryResources[repo.id] = resources
             repo.observe(this, RepositoryObserver(repo))
         }
+        lifecycle.markState(Lifecycle.State.RESUMED)
     }
 
     fun addUpdateListener(listener: MapDataListener) {
@@ -161,7 +161,7 @@ class MapDataManager(config: Config) : LifecycleOwner {
     }
 
     private fun resolvedResourcesForRepo(repo: MapDataRepository): Map<URI, MapDataResource>? {
-        return mapDataForRepository[repo.id]?.associateBy({ it.uri })
+        return repositoryResources[repo.id]?.associateBy({ it.uri })
     }
 
     private fun onMapDataChanged(resources: Set<MapDataResource>?, source: MapDataRepository) {

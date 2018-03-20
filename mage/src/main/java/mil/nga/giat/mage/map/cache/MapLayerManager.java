@@ -8,6 +8,7 @@ import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapView;
 import com.google.android.gms.maps.model.LatLng;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -125,7 +126,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
         for (MapDataProvider provider : providers) {
             this.providers.put(provider.getClass(), provider);
         }
-        for (MapDataResource cache : mapDataManager.getResources()) {
+        for (MapDataResource cache : mapDataManager.getResources().values()) {
             overlaysInZOrder.addAll(cache.getLayers().values());
         }
         mapDataManager.addUpdateListener(this);
@@ -160,10 +161,10 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
         for (MapDataResource removed : update.getRemoved()) {
 			removedCacheNames.add(removed.getResolved().getName());
 		}
-		Map<String, Map<String, MapLayerDescriptor>> updatedCaches = new HashMap<>(update.getUpdated().size());
+		Map<URI, Map<URI, MapLayerDescriptor>> updatedCaches = new HashMap<>(update.getUpdated().size());
         for (MapDataResource cache : update.getUpdated()) {
-            Map<String, MapLayerDescriptor> updatedOverlays = new HashMap<>(cache.getLayers());
-            updatedCaches.put(keyForCache(cache), updatedOverlays);
+            Map<URI, MapLayerDescriptor> updatedOverlays = new HashMap<>(cache.getLayers());
+            updatedCaches.put(cache.getUri(), updatedOverlays);
         }
 
         int position = 0;
@@ -176,10 +177,9 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
                 position--;
             }
             else {
-                String cacheKey = keyForCache(overlay);
-                Map<String, MapLayerDescriptor> updatedCacheOverlays = updatedCaches.get(cacheKey);
+                Map<URI, MapLayerDescriptor> updatedCacheOverlays = updatedCaches.get(overlay.getResourceUri());
                 if (updatedCacheOverlays != null) {
-                    MapLayerDescriptor updatedOverlay = updatedCacheOverlays.remove(overlay.getLayerName());
+                    MapLayerDescriptor updatedOverlay = updatedCacheOverlays.remove(overlay.getLayerUri());
                     if (updatedOverlay != null) {
                         refreshOverlayAtPositionFromUpdatedCache(position, updatedOverlay);
                     }
@@ -193,7 +193,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
             position++;
         }
 
-        for (Map<String, MapLayerDescriptor> newOverlaysFromUpdatedCaches : updatedCaches.values()) {
+        for (Map<URI, MapLayerDescriptor> newOverlaysFromUpdatedCaches : updatedCaches.values()) {
             overlaysInZOrder.addAll(newOverlaysFromUpdatedCaches.values());
         }
 

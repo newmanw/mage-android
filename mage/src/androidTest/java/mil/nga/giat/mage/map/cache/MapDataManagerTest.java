@@ -2,13 +2,14 @@ package mil.nga.giat.mage.map.cache;
 
 
 import android.app.Application;
+import android.arch.lifecycle.Lifecycle;
 import android.os.AsyncTask;
 import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+import android.support.test.annotation.UiThreadTest;
 import android.support.test.filters.SmallTest;
 import android.support.test.runner.AndroidJUnit4;
 
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -18,8 +19,6 @@ import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatcher;
 import org.mockito.Mockito;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
 
 import java.io.File;
 import java.io.IOException;
@@ -31,26 +30,20 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executor;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 
-import mil.nga.giat.mage.data.Resource;
-
-import static org.hamcrest.CoreMatchers.hasItems;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.sameInstance;
 import static org.hamcrest.Matchers.equalTo;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.timeout;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.withSettings;
@@ -82,7 +75,7 @@ public class MapDataManagerTest {
             return TestDirRepository.class.getName() + "." + dir.getName();
         }
 
-        @NotNull
+        @NonNull
         @Override
         public Status getStatus() {
             return status;
@@ -192,6 +185,10 @@ public class MapDataManagerTest {
         return Collections.unmodifiableSet(new HashSet<>(Arrays.asList(layers)));
     }
 
+    private static Set<MapLayerDescriptor> setOf(Collection<MapLayerDescriptor> layers) {
+        return Collections.unmodifiableSet(new HashSet<>(layers));
+    }
+
     private static Set<MapLayerDescriptor> flattenLayers(MapDataResource... resources) {
         Set<MapLayerDescriptor> layers = new HashSet<>();
         for (MapDataResource resource : resources) {
@@ -211,7 +208,7 @@ public class MapDataManagerTest {
     private File cacheDir1;
     private File cacheDir2;
     private MapDataManager.Config config;
-    private MapDataManager mapDataManager;
+    private MapDataManager manager;
     private Executor executor;
     private TestDirRepository repo1;
     private TestDirRepository repo2;
@@ -261,8 +258,8 @@ public class MapDataManagerTest {
             .updatePermission(new MapDataManager.CreateUpdatePermission(){});
 
         listener = mock(MapDataManager.MapDataListener.class);
-        mapDataManager = new MapDataManager(config);
-        mapDataManager.addUpdateListener(listener);
+        manager = new MapDataManager(config);
+        manager.addUpdateListener(listener);
     }
 
     @Test
@@ -282,10 +279,48 @@ public class MapDataManagerTest {
 
     @Test(expected = Error.class)
     public void cannotCreateUpdateWithoutPermission() {
-        mapDataManager.new MapDataUpdate(new MapDataManager.CreateUpdatePermission() {}, null, null, null);
+        manager.new MapDataUpdate(new MapDataManager.CreateUpdatePermission() {},
+            Collections.emptySet(), Collections.emptySet(), Collections.emptySet());
     }
 
     @Test
+    public void resumesAfterCreated() {
+        manager = new MapDataManager(config);
+
+        assertThat(manager.getLifecycle().getCurrentState(), is(Lifecycle.State.RESUMED));
+    }
+
+    @Test
+    public void doesNotRefreshOnConstruction() throws InterruptedException {
+        doAnswer(invocation -> {
+            throw new Error("unexpected async task execution in test " + testName.getMethodName());
+        }).when(executor).execute(any());
+
+        MapDataRepository repo1 = mock(MapDataRepository.class);
+        MapDataRepository repo2 = mock(MapDataRepository.class);
+        manager = new MapDataManager(config.repositories(repo1, repo2));
+
+        verify(repo1, never()).refreshAvailableMapData(any(), any());
+        verify(repo2, never()).refreshAvailableMapData(any(), any());
+        verify(executor, never()).execute(any());
+    }
+
+    @Test
+    public void refreshSeriallyBeginsRefreshOnRepositories() {
+        MapDataRepository repo1 = mock(MapDataRepository.class);
+        when(repo1.getId()).thenReturn("repo1");
+        MapDataRepository repo2 = mock(MapDataRepository.class);
+        when(repo2.getId()).thenReturn("repo2");
+        manager = new MapDataManager(config.repositories(repo1, repo2));
+        manager.refreshMapData();
+
+        verify(repo1).refreshAvailableMapData(anyMap(), same(executor));
+        verify(repo2).refreshAvailableMapData(anyMap(), same(executor));
+        verify(executor, never()).execute(any());
+    }
+
+    @Test
+    @UiThreadTest
     public void addsInitialAvailableLayersFromRepositories() throws URISyntaxException {
         MapDataResource initial1 = repo1.buildResource("a.dog", dogProvider).layers("a.dog.1", "a.dog.2").finish();
         MapDataResource initial2 = repo2.buildResource("a.cat", catProvider).layers("a.cat.1").finish();
@@ -293,10 +328,10 @@ public class MapDataManagerTest {
         repo1.setValue(setOf(initial1));
         repo2.setValue(setOf(initial2, initial3));
 
-        mapDataManager = new MapDataManager(config);
-        Map<URI, MapLayerDescriptor> layers = mapDataManager.getLayers();
+        manager = new MapDataManager(config);
+        Map<URI, MapLayerDescriptor> layers = manager.getLayers();
 
-        assertThat(layers.values(), equalTo(flattenLayers(initial1, initial2, initial3)));
+        assertThat(setOf(layers.values()), equalTo(flattenLayers(initial1, initial2, initial3)));
     }
 
     @Test
@@ -328,7 +363,7 @@ public class MapDataManagerTest {
 //
 //        File cacheFile = repo1.createFile("big_cache.dog");
 //
-//        mapDataManager.tryImportResource(cacheFile.toURI());
+//        manager.tryImportResource(cacheFile.toURI());
 //
 //        verify(dogProvider, timeout(1000)).resolveResource(resourceWithUri(cacheFile.toURI()));
 //        verify(catProvider, never()).resolveResource(any(MapDataResource.class));
@@ -339,18 +374,18 @@ public class MapDataManagerTest {
 //        MapDataResource resolved = repo2.createResourceWithFileName("data.cat", new MapDataResource.Resolved(cacheDir2.getName(), catProvider.getClass(), Collections.<MapLayerDescriptor>emptySet()));
 //        when(catProvider.resolveResource(resourceWithUri(resolved.getUri()))).thenReturn(resolved);
 //
-//        mapDataManager.tryImportResource(resolved.getUri());
+//        manager.tryImportResource(resolved.getUri());
 //
 //        verify(listener, timeout(1000)).onMapDataUpdated(updateCaptor.capture());
 //
 //        MapDataManager.MapDataUpdate update = updateCaptor.getValue();
-//        Set<MapDataResource> caches = mapDataManager.getResources();
+//        Set<MapDataResource> caches = manager.getResources();
 //
 //        assertThat(caches, equalTo(setOf(resolved)));
 //        assertThat(update.getAdded(), equalTo(setOf(resolved)));
 //        assertTrue(update.getUpdated().isEmpty());
 //        assertTrue(update.getRemoved().isEmpty());
-//        assertThat(update.getSource(), sameInstance(mapDataManager));
+//        assertThat(update.getSource(), sameInstance(manager));
 //    }
 //
 //    @Test
@@ -363,14 +398,14 @@ public class MapDataManagerTest {
 //        when(dogProvider.resolveResource(resourceWithUri(res1.getUri()))).thenReturn(res1);
 //        when(catProvider.resolveResource(resourceWithUri(res2.getUri()))).thenReturn(res2);
 //
-//        assertTrue(mapDataManager.getResources().isEmpty());
+//        assertTrue(manager.getResources().isEmpty());
 //
-//        mapDataManager.refreshMapData();
+//        manager.refreshMapData();
 //
 //        verify(listener, timeout(1000)).onMapDataUpdated(updateCaptor.capture());
 //
 //        MapDataManager.MapDataUpdate update = updateCaptor.getValue();
-//        Set<MapDataResource> resources = mapDataManager.getResources();
+//        Set<MapDataResource> resources = manager.getResources();
 //
 //        assertThat(resources.size(), is(2));
 //        assertThat(resources, hasItems(res1, res2));
@@ -378,7 +413,7 @@ public class MapDataManagerTest {
 //        assertThat(update.getAdded(), hasItems(res1, res2));
 //        assertTrue(update.getUpdated().isEmpty());
 //        assertTrue(update.getRemoved().isEmpty());
-//        assertThat(update.getSource(), sameInstance(mapDataManager));
+//        assertThat(update.getSource(), sameInstance(manager));
 //    }
 //
 //    @Test
@@ -393,14 +428,14 @@ public class MapDataManagerTest {
 //        when(dogProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet(), any(Executor.class))).thenReturn(setOf(dogCache1, dogCache2));
 //        when(catProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(setOf(catCache));
 //
-//        mapDataManager.refreshMapData();
+//        manager.refreshMapData();
 //
 //        verify(listener, timeout(1000)).onMapDataUpdated(updateCaptor.capture());
 //        verify(dogProvider).refreshResources(eq(Collections.<MapDataResource>emptySet()));
 //        verify(catProvider).refreshResources(eq(Collections.<MapDataResource>emptySet()));
 //
 //        MapDataManager.MapDataUpdate update = updateCaptor.getValue();
-//        Set<MapDataResource> caches = mapDataManager.getResources();
+//        Set<MapDataResource> caches = manager.getResources();
 //
 //        assertThat(caches.size(), is(3));
 //        assertThat(caches, hasItems(dogCache1, dogCache2, catCache));
@@ -408,7 +443,7 @@ public class MapDataManagerTest {
 //        assertThat(update.getAdded(), hasItems(dogCache1, dogCache2, catCache));
 //        assertTrue(update.getUpdated().isEmpty());
 //        assertTrue(update.getRemoved().isEmpty());
-//        assertThat(update.getSource(), sameInstance(mapDataManager));
+//        assertThat(update.getSource(), sameInstance(manager));
 //    }
 //
 //    @Test
@@ -420,13 +455,13 @@ public class MapDataManagerTest {
 //        when(dogProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(setOf(dogCache1, dogCache2));
 //        when(catProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(setOf(catCache));
 //
-//        mapDataManager.refreshMapData();
+//        manager.refreshMapData();
 //
 //        verify(listener, timeout(1000)).onMapDataUpdated(updateCaptor.capture());
 //        verify(dogProvider).refreshResources(eq(Collections.<MapDataResource>emptySet()));
 //        verify(catProvider).refreshResources(eq(Collections.<MapDataResource>emptySet()));
 //
-//        Set<MapDataResource> caches = mapDataManager.getResources();
+//        Set<MapDataResource> caches = manager.getResources();
 //
 //        assertThat(caches.size(), is(3));
 //        assertThat(caches, hasItems(dogCache1, dogCache2, catCache));
@@ -434,14 +469,14 @@ public class MapDataManagerTest {
 //        when(dogProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(setOf(dogCache2));
 //        when(catProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(Collections.<MapDataResource>emptySet());
 //
-//        mapDataManager.refreshMapData();
+//        manager.refreshMapData();
 //
 //        verify(listener, timeout(1000).times(2)).onMapDataUpdated(updateCaptor.capture());
 //
 //        verify(dogProvider).refreshResources(eq(setOf(dogCache1, dogCache2)));
 //        verify(catProvider).refreshResources(eq(setOf(catCache)));
 //
-//        caches = mapDataManager.getResources();
+//        caches = manager.getResources();
 //        MapDataManager.MapDataUpdate update = updateCaptor.getValue();
 //
 //        assertThat(caches.size(), is(1));
@@ -449,7 +484,7 @@ public class MapDataManagerTest {
 //        assertThat(update.getAdded(), empty());
 //        assertThat(update.getUpdated(), empty());
 //        assertThat(update.getRemoved(), hasItems(dogCache1, catCache));
-//        assertThat(update.getSource(), sameInstance(mapDataManager));
+//        assertThat(update.getSource(), sameInstance(manager));
 //    }
 //
 //    @Test
@@ -458,11 +493,11 @@ public class MapDataManagerTest {
 //
 //        when(dogProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(setOf(dogOrig));
 //
-//        mapDataManager.refreshMapData();
+//        manager.refreshMapData();
 //
 //        verify(listener, timeout(1000)).onMapDataUpdated(updateCaptor.capture());
 //
-//        Set<MapDataResource> caches = mapDataManager.getResources();
+//        Set<MapDataResource> caches = manager.getResources();
 //        MapDataManager.MapDataUpdate update = updateCaptor.getValue();
 //
 //        assertThat(caches.size(), is(1));
@@ -476,11 +511,11 @@ public class MapDataManagerTest {
 //
 //        when(dogProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(setOf(dogUpdated));
 //
-//        mapDataManager.refreshMapData();
+//        manager.refreshMapData();
 //
 //        verify(listener, timeout(1000).times(2)).onMapDataUpdated(updateCaptor.capture());
 //
-//        Set<MapDataResource> overlaysRefreshed = mapDataManager.getResources();
+//        Set<MapDataResource> overlaysRefreshed = manager.getResources();
 //        update = updateCaptor.getValue();
 //
 //        assertThat(overlaysRefreshed, not(sameInstance(caches)));
@@ -491,7 +526,7 @@ public class MapDataManagerTest {
 //        assertThat(update.getUpdated().size(), is(1));
 //        assertThat(update.getUpdated(), hasItem(sameInstance(dogUpdated)));
 //        assertThat(update.getRemoved(), empty());
-//        assertThat(update.getSource(), sameInstance(mapDataManager));
+//        assertThat(update.getSource(), sameInstance(manager));
 //    }
 //
 //    @Test
@@ -506,7 +541,7 @@ public class MapDataManagerTest {
 //            }
 //        }).when(executor).execute(any(Runnable.class));
 //
-//        mapDataManager.refreshMapData();
+//        manager.refreshMapData();
 //
 //        verify(executor).execute(any(Runnable.class));
 //        assertTrue(overrodeMock[0]);
@@ -547,7 +582,7 @@ public class MapDataManagerTest {
 ////        when(catProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(Collections.<MapDataResource>emptySet());
 ////        when(dogProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(Collections.<MapDataResource>emptySet());
 //
-//        mapDataManager.refreshMapData();
+//        manager.refreshMapData();
 //
 //        verify(executor, times(1)).execute(any(Runnable.class));
 //
@@ -555,7 +590,7 @@ public class MapDataManagerTest {
 //        // and verify no new tasks were submitted to executor
 //        taskBegan.await();
 //
-//        mapDataManager.refreshMapData();
+//        manager.refreshMapData();
 //
 //        verify(executor, times(1)).execute(any(Runnable.class));
 //
@@ -582,7 +617,7 @@ public class MapDataManagerTest {
 
         }
 
-        @NotNull
+        @NonNull
         @Override
         public Status getStatus() {
             return null;

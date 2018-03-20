@@ -26,17 +26,17 @@ class MapDataResource private constructor (val uri: URI, val repositoryId: Strin
     data class Resolved(val name: String, val type: Class<out MapDataProvider>) {
         constructor(name: String, type: Class<out MapDataProvider>, layerDescriptors: Set<MapLayerDescriptor>)
                 : this(name, type) {
-            this.layerDescriptors = layerDescriptors.associateBy({it.layerName})
+            this.layerDescriptors = layerDescriptors.associateBy({it.layerUri})
         }
-        var layerDescriptors: Map<String, MapLayerDescriptor> = emptyMap()
+        var layerDescriptors: Map<URI, MapLayerDescriptor> = emptyMap()
             private set
     }
 
     /**
-     * Return a map of [layer descriptors][MapLayerDescriptor] keyed by their [names][MapLayerDescriptor.layerName].
+     * Return a map of [layer descriptors][MapLayerDescriptor] keyed by their [URIs][MapLayerDescriptor.layerUri].
      * @return
      */
-    val layers: Map<String, MapLayerDescriptor> = resolved?.layerDescriptors ?: emptyMap()
+    val layers: Map<URI, MapLayerDescriptor> = resolved?.layerDescriptors ?: emptyMap()
     var refreshTimestamp: Long = System.currentTimeMillis()
         private set
     var bounds: LatLngBounds? = null
