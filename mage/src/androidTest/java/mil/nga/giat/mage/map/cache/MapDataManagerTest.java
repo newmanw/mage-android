@@ -27,13 +27,14 @@ import java.net.URISyntaxException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executor;
 
+import static java.util.Collections.emptyMap;
 import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.CoreMatchers.sameInstance;
 import static org.hamcrest.Matchers.equalTo;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
@@ -100,6 +101,17 @@ public class MapDataManagerTest {
         @Override
         public void refreshAvailableMapData(Map<URI, MapDataResource> existingResolved, Executor executor) {
             executor.execute(() -> {
+
+            });
+        }
+
+        @Override
+        protected void setValue(Set<MapDataResource> value) {
+            super.setValue(value);
+        }
+
+        private Runnable makeRefreshRunnable(Map<URI, MapDataResource> existingResolved) {
+            return () -> {
                 Set<MapDataResource> resources = new HashSet<>();
                 File[] files = dir.listFiles();
                 for (File file : files) {
@@ -113,12 +125,7 @@ public class MapDataManagerTest {
                     }
                 }
                 postValue(resources);
-            });
-        }
-
-        @Override
-        protected void setValue(Set<MapDataResource> value) {
-            super.setValue(value);
+            };
         }
 
         private File createFile(String name) {
@@ -175,18 +182,43 @@ public class MapDataManagerTest {
         TestLayerDescriptor(String overlayName, URI resourceUri, Class<? extends MapDataProvider> type) {
             super(overlayName, resourceUri, type);
         }
+
+        @Override
+        public String toString() {
+            return getLayerUri().toString();
+        }
     }
 
     private static Set<MapDataResource> setOf(MapDataResource... caches) {
         return Collections.unmodifiableSet(new HashSet<>(Arrays.asList(caches)));
     }
 
+    private static Set<MapDataResource> setOfResources(Collection<MapDataResource> resources) {
+        return Collections.unmodifiableSet(new HashSet<>(resources));
+    }
+
     private static Set<MapLayerDescriptor> setOf(MapLayerDescriptor... layers) {
         return Collections.unmodifiableSet(new HashSet<>(Arrays.asList(layers)));
     }
 
-    private static Set<MapLayerDescriptor> setOf(Collection<MapLayerDescriptor> layers) {
+    private static Set<MapLayerDescriptor> setOfLayers(Collection<MapLayerDescriptor> layers) {
         return Collections.unmodifiableSet(new HashSet<>(layers));
+    }
+
+    private static Map<URI, MapDataResource> mapOf(MapDataResource... resources) {
+        Map<URI, MapDataResource> map = new HashMap<>(resources.length);
+        for (MapDataResource res : resources) {
+            map.put(res.getUri(), res);
+        }
+        return map;
+    }
+
+    private static Map<URI, MapLayerDescriptor> mapOfLayers(MapDataResource... resources) {
+        Map<URI, MapLayerDescriptor> map = new HashMap<>();
+        for (MapDataResource res : resources) {
+            map.putAll(res.getLayers());
+        }
+        return map;
     }
 
     private static Set<MapLayerDescriptor> flattenLayers(MapDataResource... resources) {
@@ -232,11 +264,6 @@ public class MapDataManagerTest {
         assertTrue(cacheDir2.isDirectory());
 
         executor = mock(Executor.class);
-        doAnswer(invocationOnMock -> {
-            Runnable task = invocationOnMock.getArgument(0);
-            AsyncTask.THREAD_POOL_EXECUTOR.execute(task);
-            return null;
-        }).when(executor).execute(any(Runnable.class));
 
         catProvider = mock(CatProvider.class);
         dogProvider = mock(DogProvider.class);
@@ -260,6 +287,14 @@ public class MapDataManagerTest {
         listener = mock(MapDataManager.MapDataListener.class);
         manager = new MapDataManager(config);
         manager.addUpdateListener(listener);
+    }
+
+    private void activateExecutor() {
+        doAnswer(invocationOnMock -> {
+            Runnable task = invocationOnMock.getArgument(0);
+            AsyncTask.THREAD_POOL_EXECUTOR.execute(task);
+            return null;
+        }).when(executor).execute(any(Runnable.class));
     }
 
     @Test
@@ -331,17 +366,71 @@ public class MapDataManagerTest {
         manager = new MapDataManager(config);
         Map<URI, MapLayerDescriptor> layers = manager.getLayers();
 
-        assertThat(setOf(layers.values()), equalTo(flattenLayers(initial1, initial2, initial3)));
+        assertThat(setOfLayers(layers.values()), equalTo(flattenLayers(initial1, initial2, initial3)));
     }
 
     @Test
-    public void addsLayersWhenRepositoryAddsNewResources() {
-        fail("unimplemented");
+    @UiThreadTest
+    public void addsLayersAndResourcesWhenRepositoryAddsNewResources() {
+        manager = new MapDataManager(config);
+        MapDataResource repo1_1 = repo1.createResourceWithFileName("repo1.1.dog", null);
+        MapDataResource repo1_2 = repo1.buildResource("repo1.2.cat", catProvider).layers("repo1.2.cat.1", "repo1.2.cat.2").finish();
+        MapDataResource repo2_1 = repo2.buildResource("repo2.1.dog", dogProvider).layers("repo2.1.dog.1").finish();
+        repo1.setValue(setOf(repo1_1, repo1_2));
+        repo2.setValue(setOf(repo2_1));
+
+        assertThat(manager.getResources(), equalTo(mapOf(repo1_1, repo1_2, repo2_1)));
+        assertThat(manager.getLayers(), equalTo(mapOfLayers(repo1_1, repo1_2, repo2_1)));
     }
 
     @Test
-    public void removesLayersWhenRepositoryRemovesResources() {
-        fail("unimplemented");
+    @UiThreadTest
+    public void removesLayersAndResourcesWhenRepositoryRemovesResources() {
+        MapDataResource doomed = repo1.buildResource("doomed.dog", dogProvider).layers("doomed.1").finish();
+        repo1.setValue(setOf(doomed));
+        manager = new MapDataManager(config);
+
+        assertThat(manager.getResources(), equalTo(mapOf(doomed)));
+        assertThat(manager.getLayers(), equalTo(mapOfLayers(doomed)));
+
+        repo1.setValue(Collections.emptySet());
+
+        assertThat(manager.getResources(), equalTo(emptyMap()));
+        assertThat(manager.getLayers(), equalTo(emptyMap()));
+    }
+
+    @Test
+    @UiThreadTest
+    public void addsLayersWhenRepositoryUpdatesResource() {
+        MapDataResource mod = repo1.buildResource("mod.dog", dogProvider).layers("mod.1").finish();
+        repo1.setValue(setOf(mod));
+        manager = new MapDataManager(config);
+
+        assertThat(manager.getResources(), equalTo(mapOf(mod)));
+        assertThat(manager.getLayers(), equalTo(mapOfLayers(mod)));
+
+        mod = repo1.buildResource("mod.dog", dogProvider).layers("mod.1", "mod.2").finish();
+        repo1.setValue(setOf(mod));
+
+        assertThat(manager.getResources(), equalTo(mapOf(mod)));
+        assertThat(manager.getLayers(), equalTo(mapOfLayers(mod)));
+    }
+
+    @Test
+    @UiThreadTest
+    public void removesLayersWhenRepositoryUpdatesResource() {
+        MapDataResource mod = repo1.buildResource("mod.dog", dogProvider).layers("mod.1").finish();
+        repo1.setValue(setOf(mod));
+        manager = new MapDataManager(config);
+
+        assertThat(manager.getResources(), equalTo(mapOf(mod)));
+        assertThat(manager.getLayers(), equalTo(mapOfLayers(mod)));
+
+        mod = repo1.buildResource("mod.dog", dogProvider).finish();
+        repo1.setValue(setOf(mod));
+
+        assertThat(manager.getResources(), equalTo(mapOf(mod)));
+        assertThat(manager.getLayers(), equalTo(emptyMap()));
     }
 
     @Test
@@ -352,6 +441,11 @@ public class MapDataManagerTest {
     @Test
     public void resolvesNewResourcesThatTheRepositoryDidNotResolve() {
         fail("unimplemented");
+    }
+
+    @Test
+    public void providesResolvedResourcesToRepositoryForRefresh() {
+
     }
 
 //    @Test
