@@ -3,6 +3,7 @@ package mil.nga.giat.mage.map.cache;
 import android.annotation.SuppressLint;
 import android.os.AsyncTask;
 import android.support.annotation.MainThread;
+import android.support.annotation.NonNull;
 
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapView;
@@ -11,11 +12,13 @@ import com.google.android.gms.maps.model.LatLng;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * A {@code MapLayerManager} binds {@link MapLayerDescriptor layer data} from various
@@ -105,14 +108,6 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
         return 1.0f / (count + 1.0f);
     }
 
-    private static String keyForCache(MapDataResource cache) {
-        return cache.getResolved().getName() + ":" + cache.getResolved().getType().getName();
-    }
-
-    private static String keyForCache(MapLayerDescriptor overlay) {
-        return overlay.getResourceUri() + ":" + overlay.getDataType().getName();
-    }
-
     private final MapDataManager mapDataManager;
     private final GoogleMap map;
     private final Map<Class<? extends MapDataProvider>, MapDataProvider> providers = new HashMap<>();
@@ -132,77 +127,32 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
         mapDataManager.addUpdateListener(this);
     }
 
-    void onMapDataUpdated(Set<MapLayerDescriptor> descriptors) {
-        Map<String, MapLayerDescriptor> updateIndex = new HashMap<>(descriptors.size());
-        for (MapLayerDescriptor desc : descriptors) {
-            updateIndex.put(keyForCache(desc), desc);
-        }
-        int position = 0;
-        Iterator<MapLayerDescriptor> orderIterator = overlaysInZOrder.iterator();
-        while (orderIterator.hasNext()) {
-            MapLayerDescriptor overlay = orderIterator.next();
-            String cacheKey = keyForCache(overlay);
-            MapLayerDescriptor updated = updateIndex.get(cacheKey);
-            if (updated == null) {
-                removeFromMapReturningVisibility(overlay);
-                orderIterator.remove();
-                position--;
-            }
-            else if (updated != overlay) {
-                refreshOverlayAtPositionFromUpdatedCache(position, updated);
-            }
-            position++;
-        }
-    }
-
     @Override
-    public void onMapDataUpdated(MapDataManager.MapDataUpdate update) {
-        Set<String> removedCacheNames = new HashSet<>(update.getRemoved().size());
-        for (MapDataResource removed : update.getRemoved()) {
-			removedCacheNames.add(removed.getResolved().getName());
-		}
-		Map<URI, Map<URI, MapLayerDescriptor>> updatedCaches = new HashMap<>(update.getUpdated().size());
-        for (MapDataResource cache : update.getUpdated()) {
-            Map<URI, MapLayerDescriptor> updatedOverlays = new HashMap<>(cache.getLayers());
-            updatedCaches.put(cache.getUri(), updatedOverlays);
-        }
-
+    public void onMapDataUpdated(@NonNull MapDataManager.MapDataUpdate update) {
         int position = 0;
         Iterator<MapLayerDescriptor> orderIterator = overlaysInZOrder.iterator();
+        Map<URI, MapLayerDescriptor> allLayers = update.getSource().getLayers();
         while (orderIterator.hasNext()) {
-            MapLayerDescriptor overlay = orderIterator.next();
-            if (removedCacheNames.contains(overlay.getResourceUri())) {
-                removeFromMapReturningVisibility(overlay);
+            MapLayerDescriptor existingLayer = orderIterator.next();
+            MapLayerDescriptor updatedLayer = allLayers.get(existingLayer.getLayerUri());
+            if (updatedLayer == null) {
+                removeFromMapReturningVisibility(existingLayer);
                 orderIterator.remove();
                 position--;
             }
             else {
-                Map<URI, MapLayerDescriptor> updatedCacheOverlays = updatedCaches.get(overlay.getResourceUri());
-                if (updatedCacheOverlays != null) {
-                    MapLayerDescriptor updatedOverlay = updatedCacheOverlays.remove(overlay.getLayerUri());
-                    if (updatedOverlay != null) {
-                        refreshOverlayAtPositionFromUpdatedCache(position, updatedOverlay);
-                    }
-                    else {
-                        removeFromMapReturningVisibility(overlay);
-                        orderIterator.remove();
-                        position--;
-                    }
-                }
+                refreshOverlayAtPositionFromUpdatedResource(position, updatedLayer);
             }
             position++;
         }
-
-        for (Map<URI, MapLayerDescriptor> newOverlaysFromUpdatedCaches : updatedCaches.values()) {
-            overlaysInZOrder.addAll(newOverlaysFromUpdatedCaches.values());
+        SortedSet<MapLayerDescriptor> addedLayersSorted = new TreeSet<>(
+            (MapLayerDescriptor a, MapLayerDescriptor b) -> a.getLayerTitle().compareTo(b.getLayerTitle()));
+        for (MapDataResource resource : update.getAdded().values()) {
+            addedLayersSorted.addAll(resource.getLayers().values());
         }
-
-        for (MapDataResource added : update.getAdded()) {
-            overlaysInZOrder.addAll(added.getLayers().values());
-        }
-
+        overlaysInZOrder.addAll(addedLayersSorted);
         for (MapLayerListener listener : listeners) {
-		    listener.layersChanged();
+            listener.layersChanged();
         }
     }
 
@@ -312,7 +262,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
         return wasVisible;
     }
 
-    private void refreshOverlayAtPositionFromUpdatedCache(int position, MapLayerDescriptor updatedOverlay) {
+    private void refreshOverlayAtPositionFromUpdatedResource(int position, MapLayerDescriptor updatedOverlay) {
         MapLayerDescriptor currentOverlay = overlaysInZOrder.get(position);
         if (currentOverlay == updatedOverlay) {
             return;
@@ -339,7 +289,9 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
         MapLayer onMap = overlaysOnMap.remove(overlay);
         if (onMap == null) {
             // TODO: create a PendingLayer MapLayer implementation with a reference to the CreateLayer task
-            MapDataProvider provider = providers.get(overlay.getDataType());
+            MapDataResource resource = mapDataManager.getResources().get(overlay.getResourceUri());
+            Class<? extends MapDataProvider> resourceType = resource.getResolved().getType();
+            MapDataProvider provider = providers.get(resourceType);
             new CreateLayerTask(overlay, provider, position).execute();
         }
         else {

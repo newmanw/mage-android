@@ -3,16 +3,21 @@ package mil.nga.giat.mage.map.cache;
 import android.support.annotation.WorkerThread;
 
 /**
- * A MapDataProvider represents a specific cache data format that can put overlays on a map.
+ * A MapDataProvider represents a specific data format that can put overlays on a map.
  *
- * TODO: thread-safety coniderations - {@link MapDataManager} for now only invokes these methods serially
- * across all providers, but could be otherwise
+ * TODO: eventually this should change to async calls from the main thread to resolveResource() and
+ * createMapLayerFromDescriptor() so a provider can use its own configured background
+ * executor based on what kind of work it does to resolve resources and create map
+ * objects, rather than whatever executor {@link MapDataManager} uses.
+ * CompletableFuture would be nice but requires min SDK 24 or higher.  an option could
+ * be to use https://github.com/retrostreams/android-retrofuture, or maybe rxjava/rxandroid or
+ * some such thing.
  */
 @WorkerThread
 public interface MapDataProvider {
 
     /**
-     * Does this provider recognize the given file as its type of cache?
+     * Does this provider recognize the given resource as its data type?
      *
      * @param resource
      * @return

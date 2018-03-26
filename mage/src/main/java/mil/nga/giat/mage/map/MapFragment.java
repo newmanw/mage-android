@@ -1119,7 +1119,7 @@ public class MapFragment extends Fragment implements
 		if (update.getAdded().size() != 1) {
 			return;
 		}
-		MapDataResource explicitlyRequestedCache = update.getAdded().iterator().next();
+		MapDataResource explicitlyRequestedCache = update.getAdded().values().iterator().next();
 		for (MapLayerDescriptor layerDesc : explicitlyRequestedCache.getLayers().values()) {
 			mapOverlayManager.showOverlay(layerDesc);
 		}

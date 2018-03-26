@@ -23,6 +23,8 @@ abstract class MapLayerDescriptor protected constructor(
         val resourceUri: URI,
         /**
          * @return the [type][MapDataProvider] of the [data resource][MapDataResource] that contains this layer's data
+         *
+         * TODO: this should probably be removed.  it's redundant w/respect to the provider class supplied to the owning MapDataResource
          */
         val dataType: Class<out MapDataProvider>) {
 

@@ -7,13 +7,18 @@ import android.arch.lifecycle.LifecycleOwner
 import android.arch.lifecycle.LifecycleRegistry
 import android.arch.lifecycle.Observer
 import android.os.AsyncTask
+import android.os.Handler
+import android.os.Looper
+import android.os.Message
 import android.support.annotation.MainThread
 import com.google.android.gms.maps.GoogleMap
 import java.io.File
 import java.net.URI
 import java.util.*
 import java.util.concurrent.Executor
+import kotlin.collections.HashMap
 import kotlin.collections.HashSet
+import kotlin.collections.LinkedHashMap
 
 
 @MainThread
@@ -26,7 +31,8 @@ class MapDataManager(config: Config) : LifecycleOwner {
     private val listeners = ArrayList<MapDataListener>()
     private val lifecycle = LifecycleRegistry(this)
     private val repositoryResources = HashMap<String, Set<MapDataResource>>()
-    private val importResourcesForRefreshTask: ResolveResourcesTask? = null
+    private val pendingUpdates = HashMap<String, PendingUpdate>()
+    private var pendingResolve = LinkedHashMap<URI, MapDataResource>()
 
     val resources: Map<URI, MapDataResource>
         get() = repositoryResources.flatMap({ it.value }).associateBy({ it.uri })
@@ -50,13 +56,12 @@ class MapDataManager(config: Config) : LifecycleOwner {
      * anonymous implementation created at the call site of the [configuration][Config.updatePermission].
      * For example:
      *
-     *
      * <pre>
      * new MapDataManager(new MapDataManager.Config()<br></br>
      * .updatePermission(new MapDataManager.CreateUpdatePermission(){})
      * // other config items
      * );
-    </pre> *
+     * </pre>
      *
      * This prevents the programmer error of creating update objects outside of the
      * `MapDataManager` instance to [deliver][MapDataListener.onMapDataUpdated]
@@ -64,7 +69,12 @@ class MapDataManager(config: Config) : LifecycleOwner {
      */
     interface CreateUpdatePermission
 
-    inner class MapDataUpdate(updatePermission: CreateUpdatePermission, val added: Set<MapDataResource>, val updated: Set<MapDataResource>, val removed: Set<MapDataResource>) {
+    inner class MapDataUpdate(
+            updatePermission: CreateUpdatePermission,
+            val added: Map<URI, MapDataResource>,
+            val updated: Map<URI, MapDataResource>,
+            val removed: Map<URI, MapDataResource>) {
+
         val source = this@MapDataManager
 
         init {
@@ -72,6 +82,14 @@ class MapDataManager(config: Config) : LifecycleOwner {
                 throw Error("erroneous attempt to create update from cache manager instance " + this@MapDataManager)
             }
         }
+    }
+
+    private class PendingUpdate(
+            val repository: MapDataRepository,
+            val oldResources: HashMap<URI, MapDataResource>,
+            var newResources: HashMap<URI, MapDataResource>,
+            val toResolve: HashMap<URI, MapDataResource>) {
+        val isReady: Boolean get() = toResolve.isEmpty()
     }
 
     class Config {
@@ -117,12 +135,12 @@ class MapDataManager(config: Config) : LifecycleOwner {
         repositories = config.repositories!!
         providers = config.providers!!
         executor = config.executor!!
+        lifecycle.markState(Lifecycle.State.RESUMED)
         for (repo in repositories) {
             val resources = repo.value ?: HashSet()
             repositoryResources[repo.id] = resources
             repo.observe(this, RepositoryObserver(repo))
         }
-        lifecycle.markState(Lifecycle.State.RESUMED)
     }
 
     fun addUpdateListener(listener: MapDataListener) {
@@ -133,12 +151,14 @@ class MapDataManager(config: Config) : LifecycleOwner {
         listeners.remove(listener)
     }
 
-    fun tryImportResource(resourceUri: URI) {
+    fun tryImportResource(resourceUri: URI): Boolean {
         for (repo in repositories) {
             if (repo.ownsResource(resourceUri)) {
                 repo.refreshAvailableMapData(resolvedResourcesForRepo(repo), executor)
+                return true
             }
         }
+        return false
     }
 
     override fun getLifecycle(): Lifecycle {
@@ -146,7 +166,7 @@ class MapDataManager(config: Config) : LifecycleOwner {
     }
 
     /**
-     * Discover new resources available in standard [locations][MapDataRepository], then remove defunct resources.
+     * Discover new resources available in known [locations][MapDataRepository], then remove defunct resources.
      * Asynchronous notifications to [listeners][.addUpdateListener]
      * will result, one notification per refresh, per listener.  Only one refresh can be active at any moment.
      */
@@ -160,22 +180,59 @@ class MapDataManager(config: Config) : LifecycleOwner {
         return MapLayerManager(this, Arrays.asList(*providers), map)
     }
 
+    fun destroy() {
+        listeners.clear()
+        lifecycle.markState(Lifecycle.State.DESTROYED)
+    }
+
     private fun resolvedResourcesForRepo(repo: MapDataRepository): Map<URI, MapDataResource>? {
         return repositoryResources[repo.id]?.associateBy({ it.uri })
     }
 
-    private fun onMapDataChanged(resources: Set<MapDataResource>?, source: MapDataRepository) {
-        val toResolve = HashSet<MapDataResource>()
-        for (resource in resources!!) {
+    private fun onMapDataChanged(resources: Set<MapDataResource>, source: MapDataRepository) {
+        val oldResources = (repositoryResources[source.id] ?: emptySet()).associateByTo(HashMap<URI, MapDataResource>(), MapDataResource::uri)
+        val newResources = resources.associateByTo(HashMap(), MapDataResource::uri)
+        val toResolve = HashMap<URI, MapDataResource>()
+        for (resource in resources) {
             if (resource.resolved == null) {
-                toResolve.add(resource)
+                toResolve[resource.uri] = resource
             }
         }
         if (toResolve.isEmpty()) {
+            repositoryResources[source.id] = resources
+            val added = HashMap<URI, MapDataResource>()
+            val updated = HashMap<URI, MapDataResource>()
+            for ((key, value) in newResources) {
+                val oldValue = oldResources.remove(key)
+                if (oldValue == null) {
+                    added[key] = value
+                }
+                else if (value.contentTimestamp > oldValue.contentTimestamp) {
+                    updated[key] = value
+                }
+            }
+            if (added.isEmpty() && updated.isEmpty() && oldResources.isEmpty()) {
+                return
+            }
+            val update = MapDataUpdate(updatePermission, added, updated, oldResources)
+            for (listener in listeners) {
+                listener.onMapDataUpdated(update)
+            }
             return
         }
-        val resolveTask = ResolveResourcesTask(toResolve, source)
-        resolveTask.executeOnExecutor(executor)
+        var pendingUpdate = pendingUpdates[source.id]
+        // TODO: need to consider resources that were already resolved in the pending update,
+        // but that may have been removed in this change
+        if (pendingUpdate == null) {
+            pendingUpdate = PendingUpdate(source, oldResources, newResources, toResolve)
+            pendingUpdates[source.id] = pendingUpdate
+        }
+        else {
+            pendingUpdate.newResources = resources.associateByTo(HashMap(), MapDataResource::uri)
+        }
+        for (unresolved in toResolve.values) {
+            val t: AsyncTask<Void,Void,Void>? = null
+        }
     }
 
     private fun onResolveFinished(result: ResolveResult) {
@@ -185,7 +242,7 @@ class MapDataManager(config: Config) : LifecycleOwner {
     private inner class RepositoryObserver internal constructor(private val repo: MapDataRepository) : Observer<Set<MapDataResource>> {
 
         override fun onChanged(data: Set<MapDataResource>?) {
-            onMapDataChanged(data, repo)
+            onMapDataChanged(data ?: emptySet(), repo)
         }
     }
 
@@ -223,12 +280,16 @@ class MapDataManager(config: Config) : LifecycleOwner {
                 } catch (e: MapDataResolveException) {
                     fails[resource] = e
                 }
-
             }
             return ResolveResult(resolved, fails, repo)
         }
 
         override fun onPostExecute(result: ResolveResult) {
+            val h = object: Handler(Looper.getMainLooper()) {
+                override fun handleMessage(msg: Message?) {
+                    super.handleMessage(msg)
+                }
+            }
             onResolveFinished(result)
         }
     }
