@@ -1,9 +1,9 @@
 package mil.nga.giat.mage.map.cache;
 
 import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 import org.junit.Test;
 
 import java.net.URI;

@@ -7,8 +7,7 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Environment;
 import android.support.annotation.NonNull;
-
-import org.jetbrains.annotations.Nullable;
+import android.support.annotation.Nullable;
 
 import java.io.File;
 import java.io.IOException;

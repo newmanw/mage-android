@@ -5,12 +5,12 @@ import android.annotation.SuppressLint;
 import android.app.Application;
 import android.os.AsyncTask;
 import android.support.annotation.MainThread;
+import android.support.annotation.Nullable;
 import android.util.Log;
 
 import com.google.common.io.ByteStreams;
 
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.io.FileOutputStream;
