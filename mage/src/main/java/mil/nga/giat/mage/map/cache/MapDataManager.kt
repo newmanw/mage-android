@@ -14,6 +14,7 @@ import java.net.URI
 import java.util.*
 import java.util.concurrent.Executor
 import kotlin.collections.HashMap
+import kotlin.collections.HashSet
 
 
 @MainThread
@@ -165,7 +166,7 @@ class MapDataManager(config: Config) : LifecycleOwner {
         if (resolveTask.get() !== result) {
             throw Error("stored resolve task's result differs from result argument")
         }
-        finishPendingChangeForResolveResult(result)
+        result.repository.onExternallyResloved(HashSet(result.resolved.values))
     }
 
     private fun finishPendingChangeForResolveResult(result: ResolveRepositoryChangeResult) {

@@ -9,6 +9,7 @@ import android.support.test.annotation.UiThreadTest;
 import android.support.test.filters.SmallTest;
 import android.support.test.runner.AndroidJUnit4;
 
+import org.hamcrest.Matcher;
 import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Before;
@@ -46,6 +47,7 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.sameInstance;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasEntry;
 import static org.junit.Assert.assertThat;
@@ -381,7 +383,7 @@ public class MapDataManagerTest {
     }
 
     private VerificationWithTimeout withinOneSecond() {
-        return Mockito.timeout(100000);
+        return Mockito.timeout(300000);
     }
 
     @Test
@@ -604,7 +606,7 @@ public class MapDataManagerTest {
     }
 
     @Test
-    public void resolvesNewResourcesAsynchronouslyRepositoryDidNotResolve() throws MapDataResolveException {
+    public void asynchronouslyResolvesNewUnresolvedResources() throws MapDataResolveException {
         activateExecutor();
         MapDataResource res1 = repo1.buildResource("res1.dog", null).finish();
         MapDataResource res2 = repo1.buildResource("res2.cat", null).finish();
@@ -622,10 +624,6 @@ public class MapDataManagerTest {
 
         deactivateExecutorAndWait();
 
-        assertThat(manager.getResources(), is(mapOf(res1Resolved, res2Resolved)));
-        assertThat(manager.getResources(), allOf(
-            hasEntry(is(res1.getUri()), sameInstance(res1Resolved)),
-            hasEntry(is(res2.getUri()), sameInstance(res2Resolved))));
         MapDataManager.MapDataUpdate update = updateCaptor.getValue();
         assertThat(update.getAdded(), is(mapOf(res1Resolved, res2Resolved)));
         assertThat(update.getAdded(), allOf(
@@ -633,13 +631,12 @@ public class MapDataManagerTest {
             hasEntry(is(res2.getUri()), sameInstance(res2Resolved))));
         assertThat(update.getUpdated(), is(emptyMap()));
         assertThat(update.getRemoved(), is(emptyMap()));
+        assertThat(manager.getResources(), is(mapOf(res1Resolved, res2Resolved)));
+        assertThat(manager.getResources(), allOf(
+            hasEntry(is(res1.getUri()), sameInstance(res1Resolved)),
+            hasEntry(is(res2.getUri()), sameInstance(res2Resolved))));
         assertThat(manager.getLayers(), is(mapOfLayers(res1Resolved, res2Resolved)));
-    }
-
-    @Test
-    @UiThreadTest
-    public void notifiesRepositoryAboutResolvedResources() {
-
+        assertThat(repo1.getValue(), containsInAnyOrder(sameInstance(res1Resolved), sameInstance(res2Resolved)));
     }
 
     @Test

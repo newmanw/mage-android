@@ -1,11 +1,15 @@
 package mil.nga.giat.mage.map.cache;
 
+import android.arch.lifecycle.LifecycleOwner;
 import android.arch.lifecycle.LiveData;
+import android.arch.lifecycle.Observer;
 import android.support.annotation.MainThread;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 
 import java.net.URI;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executor;
@@ -44,12 +48,27 @@ public abstract class MapDataRepository extends LiveData<Set<MapDataResource>> i
         return super.getValue();
     }
 
+    /**
+     * Notify this repository that resources have been {@link MapDataProvider#resolveResource(MapDataResource) resolved}.
+     * This default implementation will retain only the resources from the given set that are present in this
+     * repository's {@link #getValue() current} resource set.  This will {@link #postValue(Object) asynchronously set}
+     * a new value for this repository's resource set resulting in notifications to {@link #observe(LifecycleOwner, Observer) observers}.
+     * @param resources
+     */
+    @MainThread
+    public final void onExternallyResloved(Set<MapDataResource> resources) {
+        Set<MapDataResource> existing = getValue();
+        if (existing == null) {
+            existing = Collections.emptySet();
+        }
+        Set<MapDataResource> merged = new HashSet<>(resources);
+        merged.retainAll(existing);
+        merged.addAll(existing);
+        postValue(Collections.unmodifiableSet(merged));
+    }
+
     @MainThread
     public abstract boolean ownsResource(URI resourceUri);
-
-    // TODO: maybe necessary, maybe not, with the resolvedResources already being passed to refreshAvailableMapData()
-//    @MainThread
-//    public abstract void onResolved(Set<MapDataResource> resource);
 
     @MainThread
     public abstract void refreshAvailableMapData(Map<URI, MapDataResource> resolvedResources, Executor executor);
