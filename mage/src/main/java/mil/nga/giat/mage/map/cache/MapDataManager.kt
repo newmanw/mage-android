@@ -7,9 +7,6 @@ import android.arch.lifecycle.LifecycleOwner
 import android.arch.lifecycle.LifecycleRegistry
 import android.arch.lifecycle.Observer
 import android.os.AsyncTask
-import android.os.Handler
-import android.os.Looper
-import android.os.Message
 import android.support.annotation.MainThread
 import com.google.android.gms.maps.GoogleMap
 import java.io.File
@@ -17,8 +14,6 @@ import java.net.URI
 import java.util.*
 import java.util.concurrent.Executor
 import kotlin.collections.HashMap
-import kotlin.collections.HashSet
-import kotlin.collections.LinkedHashMap
 
 
 @MainThread
@@ -30,16 +25,11 @@ class MapDataManager(config: Config) : LifecycleOwner {
     private val providers: Array<out MapDataProvider>
     private val listeners = ArrayList<MapDataListener>()
     private val lifecycle = LifecycleRegistry(this)
-    private val repositoryResources = HashMap<String, Set<MapDataResource>>()
-    private val pendingUpdates = HashMap<String, PendingUpdate>()
-    private var pendingResolve = LinkedHashMap<URI, MapDataResource>()
+    private val mutableResources = HashMap<URI, MapDataResource>()
+    private val pendingChangeForRepository = HashMap<String, ResolveRepositoryChangeTask>()
 
-    val resources: Map<URI, MapDataResource>
-        get() = repositoryResources.flatMap({ it.value }).associateBy({ it.uri })
-
-    var layers: Map<URI, MapLayerDescriptor> = emptyMap()
-        get() = repositoryResources.asSequence().flatMap({ it.value.asSequence() }).flatMap({ it.layers.asSequence() }).map({ it.value }).associateBy({ it.layerUri })
-        private set
+    val resources: Map<URI, MapDataResource> = mutableResources
+    val layers: Map<URI, MapLayerDescriptor> get() = mutableResources.values.flatMap({ it.layers.values }).associateBy({ it.layerUri })
 
     /**
      * Implement this interface and [register][.addUpdateListener]
@@ -47,49 +37,6 @@ class MapDataManager(config: Config) : LifecycleOwner {
      */
     interface MapDataListener {
         fun onMapDataUpdated(update: MapDataUpdate)
-    }
-
-    /**
-     * The create update permission is an opaque interface that enforces only holders of
-     * the the permission instance have the ability to create a [MapDataUpdate]
-     * associated with a given instance of [MapDataManager].  This can simply be an
-     * anonymous implementation created at the call site of the [configuration][Config.updatePermission].
-     * For example:
-     *
-     * <pre>
-     * new MapDataManager(new MapDataManager.Config()<br></br>
-     * .updatePermission(new MapDataManager.CreateUpdatePermission(){})
-     * // other config items
-     * );
-     * </pre>
-     *
-     * This prevents the programmer error of creating update objects outside of the
-     * `MapDataManager` instance to [deliver][MapDataListener.onMapDataUpdated]
-     * to listeners.
-     */
-    interface CreateUpdatePermission
-
-    inner class MapDataUpdate(
-            updatePermission: CreateUpdatePermission,
-            val added: Map<URI, MapDataResource>,
-            val updated: Map<URI, MapDataResource>,
-            val removed: Map<URI, MapDataResource>) {
-
-        val source = this@MapDataManager
-
-        init {
-            if (updatePermission !== source.updatePermission) {
-                throw Error("erroneous attempt to create update from cache manager instance " + this@MapDataManager)
-            }
-        }
-    }
-
-    private class PendingUpdate(
-            val repository: MapDataRepository,
-            val oldResources: HashMap<URI, MapDataResource>,
-            var newResources: HashMap<URI, MapDataResource>,
-            val toResolve: HashMap<URI, MapDataResource>) {
-        val isReady: Boolean get() = toResolve.isEmpty()
     }
 
     class Config {
@@ -137,8 +84,7 @@ class MapDataManager(config: Config) : LifecycleOwner {
         executor = config.executor!!
         lifecycle.markState(Lifecycle.State.RESUMED)
         for (repo in repositories) {
-            val resources = repo.value ?: HashSet()
-            repositoryResources[repo.id] = resources
+            mutableResources.putAll(repo.value?.associateBy(MapDataResource::uri) ?: emptyMap())
             repo.observe(this, RepositoryObserver(repo))
         }
     }
@@ -154,7 +100,7 @@ class MapDataManager(config: Config) : LifecycleOwner {
     fun tryImportResource(resourceUri: URI): Boolean {
         for (repo in repositories) {
             if (repo.ownsResource(resourceUri)) {
-                repo.refreshAvailableMapData(resolvedResourcesForRepo(repo), executor)
+                repo.refreshAvailableMapData(resourcesForRepo(repo), executor)
                 return true
             }
         }
@@ -172,7 +118,7 @@ class MapDataManager(config: Config) : LifecycleOwner {
      */
     fun refreshMapData() {
         for (repo in repositories) {
-            repo.refreshAvailableMapData(resolvedResourcesForRepo(repo), executor)
+            repo.refreshAvailableMapData(resourcesForRepo(repo), executor)
         }
     }
 
@@ -185,12 +131,12 @@ class MapDataManager(config: Config) : LifecycleOwner {
         lifecycle.markState(Lifecycle.State.DESTROYED)
     }
 
-    private fun resolvedResourcesForRepo(repo: MapDataRepository): Map<URI, MapDataResource>? {
-        return repositoryResources[repo.id]?.associateBy({ it.uri })
+    private fun resourcesForRepo(repo: MapDataRepository): Map<URI, MapDataResource> {
+        return mutableResources.filter { it.value.repositoryId == repo.id }
     }
 
     private fun onMapDataChanged(resources: Set<MapDataResource>, source: MapDataRepository) {
-        val oldResources = (repositoryResources[source.id] ?: emptySet()).associateByTo(HashMap<URI, MapDataResource>(), MapDataResource::uri)
+        val oldResources = resourcesForRepo(source).toMutableMap()
         val newResources = resources.associateByTo(HashMap(), MapDataResource::uri)
         val toResolve = HashMap<URI, MapDataResource>()
         for (resource in resources) {
@@ -199,46 +145,87 @@ class MapDataManager(config: Config) : LifecycleOwner {
             }
         }
         if (toResolve.isEmpty()) {
-            repositoryResources[source.id] = resources
-            val added = HashMap<URI, MapDataResource>()
-            val updated = HashMap<URI, MapDataResource>()
-            for ((key, value) in newResources) {
-                val oldValue = oldResources.remove(key)
-                if (oldValue == null) {
-                    added[key] = value
-                }
-                else if (value.contentTimestamp > oldValue.contentTimestamp) {
-                    updated[key] = value
-                }
-            }
-            if (added.isEmpty() && updated.isEmpty() && oldResources.isEmpty()) {
-                return
-            }
-            val update = MapDataUpdate(updatePermission, added, updated, oldResources)
-            for (listener in listeners) {
-                listener.onMapDataUpdated(update)
-            }
+            // TODO: dispatch immediately or go through the async flow?
+            val change = ResolveRepositoryChangeResult(source, oldResources, newResources)
+            change.resolved.putAll(newResources.mapKeys { it.value })
+            finishPendingChangeForResolveResult(change)
             return
         }
-        var pendingUpdate = pendingUpdates[source.id]
-        // TODO: need to consider resources that were already resolved in the pending update,
-        // but that may have been removed in this change
-        if (pendingUpdate == null) {
-            pendingUpdate = PendingUpdate(source, oldResources, newResources, toResolve)
-            pendingUpdates[source.id] = pendingUpdate
+        val resolveTask = ResolveRepositoryChangeTask(source, oldResources, newResources, toResolve)
+        pendingChangeForRepository[source.id] = resolveTask
+        resolveTask.executeOnExecutor(executor)
+    }
+
+    private fun onResolveFinished(result: ResolveRepositoryChangeResult) {
+        val resolveTask = pendingChangeForRepository.remove(result.repository.id)!!
+        if (resolveTask.isCancelled) {
+            // TODO something
+            return
         }
-        else {
-            pendingUpdate.newResources = resources.associateByTo(HashMap(), MapDataResource::uri)
+        if (resolveTask.get() !== result) {
+            throw Error("stored resolve task's result differs from result argument")
         }
-        for (unresolved in toResolve.values) {
-            val t: AsyncTask<Void,Void,Void>? = null
+        finishPendingChangeForResolveResult(result)
+    }
+
+    private fun finishPendingChangeForResolveResult(result: ResolveRepositoryChangeResult) {
+        val added = HashMap<URI, MapDataResource>()
+        val updated = HashMap<URI, MapDataResource>()
+        val removed = result.oldResources
+        for ((key, value) in result.resolved) {
+            val oldValue = removed.remove(value.uri)
+            if (oldValue == null) {
+                added[value.uri] = value
+            }
+            else if (value.contentTimestamp > oldValue.contentTimestamp) {
+                updated[value.uri] = value
+            }
+        }
+        if (added.isEmpty() && updated.isEmpty() && removed.isEmpty()) {
+            return
+        }
+        mutableResources.putAll(result.resolved.mapKeys { it.key.uri })
+        removed.keys.forEach({ mutableResources.remove(it) })
+        val update = MapDataUpdate(updatePermission, added, updated, removed)
+        for (listener in listeners) {
+            listener.onMapDataUpdated(update)
         }
     }
 
-    private fun onResolveFinished(result: ResolveResult) {
+    /**
+     * The create update permission is an opaque interface that enforces only holders of
+     * the the permission instance have the ability to create a [MapDataUpdate]
+     * associated with a given instance of [MapDataManager].  This can simply be an
+     * anonymous implementation created at the call site of the [configuration][Config.updatePermission].
+     * For example:
+     *
+     * <pre>
+     * new MapDataManager(new MapDataManager.Config()<br></br>
+     * .updatePermission(new MapDataManager.CreateUpdatePermission(){})
+     * // other config items
+     * );
+     * </pre>
+     *
+     * This prevents the programmer error of creating update objects outside of the
+     * `MapDataManager` instance to [deliver][MapDataListener.onMapDataUpdated]
+     * to listeners.
+     */
+    interface CreateUpdatePermission
 
+    inner class MapDataUpdate(
+            updatePermission: CreateUpdatePermission,
+            val added: Map<URI, MapDataResource>,
+            val updated: Map<URI, MapDataResource>,
+            val removed: Map<URI, MapDataResource>) {
+
+        val source = this@MapDataManager
+
+        init {
+            if (updatePermission !== source.updatePermission) {
+                throw Error("erroneous attempt to create update from cache manager instance " + this@MapDataManager)
+            }
+        }
     }
-
     private inner class RepositoryObserver internal constructor(private val repo: MapDataRepository) : Observer<Set<MapDataResource>> {
 
         override fun onChanged(data: Set<MapDataResource>?) {
@@ -247,19 +234,23 @@ class MapDataManager(config: Config) : LifecycleOwner {
     }
 
     @SuppressLint("StaticFieldLeak")
-    private inner class ResolveResourcesTask
-    internal constructor(unresolved: Set<MapDataResource>, private val repo: MapDataRepository) : AsyncTask<Void, Void, ResolveResult>() {
+    private inner class ResolveRepositoryChangeTask internal constructor(
+            repository: MapDataRepository,
+            oldResources: MutableMap<URI, MapDataResource>,
+            newResources: MutableMap<URI, MapDataResource>,
+            toResolve: MutableMap<URI, MapDataResource>) : AsyncTask<Void, ResolveRepositoryChangeProgress, ResolveRepositoryChangeResult>() {
 
-        private val unresolved: Array<MapDataResource> = unresolved.toTypedArray()
+        private val resolveQueue = ArrayDeque<MapDataResource>(toResolve.values)
+        private val result = ResolveRepositoryChangeResult(repository, oldResources, newResources)
 
         @Throws(MapDataResolveException::class)
-        private fun importFromFirstCapableProvider(resource: MapDataResource): MapDataResource {
+        private fun resolveWithFirstCapableProvider(resource: MapDataResource): MapDataResource {
             val uri = resource.uri
             for (provider in providers) {
                 if (uri.scheme.equals("file", ignoreCase = true)) {
-                    val cacheFile = File(uri)
-                    if (!cacheFile.canRead()) {
-                        throw MapDataResolveException(uri, "cache file is not readable or does not exist: " + cacheFile.name)
+                    val resourceFile = File(uri)
+                    if (!resourceFile.canRead()) {
+                        throw MapDataResolveException(uri, "resource file is not readable or does not exist: ${resourceFile.name}")
                     }
                 }
                 if (provider.canHandleResource(resource)) {
@@ -269,36 +260,59 @@ class MapDataManager(config: Config) : LifecycleOwner {
             throw MapDataResolveException(uri, "no cache provider could handle file $resource")
         }
 
-        override fun doInBackground(vararg nothing: Void): ResolveResult {
-            val resolved = HashMap<MapDataResource, MapDataResource>(unresolved.size)
-            val fails = HashMap<MapDataResource, MapDataResolveException>(unresolved.size)
-            for (resource in unresolved) {
-                val imported: MapDataResource
+        override fun doInBackground(vararg nothing: Void): ResolveRepositoryChangeResult {
+            while (resolveQueue.size > 0 && !isCancelled) {
+                val unresolved = resolveQueue.poll()
                 try {
-                    imported = importFromFirstCapableProvider(resource)
-                    resolved[imported] = imported
-                } catch (e: MapDataResolveException) {
-                    fails[resource] = e
+                    val resolved = resolveWithFirstCapableProvider(unresolved)
+                    publishProgress(ResolveRepositoryChangeProgress(unresolved, resolved))
+                }
+                catch (e: MapDataResolveException) {
+                    publishProgress(ResolveRepositoryChangeProgress(unresolved, e))
                 }
             }
-            return ResolveResult(resolved, fails, repo)
+            return result
         }
 
-        override fun onPostExecute(result: ResolveResult) {
-            val h = object: Handler(Looper.getMainLooper()) {
-                override fun handleMessage(msg: Message?) {
-                    super.handleMessage(msg)
-                }
+        override fun onProgressUpdate(vararg values: ResolveRepositoryChangeProgress?) {
+            val update = values[0]!!
+            if (update.resolved != null) {
+                result.resolved[update.unresolved] = update.resolved
             }
+            else {
+                result.failed[update.unresolved] = update.failure!!
+            }
+        }
+
+        override fun onCancelled(result: ResolveRepositoryChangeResult) {
+            while (resolveQueue.size > 0) {
+                val resource = resolveQueue.poll()
+                result.cancelled[resource] = resource
+            }
+            onResolveFinished(result)
+        }
+
+        override fun onPostExecute(result: ResolveRepositoryChangeResult) {
             onResolveFinished(result)
         }
     }
 
-    private class ResolveResult internal constructor(
-            private val resolved: Map<MapDataResource, MapDataResource>,
-            // TODO: propagate failed imports to user somehow
-            private val failed: Map<MapDataResource, MapDataResolveException>,
-            private val repo: MapDataRepository)
+    private class ResolveRepositoryChangeProgress private constructor(val unresolved: MapDataResource, val resolved: MapDataResource?, val failure: MapDataResolveException?) {
+
+        constructor(unresolved: MapDataResource, resolved: MapDataResource) : this(unresolved, resolved, null)
+        constructor(unresolved: MapDataResource, failure: MapDataResolveException) : this(unresolved, null, failure)
+    }
+
+    private class ResolveRepositoryChangeResult internal constructor(
+            val repository: MapDataRepository,
+            val oldResources: MutableMap<URI, MapDataResource>,
+            val newResources: MutableMap<URI, MapDataResource>) {
+
+        val resolved = HashMap<MapDataResource, MapDataResource>()
+        val cancelled = HashMap<MapDataResource, MapDataResource>()
+        // TODO: propagate failed imports to user somehow
+        val failed = HashMap<MapDataResource, MapDataResolveException>()
+    }
 
     companion object {
 

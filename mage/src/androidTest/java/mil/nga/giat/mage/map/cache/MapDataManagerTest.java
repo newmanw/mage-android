@@ -41,8 +41,10 @@ import java.util.concurrent.TimeUnit;
 
 import static java.util.Collections.emptyMap;
 import static org.hamcrest.CoreMatchers.equalTo;
+import static org.hamcrest.CoreMatchers.hasItems;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.sameInstance;
+import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasEntry;
@@ -123,6 +125,11 @@ public class MapDataManagerTest {
         }
 
         @Override
+        protected void postValue(Set<MapDataResource> value) {
+            super.postValue(value);
+        }
+
+        @Override
         protected void setValue(Set<MapDataResource> value) {
             super.setValue(value);
         }
@@ -183,7 +190,7 @@ public class MapDataManagerTest {
 
         private MapDataResource resolveResource(MapDataResource unresolved, MapDataProvider provider, String... layerNames) {
             File file = new File(unresolved.getUri());
-            if (!file.getParent().equals(dir)) {
+            if (!file.getParentFile().equals(dir)) {
                 throw new Error("cannot resolve resource from another repository: " + file);
             }
             String name = file.getName();
@@ -343,26 +350,6 @@ public class MapDataManagerTest {
     }
 
     @After
-    public void shutdownRealExecutor() {
-        if (realExecutor == null) {
-            return;
-        }
-        final String testMethodName = this.testName.getMethodName();
-        realExecutor.shutdown();
-        realExecutor.setRejectedExecutionHandler((Runnable rejected, ThreadPoolExecutor executor) -> {
-            throw new RejectedExecutionException(testMethodName + " tried to execute more background tasks after shutdown");
-        });
-        try {
-            if (!realExecutor.awaitTermination(10, TimeUnit.SECONDS)) {
-                throw new Error(testMethodName + " timed out waiting for thread pool termination");
-            }
-        }
-        catch (InterruptedException e) {
-            throw new Error(testMethodName + " interrupted waiting for thread pool termination");
-        }
-    }
-
-    @After
     public void deactivateExecutorAndWait() {
         if (realExecutor == null) {
             return;
@@ -375,7 +362,7 @@ public class MapDataManagerTest {
             throw new RejectedExecutionException(testMethodName + " tried to execute more background tasks after shutdown");
         });
         try {
-            if (!localRef.awaitTermination(10, TimeUnit.SECONDS)) {
+            if (!localRef.awaitTermination(300, TimeUnit.SECONDS)) {
                 throw new Error(testMethodName + " timed out waiting for thread pool termination");
             }
         }
@@ -394,7 +381,7 @@ public class MapDataManagerTest {
     }
 
     private VerificationWithTimeout withinOneSecond() {
-        return Mockito.timeout(1000);
+        return Mockito.timeout(100000);
     }
 
     @Test
@@ -424,6 +411,7 @@ public class MapDataManagerTest {
     }
 
     @Test
+    @UiThreadTest
     public void doesNotRefreshOnConstruction() throws InterruptedException {
         doAnswer(invocation -> {
             throw new Error("unexpected async task execution in test " + testName.getMethodName());
@@ -446,7 +434,7 @@ public class MapDataManagerTest {
         when(repo1.getId()).thenReturn("repo1");
         MapDataRepository repo2 = mock(MapDataRepository.class);
         when(repo2.getId()).thenReturn("repo2");
-        initializeManager();
+        initializeManager(config.repositories(repo1, repo2));
         manager.refreshMapData();
 
         verify(repo1).refreshAvailableMapData(anyMap(), same(executor));
@@ -550,7 +538,7 @@ public class MapDataManagerTest {
 
         assertThat(mod.getContentTimestamp(), greaterThan(oldTimestamp));
         assertThat(manager.getResources(), equalTo(mapOf(mod)));
-        assertThat(manager.getResources(), Matchers.hasEntry(is(mod.getUri()), sameInstance(mod)));
+        assertThat(manager.getResources(), hasEntry(is(mod.getUri()), sameInstance(mod)));
         assertThat(manager.getLayers(), equalTo(mapOfLayers(mod)));
         verify(listener).onMapDataUpdated(updateCaptor.capture());
         MapDataManager.MapDataUpdate update = updateCaptor.getValue();
@@ -592,7 +580,7 @@ public class MapDataManagerTest {
         assertThat(manager.getResources(), equalTo(mapOf(mod)));
         assertThat(manager.getLayers(), equalTo(mapOfLayers(mod)));
 
-        mod = repo1.buildResource("mod.dog", dogProvider).finish();
+        mod = repo1.updateContentTimestampOfResource(repo1.buildResource("mod.dog", dogProvider).finish());
         repo1.setValue(setOf(mod));
 
         assertThat(manager.getResources(), equalTo(mapOf(mod)));
@@ -606,7 +594,7 @@ public class MapDataManagerTest {
 
     @Test
     @UiThreadTest
-    public void doesNotDispatchUpdateUntilAllResourcesAreResolved() {
+    public void doesNotFireUpdateUntilAllResourcesAreResolved() {
         MapDataResource unresolved = repo1.buildResource("unresolved.dog", null).finish();
         repo1.setValue(setOf(unresolved));
 
@@ -616,7 +604,6 @@ public class MapDataManagerTest {
     }
 
     @Test
-    @UiThreadTest
     public void resolvesNewResourcesAsynchronouslyRepositoryDidNotResolve() throws MapDataResolveException {
         activateExecutor();
         MapDataResource res1 = repo1.buildResource("res1.dog", null).finish();
@@ -625,25 +612,34 @@ public class MapDataManagerTest {
         MapDataResource res2Resolved = repo1.resolveResource(res2, catProvider, "Res 2, Layer 1", "Res 2, Layer 2");
         when(dogProvider.resolveResource(res1)).thenReturn(res1Resolved);
         when(catProvider.resolveResource(res2)).thenReturn(res2Resolved);
-        repo1.setValue(setOf(res1, res2));
+        repo1.postValue(setOf(res1, res2));
 
         assertThat(manager.getResources(), is(emptyMap()));
         assertThat(manager.getLayers(), is(emptyMap()));
-
-        verify(executor, atLeastOnce()).execute(any(Runnable.class));
         verify(dogProvider, withinOneSecond()).resolveResource(res1);
         verify(catProvider, withinOneSecond()).resolveResource(res2);
+        verify(listener, withinOneSecond()).onMapDataUpdated(updateCaptor.capture());
 
         deactivateExecutorAndWait();
 
         assertThat(manager.getResources(), is(mapOf(res1Resolved, res2Resolved)));
-        assertThat(manager.getResources().values(), contains(Arrays.asList(sameInstance(res1Resolved), sameInstance(res2Resolved))));
-        verify(listener).onMapDataUpdated(updateCaptor.capture());
+        assertThat(manager.getResources(), allOf(
+            hasEntry(is(res1.getUri()), sameInstance(res1Resolved)),
+            hasEntry(is(res2.getUri()), sameInstance(res2Resolved))));
         MapDataManager.MapDataUpdate update = updateCaptor.getValue();
         assertThat(update.getAdded(), is(mapOf(res1Resolved, res2Resolved)));
-        assertThat(update.getAdded().values(), contains(Arrays.asList(sameInstance(res1Resolved), sameInstance(res2Resolved))));
+        assertThat(update.getAdded(), allOf(
+            hasEntry(is(res1.getUri()), sameInstance(res1Resolved)),
+            hasEntry(is(res2.getUri()), sameInstance(res2Resolved))));
         assertThat(update.getUpdated(), is(emptyMap()));
         assertThat(update.getRemoved(), is(emptyMap()));
+        assertThat(manager.getLayers(), is(mapOfLayers(res1Resolved, res2Resolved)));
+    }
+
+    @Test
+    @UiThreadTest
+    public void notifiesRepositoryAboutResolvedResources() {
+
     }
 
     @Test
@@ -654,12 +650,14 @@ public class MapDataManagerTest {
         repo1.setValue(setOf(res1, res2));
 
         assertThat(manager.getResources(), is(mapOf(res1, res2)));
-        assertThat(manager.getResources(), hasEntry(res1.getUri(), sameInstance(res1)));
-        assertThat(manager.getResources(), hasEntry(res2.getUri(), sameInstance(res2)));
+        assertThat(manager.getResources(), hasEntry(is(res1.getUri()), sameInstance(res1)));
+        assertThat(manager.getResources(), hasEntry(is(res2.getUri()), sameInstance(res2)));
         verify(listener).onMapDataUpdated(updateCaptor.capture());
         MapDataManager.MapDataUpdate update = updateCaptor.getValue();
         assertThat(update.getAdded(), is(mapOf(res1, res2)));
-        assertThat(update.getAdded().values(), contains(Arrays.asList(sameInstance(res1), sameInstance(res2))));
+        assertThat(update.getAdded(), allOf(
+            hasEntry(is(res1.getUri()), sameInstance(res1)),
+            hasEntry(is(res2.getUri()), sameInstance(res2))));
         assertThat(update.getUpdated(), is(emptyMap()));
         assertThat(update.getRemoved(), is(emptyMap()));
     }
@@ -670,7 +668,7 @@ public class MapDataManagerTest {
     }
 
     @Test
-    public void resolvesUpdatedResourcesTheRepositoryDidNotResolve() {
+    public void resolvesUpdatedResourcesAsynchronouslyRepositoryDidNotResolve() {
         fail("unimplemented");
     }
 
