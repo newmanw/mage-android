@@ -160,7 +160,7 @@ public class MapDataManagerTest {
                 file.createNewFile();
             }
             catch (IOException e) {
-                throw new RuntimeException("error creating file", e);
+                throw new RuntimeException("error creating file: " + file, e);
             }
             return file;
         }
@@ -176,7 +176,7 @@ public class MapDataManagerTest {
         }
 
         private ResourceBuilder buildResource(String name, MapDataProvider provider) {
-            return new ResourceBuilder(name, provider);
+            return new ResourceBuilder(name, provider.getClass());
         }
 
         private MapDataResource updateContentTimestampOfResource(MapDataResource resource) {
@@ -196,7 +196,13 @@ public class MapDataManagerTest {
                 throw new Error("cannot resolve resource from another repository: " + file);
             }
             String name = file.getName();
-            return new ResourceBuilder(name, provider).layers(layerNames).finish();
+            return new ResourceBuilder(name, provider.getClass()).layers(layerNames).finish();
+        }
+
+        private MapDataResource updateContentTimestampAndLayers(MapDataResource resource, String... layerNames) {
+            return updateContentTimestampOfResource(
+                new ResourceBuilder(resource.getResolved().getName(), resource.getResolved().getType())
+                    .layers(layerNames).finish());
         }
 
         private class ResourceBuilder {
@@ -205,10 +211,10 @@ public class MapDataManagerTest {
             private final Class<? extends MapDataProvider> type;
             private final Set<MapLayerDescriptor> layers = new HashSet<>();
 
-            private ResourceBuilder(String name, MapDataProvider provider) {
+            private ResourceBuilder(String name, Class<? extends MapDataProvider> type) {
                 file = createFile(name);
                 uri = file.toURI();
-                type = provider == null ? null : provider.getClass();
+                this.type = type;
             }
 
             private ResourceBuilder layers(String... names) {
@@ -223,7 +229,7 @@ public class MapDataManagerTest {
                     return new MapDataResource(uri, TestDirRepository.this, file.lastModified());
                 }
                 return new MapDataResource(uri, TestDirRepository.this, file.lastModified(),
-                    new MapDataResource.Resolved(file.getPath(), type, Collections.unmodifiableSet(layers)));
+                    new MapDataResource.Resolved(file.getName(), type, Collections.unmodifiableSet(layers)));
             }
         }
     }
@@ -641,7 +647,7 @@ public class MapDataManagerTest {
 
     @Test
     @UiThreadTest
-    public void doesNotResolveNewResourcesRepositoryResolved() {
+    public void doesNotResolveNewResourcesRepositoryResolved() throws MapDataResolveException {
         MapDataResource res1 = repo1.buildResource("res1.dog", dogProvider).finish();
         MapDataResource res2 = repo1.buildResource("res2.cat", catProvider).finish();
         repo1.setValue(setOf(res1, res2));
@@ -657,11 +663,48 @@ public class MapDataManagerTest {
             hasEntry(is(res2.getUri()), sameInstance(res2))));
         assertThat(update.getUpdated(), is(emptyMap()));
         assertThat(update.getRemoved(), is(emptyMap()));
+        assertThat(manager.getResources(), allOf(
+            is(mapOf(res1, res2)),
+            hasEntry(is(res1.getUri()), sameInstance(res1)),
+            hasEntry(is(res2.getUri()), sameInstance(res2))
+        ));
+        verify(executor, never()).execute(any());
+        verify(catProvider, never()).resolveResource(any());
+        verify(dogProvider, never()).resolveResource(any());
     }
 
     @Test
-    public void doesNotResolveUpdatedResourcesTheRepositoryResolved() {
-        fail("unimplemented");
+    @UiThreadTest
+    public void doesNotResolveUpdatedResourcesTheRepositoryResolved() throws MapDataResolveException {
+        MapDataResource res1 = repo1.buildResource("res1.dog", dogProvider).finish();
+        MapDataResource res2 = repo1.buildResource("res2.cat", catProvider).finish();
+        repo1.setValue(setOf(res1, res2));
+
+        initializeManager();
+
+        assertThat(manager.getResources(), is(mapOf(res1, res2)));
+        assertThat(manager.getResources(), hasEntry(is(res1.getUri()), sameInstance(res1)));
+        assertThat(manager.getResources(), hasEntry(is(res2.getUri()), sameInstance(res2)));
+        assertThat(manager.getLayers(), is(emptyMap()));
+
+        res1 = repo1.updateContentTimestampAndLayers(res1, "layer1", "layer2");
+        repo1.setValue(setOf(res1, res2));
+
+        verify(listener).onMapDataUpdated(updateCaptor.capture());
+        MapDataManager.MapDataUpdate update = updateCaptor.getValue();
+        assertThat(update.getAdded(), is(emptyMap()));
+        assertThat(update.getUpdated(), is(mapOf(res1)));
+        assertThat(update.getUpdated(), hasEntry(is(res1.getUri()), sameInstance(res1)));
+        assertThat(update.getRemoved(), is(emptyMap()));
+        assertThat(manager.getResources(), allOf(
+            is(mapOf(res1, res2)),
+            hasEntry(is(res1.getUri()), sameInstance(res1)),
+            hasEntry(is(res2.getUri()), sameInstance(res2))
+        ));
+        assertThat(manager.getLayers(), is(mapOfLayers(res1)));
+        verify(executor, never()).execute(any());
+        verify(catProvider, never()).resolveResource(any());
+        verify(dogProvider, never()).resolveResource(any());
     }
 
     @Test
