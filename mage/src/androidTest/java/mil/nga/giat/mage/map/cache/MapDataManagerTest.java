@@ -9,8 +9,6 @@ import android.support.test.annotation.UiThreadTest;
 import android.support.test.filters.SmallTest;
 import android.support.test.runner.AndroidJUnit4;
 
-import org.hamcrest.Matcher;
-import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -34,19 +32,20 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+import mil.nga.giat.mage.test.AsyncTesting;
+
 import static java.util.Collections.emptyMap;
 import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.CoreMatchers.hasItems;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.sameInstance;
 import static org.hamcrest.Matchers.allOf;
-import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasEntry;
@@ -56,7 +55,6 @@ import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.any;
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -612,40 +610,6 @@ public class MapDataManagerTest {
     }
 
     @Test
-    public void asynchronouslyResolvesNewUnresolvedResources() throws MapDataResolveException {
-        activateExecutor();
-        MapDataResource res1 = repo1.buildResource("res1.dog", null).finish();
-        MapDataResource res2 = repo1.buildResource("res2.cat", null).finish();
-        MapDataResource res1Resolved = repo1.resolveResource(res1, dogProvider, "Res 1, Layer 1");
-        MapDataResource res2Resolved = repo1.resolveResource(res2, catProvider, "Res 2, Layer 1", "Res 2, Layer 2");
-        when(dogProvider.resolveResource(res1)).thenReturn(res1Resolved);
-        when(catProvider.resolveResource(res2)).thenReturn(res2Resolved);
-        repo1.postValue(setOf(res1, res2));
-
-        assertThat(manager.getResources(), is(emptyMap()));
-        assertThat(manager.getLayers(), is(emptyMap()));
-        verify(dogProvider, withinOneSecond()).resolveResource(res1);
-        verify(catProvider, withinOneSecond()).resolveResource(res2);
-        verify(listener, withinOneSecond()).onMapDataUpdated(updateCaptor.capture());
-
-        deactivateExecutorAndWait();
-
-        MapDataManager.MapDataUpdate update = updateCaptor.getValue();
-        assertThat(update.getAdded(), is(mapOf(res1Resolved, res2Resolved)));
-        assertThat(update.getAdded(), allOf(
-            hasEntry(is(res1.getUri()), sameInstance(res1Resolved)),
-            hasEntry(is(res2.getUri()), sameInstance(res2Resolved))));
-        assertThat(update.getUpdated(), is(emptyMap()));
-        assertThat(update.getRemoved(), is(emptyMap()));
-        assertThat(manager.getResources(), is(mapOf(res1Resolved, res2Resolved)));
-        assertThat(manager.getResources(), allOf(
-            hasEntry(is(res1.getUri()), sameInstance(res1Resolved)),
-            hasEntry(is(res2.getUri()), sameInstance(res2Resolved))));
-        assertThat(manager.getLayers(), is(mapOfLayers(res1Resolved, res2Resolved)));
-        assertThat(repo1.getValue(), containsInAnyOrder(sameInstance(res1Resolved), sameInstance(res2Resolved)));
-    }
-
-    @Test
     @UiThreadTest
     public void doesNotResolveNewResourcesRepositoryResolved() throws MapDataResolveException {
         MapDataResource res1 = repo1.buildResource("res1.dog", dogProvider).finish();
@@ -708,8 +672,97 @@ public class MapDataManagerTest {
     }
 
     @Test
-    public void resolvesUpdatedResourcesAsynchronouslyRepositoryDidNotResolve() {
-        fail("unimplemented");
+    public void asynchronouslyResolvesNewUnresolvedResources() throws MapDataResolveException, ExecutionException, InterruptedException {
+        activateExecutor();
+
+        MapDataResource res1 = repo1.buildResource("res1.dog", null).finish();
+        MapDataResource res2 = repo1.buildResource("res2.cat", null).finish();
+        MapDataResource res1Resolved = repo1.resolveResource(res1, dogProvider, "Res 1, Layer 1");
+        MapDataResource res2Resolved = repo1.resolveResource(res2, catProvider, "Res 2, Layer 1", "Res 2, Layer 2");
+        when(dogProvider.resolveResource(res1)).thenReturn(res1Resolved);
+        when(catProvider.resolveResource(res2)).thenReturn(res2Resolved);
+
+        repo1.postValue(setOf(res1, res2));
+
+        assertThat(manager.getResources(), is(emptyMap()));
+        assertThat(manager.getLayers(), is(emptyMap()));
+        verify(dogProvider, withinOneSecond()).resolveResource(res1);
+        verify(catProvider, withinOneSecond()).resolveResource(res2);
+        verify(listener, withinOneSecond()).onMapDataUpdated(updateCaptor.capture());
+
+        deactivateExecutorAndWait();
+
+        assertThat(repo1.getValue(), containsInAnyOrder(sameInstance(res1Resolved), sameInstance(res2Resolved)));
+        MapDataManager.MapDataUpdate update = updateCaptor.getValue();
+        assertThat(update.getAdded(), is(mapOf(res1Resolved, res2Resolved)));
+        assertThat(update.getAdded(), allOf(
+            hasEntry(is(res1.getUri()), sameInstance(res1Resolved)),
+            hasEntry(is(res2.getUri()), sameInstance(res2Resolved))));
+        assertThat(update.getUpdated(), is(emptyMap()));
+        assertThat(update.getRemoved(), is(emptyMap()));
+
+        AsyncTesting.waitForMainThreadToRun(() -> {
+            assertThat(manager.getResources(), is(mapOf(res1Resolved, res2Resolved)));
+            assertThat(manager.getResources(), allOf(
+                hasEntry(is(res1.getUri()), sameInstance(res1Resolved)),
+                hasEntry(is(res2.getUri()), sameInstance(res2Resolved))));
+            assertThat(manager.getLayers(), is(mapOfLayers(res1Resolved, res2Resolved)));
+        });
+    }
+
+    @Test
+    public void asynchronouslyResolvesUpdatedUnresolvedResources() throws MapDataResolveException {
+        MapDataResource res1 = repo1.buildResource("res1.dog", dogProvider).finish();
+        MapDataResource res2 = repo1.buildResource("res2.cat", catProvider).finish();
+
+        AsyncTesting.waitForMainThreadToRun(() -> {
+            repo1.setValue(setOf(res1, res2));
+            initializeManager();
+
+            assertThat(manager.getResources(), is(mapOf(res1, res2)));
+            assertThat(manager.getLayers(), is(emptyMap()));
+        });
+
+        verify(executor, never()).execute(any());
+        verify(dogProvider, never()).resolveResource(any());
+        verify(catProvider, never()).resolveResource(any());
+        verify(listener, never()).onMapDataUpdated(updateCaptor.capture());
+
+        activateExecutor();
+
+        repo1.updateContentTimestampOfResource(res1);
+        repo1.updateContentTimestampOfResource(res2);
+        MapDataResource res1Unresolved = repo1.buildResource(res1.getResolved().getName(), null).finish();
+        MapDataResource res2Unresolved = repo1.buildResource(res2.getResolved().getName(), null).finish();
+        MapDataResource res1Resolved = repo1.resolveResource(res1Unresolved, dogProvider, "R1/L1");
+        MapDataResource res2Resolved = repo1.resolveResource(res2Unresolved, catProvider, "R2/L1", "R2/L2");
+        when(dogProvider.resolveResource(res1Unresolved)).thenReturn(res1Resolved);
+        when(catProvider.resolveResource(res2Unresolved)).thenReturn(res2Resolved);
+
+        repo1.postValue(setOf(res1Unresolved, res2Unresolved));
+
+        verify(dogProvider, withinOneSecond()).resolveResource(res1Unresolved);
+        verify(catProvider, withinOneSecond()).resolveResource(res2Unresolved);
+        verify(listener, withinOneSecond()).onMapDataUpdated(updateCaptor.capture());
+
+        deactivateExecutorAndWait();
+
+        assertThat(repo1.getValue(), containsInAnyOrder(sameInstance(res1Resolved), sameInstance(res2Resolved)));
+        MapDataManager.MapDataUpdate update = updateCaptor.getValue();
+        assertThat(update.getAdded(), is(emptyMap()));
+        assertThat(update.getUpdated(), is(mapOf(res1Resolved, res2Resolved)));
+        assertThat(update.getUpdated(), allOf(
+            hasEntry(is(res1.getUri()), sameInstance(res1Resolved)),
+            hasEntry(is(res2.getUri()), sameInstance(res2Resolved))));
+        assertThat(update.getRemoved(), is(emptyMap()));
+
+        AsyncTesting.waitForMainThreadToRun(() -> {
+            assertThat(manager.getResources(), is(mapOf(res1Resolved, res2Resolved)));
+            assertThat(manager.getResources(), allOf(
+                hasEntry(is(res1.getUri()), sameInstance(res1Resolved)),
+                hasEntry(is(res2.getUri()), sameInstance(res2Resolved))));
+            assertThat(manager.getLayers(), is(mapOfLayers(res1Resolved, res2Resolved)));
+        });
     }
 
     @Test
@@ -732,7 +785,7 @@ public class MapDataManagerTest {
      */
 
     @Test
-    public void doesNotRefreshRepositoryWithPendingResolves() {
+    public void doesNotRefreshRepositoryThatIsAlreadyRefreshing() {
         fail("unimplemented");
     }
 
