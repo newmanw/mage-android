@@ -176,7 +176,7 @@ public class MapDataManagerTest {
         }
 
         private ResourceBuilder buildResource(String name, MapDataProvider provider) {
-            return new ResourceBuilder(name, provider.getClass());
+            return new ResourceBuilder(name, provider == null ? null : provider.getClass());
         }
 
         private MapDataResource updateContentTimestampOfResource(MapDataResource resource) {
