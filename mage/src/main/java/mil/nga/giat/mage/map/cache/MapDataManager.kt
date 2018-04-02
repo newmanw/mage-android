@@ -32,62 +32,16 @@ class MapDataManager(config: Config) : LifecycleOwner {
     val resources: Map<URI, MapDataResource> = mutableResources
     val layers: Map<URI, MapLayerDescriptor> get() = mutableResources.values.flatMap({ it.layers.values }).associateBy({ it.layerUri })
 
-    /**
-     * Implement this interface and [register][.addUpdateListener]
-     * an instance to receive [notifications][.onMapDataUpdated] when the set of resources changes.
-     */
-    interface MapDataListener {
-        fun onMapDataUpdated(update: MapDataUpdate)
-    }
-
-    class Config {
-        var context: Application? = null
-            private set
-        var updatePermission: CreateUpdatePermission? = null
-            private set
-        var repositories: Array<out MapDataRepository>? = emptyArray()
-            private set
-        var providers: Array<out MapDataProvider>? = emptyArray()
-            private set
-        var executor: Executor? = AsyncTask.THREAD_POOL_EXECUTOR
-            private set
-
-        fun context(x: Application): Config {
-            context = x
-            return this
-        }
-
-        fun updatePermission(x: CreateUpdatePermission): Config {
-            updatePermission = x
-            return this
-        }
-
-        fun repositories(vararg x: MapDataRepository): Config {
-            repositories = x
-            return this
-        }
-
-        fun providers(vararg x: MapDataProvider): Config {
-            providers = x
-            return this
-        }
-
-        fun executor(x: Executor): Config {
-            executor = x
-            return this
-        }
-    }
-
     init {
         updatePermission = config.updatePermission!!
         repositories = config.repositories!!
         providers = config.providers!!
         executor = config.executor!!
-        lifecycle.markState(Lifecycle.State.RESUMED)
+        lifecycle.markState(Lifecycle.State.STARTED)
         for (repo in repositories) {
-            mutableResources.putAll(repo.value?.associateBy(MapDataResource::uri) ?: emptyMap())
             repo.observe(this, RepositoryObserver(repo))
         }
+        lifecycle.markState(Lifecycle.State.RESUMED)
     }
 
     fun addUpdateListener(listener: MapDataListener) {
@@ -137,6 +91,9 @@ class MapDataManager(config: Config) : LifecycleOwner {
     }
 
     private fun onMapDataChanged(resources: Set<MapDataResource>, source: MapDataRepository) {
+        if (lifecycle.currentState != Lifecycle.State.RESUMED) {
+            return
+        }
         val oldResources = resourcesForRepo(source).toMutableMap()
         val newResources = resources.associateByTo(HashMap(), MapDataResource::uri)
         val toResolve = HashMap<URI, MapDataResource>()
@@ -153,7 +110,10 @@ class MapDataManager(config: Config) : LifecycleOwner {
             return
         }
         val resolveTask = ResolveRepositoryChangeTask(source, oldResources, newResources, toResolve)
-        pendingChangeForRepository[source.id] = resolveTask
+        val replaced = pendingChangeForRepository.put(source.id, resolveTask)
+        if (replaced != null) {
+            throw Error("TODO: handle concurrent updates")
+        }
         resolveTask.executeOnExecutor(executor)
     }
 
@@ -182,10 +142,10 @@ class MapDataManager(config: Config) : LifecycleOwner {
                 updated[value.uri] = value
             }
         }
+        mutableResources.putAll(result.resolved.mapKeys { it.key.uri })
         if (added.isEmpty() && updated.isEmpty() && removed.isEmpty()) {
             return
         }
-        mutableResources.putAll(result.resolved.mapKeys { it.key.uri })
         removed.keys.forEach({ mutableResources.remove(it) })
         val update = MapDataUpdate(updatePermission, added, updated, removed)
         for (listener in listeners) {
@@ -213,6 +173,52 @@ class MapDataManager(config: Config) : LifecycleOwner {
      */
     interface CreateUpdatePermission
 
+    /**
+     * Implement this interface and [register][.addUpdateListener]
+     * an instance to receive [notifications][.onMapDataUpdated] when the set of resources changes.
+     */
+    interface MapDataListener {
+        fun onMapDataUpdated(update: MapDataUpdate)
+    }
+
+    class Config {
+        var context: Application? = null
+            private set
+        var updatePermission: CreateUpdatePermission? = null
+            private set
+        var repositories: Array<out MapDataRepository>? = emptyArray()
+            private set
+        var providers: Array<out MapDataProvider>? = emptyArray()
+            private set
+        var executor: Executor? = AsyncTask.THREAD_POOL_EXECUTOR
+            private set
+
+        fun context(x: Application): Config {
+            context = x
+            return this
+        }
+
+        fun updatePermission(x: CreateUpdatePermission): Config {
+            updatePermission = x
+            return this
+        }
+
+        fun repositories(vararg x: MapDataRepository): Config {
+            repositories = x
+            return this
+        }
+
+        fun providers(vararg x: MapDataProvider): Config {
+            providers = x
+            return this
+        }
+
+        fun executor(x: Executor): Config {
+            executor = x
+            return this
+        }
+    }
+
     inner class MapDataUpdate(
             updatePermission: CreateUpdatePermission,
             val added: Map<URI, MapDataResource>,
@@ -227,6 +233,7 @@ class MapDataManager(config: Config) : LifecycleOwner {
             }
         }
     }
+
     private inner class RepositoryObserver internal constructor(private val repo: MapDataRepository) : Observer<Set<MapDataResource>> {
 
         override fun onChanged(data: Set<MapDataResource>?) {
@@ -247,13 +254,17 @@ class MapDataManager(config: Config) : LifecycleOwner {
         @Throws(MapDataResolveException::class)
         private fun resolveWithFirstCapableProvider(resource: MapDataResource): MapDataResource {
             val uri = resource.uri
-            for (provider in providers) {
-                if (uri.scheme.equals("file", ignoreCase = true)) {
-                    val resourceFile = File(uri)
-                    if (!resourceFile.canRead()) {
-                        throw MapDataResolveException(uri, "resource file is not readable or does not exist: ${resourceFile.name}")
-                    }
+            if (uri.scheme.equals("file", ignoreCase = true)) {
+                val resourceFile = File(uri)
+                if (!resourceFile.canRead()) {
+                    throw MapDataResolveException(uri, "resource file is not readable or does not exist: ${resourceFile.name}")
                 }
+            }
+            val oldResource = result.oldResources[uri]
+            if (oldResource != null && oldResource.contentTimestamp >= resource.contentTimestamp) {
+                return resource.resolve(oldResource.resolved!!)
+            }
+            for (provider in providers) {
                 if (provider.canHandleResource(resource)) {
                     return provider.resolveResource(resource)
                 }
