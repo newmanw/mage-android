@@ -37,8 +37,10 @@ class MapDataResource private constructor (val uri: URI, val repositoryId: Strin
      * @return
      */
     val layers: Map<URI, MapLayerDescriptor> = resolved?.layerDescriptors ?: emptyMap()
+    // TODO: this needs to be read-only to ensure thread safety
     var refreshTimestamp: Long = System.currentTimeMillis()
         private set
+    // TODO: move bounds to Resolved
     var bounds: LatLngBounds? = null
         get() = null
         private set

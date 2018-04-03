@@ -23,8 +23,8 @@ public class AsyncTesting {
         try {
             blockUntilRun.get();
         }
-        catch (Exception e) {
-            throw new Error("error waiting for main thread task to complete", e);
+        catch (Throwable t) {
+            throw new Error("error waiting for main thread task to complete", t);
         }
     }
 

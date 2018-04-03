@@ -13,6 +13,7 @@ import java.io.File
 import java.net.URI
 import java.util.*
 import java.util.concurrent.Executor
+import java.util.concurrent.Executors
 import kotlin.collections.HashMap
 import kotlin.collections.HashSet
 
@@ -94,46 +95,45 @@ class MapDataManager(config: Config) : LifecycleOwner {
         if (lifecycle.currentState != Lifecycle.State.RESUMED) {
             return
         }
-        val oldResources = resourcesForRepo(source).toMutableMap()
-        val newResources = resources.associateByTo(HashMap(), MapDataResource::uri)
-        val toResolve = HashMap<URI, MapDataResource>()
-        for (resource in resources) {
-            if (resource.resolved == null) {
-                toResolve[resource.uri] = resource
-            }
+        val changeInProgress = pendingChangeForRepository.put(source.id, ResolveRepositoryChangeTask(source, resources))
+        if (changeInProgress == null) {
+            beginPendingChangeForRepository(source)
         }
-        if (toResolve.isEmpty()) {
-            // TODO: dispatch immediately or go through the async flow?
-            val change = ResolveRepositoryChangeResult(source, oldResources, newResources)
-            change.resolved.putAll(newResources.mapKeys { it.value })
-            finishPendingChangeForResolveResult(change)
-            return
+        else {
+            changeInProgress.cancel(false)
         }
-        val resolveTask = ResolveRepositoryChangeTask(source, oldResources, newResources, toResolve)
-        val replaced = pendingChangeForRepository.put(source.id, resolveTask)
-        if (replaced != null) {
-            throw Error("TODO: handle concurrent updates")
-        }
-        resolveTask.executeOnExecutor(executor)
     }
 
-    private fun onResolveFinished(result: ResolveRepositoryChangeResult) {
-        val resolveTask = pendingChangeForRepository.remove(result.repository.id)!!
-        if (resolveTask.isCancelled) {
-            // TODO something
+    private fun beginPendingChangeForRepository(source: MapDataRepository) {
+        val change = pendingChangeForRepository[source.id]!!
+        if (change.toResolve.isEmpty()) {
+            // TODO: dispatch immediately or go through the async flow?
+            pendingChangeForRepository.remove(source.id)
+            val changeResult = ResolveRepositoryChangeResult(change.repository, change.oldResources, change.newResources)
+            changeResult.resolved.putAll(change.newResources.mapKeys { it.value })
+            finishPendingChangeForResolveResult(changeResult)
+        }
+        else {
+            change.executeOnExecutor(executor)
+        }
+    }
+
+    private fun onResolveFinished(change: ResolveRepositoryChangeTask) {
+        if (change.isCancelled) {
+            // TODO: take potentially already resolved resources from cancelled change?
+            beginPendingChangeForRepository(change.repository)
             return
         }
-        if (resolveTask.get() !== result) {
-            throw Error("stored resolve task's result differs from result argument")
-        }
+        assert(pendingChangeForRepository.remove(change.repository.id) === change, {"finished repository change mismatch"})
+        val result = change.get()
         result.repository.onExternallyResloved(HashSet(result.resolved.values))
     }
 
     private fun finishPendingChangeForResolveResult(result: ResolveRepositoryChangeResult) {
         val added = HashMap<URI, MapDataResource>()
         val updated = HashMap<URI, MapDataResource>()
-        val removed = result.oldResources
-        for ((key, value) in result.resolved) {
+        val removed = result.oldResources.toMutableMap()
+        for (value in result.resolved.values) {
             val oldValue = removed.remove(value.uri)
             if (oldValue == null) {
                 added[value.uri] = value
@@ -243,10 +243,24 @@ class MapDataManager(config: Config) : LifecycleOwner {
 
     @SuppressLint("StaticFieldLeak")
     private inner class ResolveRepositoryChangeTask internal constructor(
-            repository: MapDataRepository,
-            oldResources: MutableMap<URI, MapDataResource>,
-            newResources: MutableMap<URI, MapDataResource>,
-            toResolve: MutableMap<URI, MapDataResource>) : AsyncTask<Void, ResolveRepositoryChangeProgress, ResolveRepositoryChangeResult>() {
+            val repository: MapDataRepository,
+            changedResources: Set<MapDataResource>)
+        : AsyncTask<Void, ResolveRepositoryChangeProgress, ResolveRepositoryChangeResult>() {
+
+        internal val oldResources = resourcesForRepo(repository)
+        internal val newResources: Map<URI, MapDataResource>
+        internal val toResolve: Map<URI, MapDataResource>
+
+        init {
+            newResources = HashMap()
+            toResolve = HashMap()
+            for (resource in changedResources) {
+                newResources[resource.uri] = resource
+                if (resource.resolved == null) {
+                    toResolve[resource.uri] = resource
+                }
+            }
+        }
 
         private val resolveQueue = ArrayDeque<MapDataResource>(toResolve.values)
         private val result = ResolveRepositoryChangeResult(repository, oldResources, newResources)
@@ -301,11 +315,11 @@ class MapDataManager(config: Config) : LifecycleOwner {
                 val resource = resolveQueue.poll()
                 result.cancelled[resource] = resource
             }
-            onResolveFinished(result)
+            onResolveFinished(this)
         }
 
         override fun onPostExecute(result: ResolveRepositoryChangeResult) {
-            onResolveFinished(result)
+            onResolveFinished(this)
         }
     }
 
@@ -317,8 +331,8 @@ class MapDataManager(config: Config) : LifecycleOwner {
 
     private class ResolveRepositoryChangeResult internal constructor(
             val repository: MapDataRepository,
-            val oldResources: MutableMap<URI, MapDataResource>,
-            val newResources: MutableMap<URI, MapDataResource>) {
+            val oldResources: Map<URI, MapDataResource>,
+            val newResources: Map<URI, MapDataResource>) {
 
         val resolved = HashMap<MapDataResource, MapDataResource>()
         val cancelled = HashMap<MapDataResource, MapDataResource>()

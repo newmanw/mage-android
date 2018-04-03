@@ -35,12 +35,17 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 import mil.nga.giat.mage.test.AsyncTesting;
 
@@ -294,11 +299,11 @@ public class MapDataManagerTest {
     }
 
     private static long oneSecond() {
-        return 1000;
+        return 300000;
     }
 
     private static VerificationWithTimeout withinOneSecond() {
-        return Mockito.timeout(1000);
+        return Mockito.timeout(oneSecond());
     }
 
     @Rule
@@ -386,7 +391,7 @@ public class MapDataManagerTest {
             throw new RejectedExecutionException(testMethodName + " tried to execute more background tasks after shutdown");
         });
         try {
-            if (!localRef.awaitTermination(300, TimeUnit.SECONDS)) {
+            if (!localRef.awaitTermination(5, TimeUnit.SECONDS)) {
                 throw new Error(testMethodName + " timed out waiting for thread pool termination");
             }
         }
@@ -396,7 +401,7 @@ public class MapDataManagerTest {
     }
 
     private void activateExecutor() {
-        realExecutor = new ThreadPoolExecutor(2, 2, 0, TimeUnit.SECONDS, new LinkedBlockingQueue<>());
+        realExecutor = new ThreadPoolExecutor(2, 4, 0, TimeUnit.SECONDS, new LinkedBlockingQueue<>());
         doAnswer(invocationOnMock -> {
             Runnable task = invocationOnMock.getArgument(0);
             realExecutor.execute(task);
@@ -840,6 +845,85 @@ public class MapDataManagerTest {
         });
     }
 
+    /*
+     The concurrency meat.  What happens when a repository fires a change while resources are resolving from a previous change?
+     */
+
+    @Test
+    public void handlesRepositoryChangeThatAddsResourcesWhileResolvingConcurrently() throws MapDataResolveException, InterruptedException {
+        Lock resolveLock = new ReentrantLock();
+        AtomicBoolean res1ResolveBegan = new AtomicBoolean(false);
+        Condition res1ResolveBeganCondition = resolveLock.newCondition();
+        AtomicBoolean res1ResolveBlocking = new AtomicBoolean(true);
+        Condition res1ResolveBlockingCondition = resolveLock.newCondition();
+        MapDataResource res1 = repo1.buildResource("res1.cat", null).finish();
+        MapDataResource res1Resolved = repo1.resolveResource(res1, catProvider, "res1/layer1");
+        MapDataResource res2 = repo1.buildResource("res2.cat", null).finish();
+        MapDataResource res2Resolved = repo1.resolveResource(res2, catProvider, "res2/layer2");
+
+        when(catProvider.resolveResource(res1)).then(invoc -> {
+            resolveLock.lock();
+            res1ResolveBegan.set(true);
+            res1ResolveBeganCondition.signal();
+            resolveLock.unlock();
+            resolveLock.lock();
+            while (res1ResolveBlocking.get()) {
+                res1ResolveBlockingCondition.awaitUninterruptibly();
+            }
+            resolveLock.unlock();
+            return res1Resolved;
+        });
+
+        activateExecutor();
+
+        repo1.postValue(setOf(res1));
+        resolveLock.lock();
+        while (!res1ResolveBegan.get()) {
+            res1ResolveBeganCondition.awaitUninterruptibly();
+        }
+        resolveLock.unlock();
+
+        AsyncTesting.waitForMainThreadToRun(() -> {
+            repo1.setValue(setOf(res1, res2));
+        });
+
+        when(catProvider.resolveResource(res2)).thenReturn(res2Resolved);
+
+        resolveLock.lock();
+        res1ResolveBlocking.set(false);
+        res1ResolveBlockingCondition.signal();
+        resolveLock.unlock();
+
+        mainLooperAssertion.assertOnMainThreadThatWithin(1000, manager::getResources, is(mapOf(res1, res2)));
+
+        deactivateExecutorAndWait();
+
+        AsyncTesting.waitForMainThreadToRun(() -> {
+            verify(listener).onMapDataUpdated(updateCaptor.capture());
+            MapDataManager.MapDataUpdate update = updateCaptor.getValue();
+            assertThat(update.getAdded(), is(mapOf(res1, res2)));
+            assertThat(update.getUpdated(), is(emptyMap()));
+            assertThat(update.getRemoved(), is(emptyMap()));
+            assertThat(manager.getResources(), hasEntry(is(res1.getUri()), sameInstance(res1Resolved)));
+            assertThat(manager.getResources(), hasEntry(is(res2.getUri()), sameInstance(res2Resolved)));
+        });
+    }
+
+    @Test
+    public void handlesRepositoryChangeThatUpdatesResourcesWhileResolvingConcurrently() {
+        fail("unimplemented");
+    }
+
+    @Test
+    public void handlesRepositoryChangeThatRemovesResourcesWhileResolvingConcurrently() {
+        fail("unimplemented");
+    }
+
+    @Test
+    public void handlesRepositoryChangeThatResolvesResourcesWhileResolvingConcurrently() {
+        fail("unimplemented");
+    }
+
     @Test
     public void providesResolvedResourcesToRepositoryForRefresh() {
         fail("unimplemented");
@@ -869,250 +953,7 @@ public class MapDataManagerTest {
         fail("unimplemented");
     }
 
-//    @Test
-//    public void resolvesResourceFromCapableProvider() throws Exception {
-//
-//        fail("evaluate whether to make tryImportResource() available only on the LocalStorageMapDataRepository");
-//        // TODO: maybe MapDataManager should just get the live data update when an external entity uses
-//        // LocalStorageMapDataRepository to copy a resource to local storage.
-//
-//        File cacheFile = repo1.createFile("big_cache.dog");
-//
-//        manager.tryImportResource(cacheFile.toURI());
-//
-//        verify(dogProvider, timeout(1000)).resolveResource(resourceWithUri(cacheFile.toURI()));
-//        verify(catProvider, never()).resolveResource(any(MapDataResource.class));
-//    }
-//
-//    @Test
-//    public void addsNewResolvedResourcesToResourceSet() throws Exception {
-//        MapDataResource resolved = repo2.createResourceWithFileName("data.cat", new MapDataResource.Resolved(cacheDir2.getName(), catProvider.getClass(), Collections.<MapLayerDescriptor>emptySet()));
-//        when(catProvider.resolveResource(resourceWithUri(resolved.getUri()))).thenReturn(resolved);
-//
-//        manager.tryImportResource(resolved.getUri());
-//
-//        verify(listener, timeout(1000)).onMapDataUpdated(updateCaptor.capture());
-//
-//        MapDataManager.MapDataUpdate update = updateCaptor.getValue();
-//        Set<MapDataResource> caches = manager.getResources();
-//
-//        assertThat(caches, equalTo(setOf(resolved)));
-//        assertThat(update.getAdded(), equalTo(setOf(resolved)));
-//        assertTrue(update.getUpdated().isEmpty());
-//        assertTrue(update.getRemoved().isEmpty());
-//        assertThat(update.getSource(), sameInstance(manager));
-//    }
-//
-//    @Test
-//    public void refreshingFindsNewResourcesInRepositories() throws Exception {
-//        MapDataResource res1 = repo1.createResourceWithFileName("pluto.dog",
-//            new MapDataResource.Resolved("pluto", dogProvider.getClass(), Collections.emptySet()));
-//        MapDataResource res2 = repo2.createResourceWithFileName("figaro.cat",
-//            new MapDataResource.Resolved("figaro", catProvider.getClass(), Collections.emptySet()));
-//
-//        when(dogProvider.resolveResource(resourceWithUri(res1.getUri()))).thenReturn(res1);
-//        when(catProvider.resolveResource(resourceWithUri(res2.getUri()))).thenReturn(res2);
-//
-//        assertTrue(manager.getResources().isEmpty());
-//
-//        manager.refreshMapData();
-//
-//        verify(listener, timeout(1000)).onMapDataUpdated(updateCaptor.capture());
-//
-//        MapDataManager.MapDataUpdate update = updateCaptor.getValue();
-//        Set<MapDataResource> resources = manager.getResources();
-//
-//        assertThat(resources.size(), is(2));
-//        assertThat(resources, hasItems(res1, res2));
-//        assertThat(update.getAdded().size(), is(2));
-//        assertThat(update.getAdded(), hasItems(res1, res2));
-//        assertTrue(update.getUpdated().isEmpty());
-//        assertTrue(update.getRemoved().isEmpty());
-//        assertThat(update.getSource(), sameInstance(manager));
-//    }
-//
-//    @Test
-//    public void refreshingGetsAvailableCachesFromProviders() {
-//        MapDataResource dog1 = repo1.createResourceWithFileName("dog1.dog",
-//            new MapDataResource.Resolved("dog1", dogProvider.getClass(), Collections.emptySet()));
-//        MapDataResource dog2 = repo1.createResourceWithFileName("dog2.dog",
-//            new MapDataResource.Resolved("dog2", dogProvider.getClass(), Collections.emptySet()));
-//        MapDataResource cat = repo1.createResourceWithFileName("cat1.cat",
-//            new MapDataResource.Resolved("cat1", catProvider.getClass(), Collections.emptySet()));
-//
-//        when(dogProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet(), any(Executor.class))).thenReturn(setOf(dogCache1, dogCache2));
-//        when(catProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(setOf(catCache));
-//
-//        manager.refreshMapData();
-//
-//        verify(listener, timeout(1000)).onMapDataUpdated(updateCaptor.capture());
-//        verify(dogProvider).refreshResources(eq(Collections.<MapDataResource>emptySet()));
-//        verify(catProvider).refreshResources(eq(Collections.<MapDataResource>emptySet()));
-//
-//        MapDataManager.MapDataUpdate update = updateCaptor.getValue();
-//        Set<MapDataResource> caches = manager.getResources();
-//
-//        assertThat(caches.size(), is(3));
-//        assertThat(caches, hasItems(dogCache1, dogCache2, catCache));
-//        assertThat(update.getAdded().size(), is(3));
-//        assertThat(update.getAdded(), hasItems(dogCache1, dogCache2, catCache));
-//        assertTrue(update.getUpdated().isEmpty());
-//        assertTrue(update.getRemoved().isEmpty());
-//        assertThat(update.getSource(), sameInstance(manager));
-//    }
-//
-//    @Test
-//    public void refreshingRemovesCachesNoLongerAvailable() {
-//        MapDataResource dogCache1 = new MapDataResource(new File(cacheDir1, "dog1.dog").toURI(), "dog1", dogProvider.getClass(), Collections.<MapLayerDescriptor>emptySet());
-//        MapDataResource dogCache2 = new MapDataResource(new File(cacheDir1, "dog2.dog").toURI(), "dog2", dogProvider.getClass(), Collections.<MapLayerDescriptor>emptySet());
-//        MapDataResource catCache = new MapDataResource(new File(cacheDir1, "cat1.cat").toURI(), "cat1", catProvider.getClass(), Collections.<MapLayerDescriptor>emptySet());
-//
-//        when(dogProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(setOf(dogCache1, dogCache2));
-//        when(catProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(setOf(catCache));
-//
-//        manager.refreshMapData();
-//
-//        verify(listener, timeout(1000)).onMapDataUpdated(updateCaptor.capture());
-//        verify(dogProvider).refreshResources(eq(Collections.<MapDataResource>emptySet()));
-//        verify(catProvider).refreshResources(eq(Collections.<MapDataResource>emptySet()));
-//
-//        Set<MapDataResource> caches = manager.getResources();
-//
-//        assertThat(caches.size(), is(3));
-//        assertThat(caches, hasItems(dogCache1, dogCache2, catCache));
-//
-//        when(dogProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(setOf(dogCache2));
-//        when(catProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(Collections.<MapDataResource>emptySet());
-//
-//        manager.refreshMapData();
-//
-//        verify(listener, timeout(1000).times(2)).onMapDataUpdated(updateCaptor.capture());
-//
-//        verify(dogProvider).refreshResources(eq(setOf(dogCache1, dogCache2)));
-//        verify(catProvider).refreshResources(eq(setOf(catCache)));
-//
-//        caches = manager.getResources();
-//        MapDataManager.MapDataUpdate update = updateCaptor.getValue();
-//
-//        assertThat(caches.size(), is(1));
-//        assertThat(caches, hasItem(dogCache2));
-//        assertThat(update.getAdded(), empty());
-//        assertThat(update.getUpdated(), empty());
-//        assertThat(update.getRemoved(), hasItems(dogCache1, catCache));
-//        assertThat(update.getSource(), sameInstance(manager));
-//    }
-//
-//    @Test
-//    public void refreshingUpdatesExistingCachesThatChanged() {
-//        MapDataResource dogOrig = new MapDataResource(new File(cacheDir1, "dog1.dog").toURI(), "dog1", dogProvider.getClass(), Collections.<MapLayerDescriptor>emptySet());
-//
-//        when(dogProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(setOf(dogOrig));
-//
-//        manager.refreshMapData();
-//
-//        verify(listener, timeout(1000)).onMapDataUpdated(updateCaptor.capture());
-//
-//        Set<MapDataResource> caches = manager.getResources();
-//        MapDataManager.MapDataUpdate update = updateCaptor.getValue();
-//
-//        assertThat(caches.size(), is(1));
-//        assertThat(caches, hasItem(dogOrig));
-//        assertThat(update.getAdded().size(), is(1));
-//        assertThat(update.getAdded(), hasItem(dogOrig));
-//        assertThat(update.getUpdated(), empty());
-//        assertThat(update.getRemoved(), empty());
-//
-//        MapDataResource dogUpdated = new MapDataResource(new File(cacheDir1, "dog1.dog").toURI(), "dog1", dogProvider.getClass(), Collections.<MapLayerDescriptor>emptySet());
-//
-//        when(dogProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(setOf(dogUpdated));
-//
-//        manager.refreshMapData();
-//
-//        verify(listener, timeout(1000).times(2)).onMapDataUpdated(updateCaptor.capture());
-//
-//        Set<MapDataResource> overlaysRefreshed = manager.getResources();
-//        update = updateCaptor.getValue();
-//
-//        assertThat(overlaysRefreshed, not(sameInstance(caches)));
-//        assertThat(overlaysRefreshed.size(), is(1));
-//        assertThat(overlaysRefreshed, hasItem(sameInstance(dogUpdated)));
-//        assertThat(overlaysRefreshed, hasItem(dogOrig));
-//        assertThat(update.getAdded(), empty());
-//        assertThat(update.getUpdated().size(), is(1));
-//        assertThat(update.getUpdated(), hasItem(sameInstance(dogUpdated)));
-//        assertThat(update.getRemoved(), empty());
-//        assertThat(update.getSource(), sameInstance(manager));
-//    }
-//
-//    @Test
-//    public void immediatelyBeginsRefreshOnExecutor() {
-//        final boolean[] overrodeMock = new boolean[]{false};
-//        doAnswer(new Answer() {
-//            @Override
-//            public Object answer(InvocationOnMock invocation) {
-//                // make sure this answer overrides the one in the setup method
-//                overrodeMock[0] = true;
-//                return null;
-//            }
-//        }).when(executor).execute(any(Runnable.class));
-//
-//        manager.refreshMapData();
-//
-//        verify(executor).execute(any(Runnable.class));
-//        assertTrue(overrodeMock[0]);
-//    }
-//
-//    @Test
-//    public void cannotRefreshMoreThanOnceConcurrently() throws Exception {
-//        final CyclicBarrier taskBegan = new CyclicBarrier(2);
-//        final CyclicBarrier taskCanProceed = new CyclicBarrier(2);
-//        final AtomicReference<Runnable> runningTask = new AtomicReference<>();
-//
-//        doAnswer(new Answer() {
-//            @Override
-//            public Object answer(InvocationOnMock invocation) {
-//                final Runnable task = invocation.getArgument(0);
-//                final Runnable blocked = new Runnable() {
-//                    @Override
-//                    public void run() {
-//                        if (runningTask.get() == this) {
-//                            try {
-//                                taskBegan.await();
-//                                taskCanProceed.await();
-//                            }
-//                            catch (Exception e) {
-//                                fail(e.getMessage());
-//                                throw new IllegalStateException(e);
-//                            }
-//                        }
-//                        task.run();
-//                    }
-//                };
-//                runningTask.compareAndSet(null, blocked);
-//                AsyncTask.SERIAL_EXECUTOR.execute(blocked);
-//                return null;
-//            }
-//        }).when(executor).execute(any(Runnable.class));
-//
-////        when(catProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(Collections.<MapDataResource>emptySet());
-////        when(dogProvider.refreshResources(ArgumentMatchers.<MapDataResource>anySet())).thenReturn(Collections.<MapDataResource>emptySet());
-//
-//        manager.refreshMapData();
-//
-//        verify(executor, times(1)).execute(any(Runnable.class));
-//
-//        // wait for the background task to start, then try to start another refresh
-//        // and verify no new tasks were submitted to executor
-//        taskBegan.await();
-//
-//        manager.refreshMapData();
-//
-//        verify(executor, times(1)).execute(any(Runnable.class));
-//
-//        taskCanProceed.await();
-//
-//        verify(listener, timeout(1000)).onMapDataUpdated(updateCaptor.capture());
-//    }
+
 
     private static final MapDataRepository MATCHER_REPO = new MapDataRepository() {
 
