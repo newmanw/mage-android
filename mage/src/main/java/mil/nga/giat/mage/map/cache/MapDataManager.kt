@@ -27,7 +27,8 @@ class MapDataManager(config: Config) : LifecycleOwner {
     private val listeners = ArrayList<MapDataListener>()
     private val lifecycle = LifecycleRegistry(this)
     private val mutableResources = HashMap<URI, MapDataResource>()
-    private val pendingChangeForRepository = HashMap<String, ResolveRepositoryChangeTask>()
+    private val nextChangeForRepository = HashMap<String, ResolveRepositoryChangeTask>()
+    private val changeInProgressForRepository = HashMap<String, ResolveRepositoryChangeTask>()
 
     val resources: Map<URI, MapDataResource> = mutableResources
     val layers: Map<URI, MapLayerDescriptor> get() = mutableResources.values.flatMap({ it.layers.values }).associateBy({ it.layerUri })
@@ -94,24 +95,24 @@ class MapDataManager(config: Config) : LifecycleOwner {
         if (lifecycle.currentState != Lifecycle.State.RESUMED) {
             return
         }
-        val changeInProgress = pendingChangeForRepository.put(source.id, ResolveRepositoryChangeTask(source, resources))
+        nextChangeForRepository[source.id] = ResolveRepositoryChangeTask(source, resources)
+        val changeInProgress = changeInProgressForRepository[source.id]
         if (changeInProgress == null) {
-            beginPendingChangeForRepository(source)
+            beginNextChangeForRepository(source)
         }
         else {
             changeInProgress.cancel(false)
         }
     }
 
-    private fun beginPendingChangeForRepository(source: MapDataRepository, cancelledChange: ResolveRepositoryChangeTask? = null) {
-        val change = pendingChangeForRepository[source.id]!!
-        if (cancelledChange != null) {
-            change.updateProgressFromCancelledChange(cancelledChange)
+    private fun beginNextChangeForRepository(source: MapDataRepository, changeInProgress: ResolveRepositoryChangeTask? = null) {
+        val change = nextChangeForRepository.remove(source.id)!!
+        changeInProgressForRepository[source.id] = change
+        if (changeInProgress != null) {
+            change.updateProgressFromCancelledChange(changeInProgress)
         }
         if (change.toResolve.isEmpty()) {
-            // TODO: dispatch immediately or go through the async flow?
-            pendingChangeForRepository.remove(source.id)
-            finishPendingChangeForResolveResult(change.result)
+            finishChangeInProgressForRepository(source)
         }
         else {
             change.executeOnExecutor(executor)
@@ -119,17 +120,22 @@ class MapDataManager(config: Config) : LifecycleOwner {
     }
 
     private fun onResolveFinished(change: ResolveRepositoryChangeTask) {
-        if (change.isCancelled) {
-            // TODO: take potentially already resolved resources from cancelled change?
-            beginPendingChangeForRepository(change.repository, change)
-            return
+        val changeInProgress = changeInProgressForRepository.remove(change.repository.id)
+        if (change !== changeInProgress) {
+            throw IllegalStateException("finished repository change mismatch: expected\n  $changeInProgress\n  but finishing change is\n  $change")
         }
-        assert(pendingChangeForRepository.remove(change.repository.id) === change, {"finished repository change mismatch"})
-        val result = change.get()
-        result.repository.onExternallyResloved(HashSet(result.resolved.values))
+        if (change.isCancelled) {
+            beginNextChangeForRepository(change.repository, change)
+        }
+        else {
+            val result = change.get()
+            result.repository.onExternallyResloved(HashSet(result.resolved.values))
+        }
     }
 
-    private fun finishPendingChangeForResolveResult(result: ResolveRepositoryChangeResult) {
+    private fun finishChangeInProgressForRepository(repo: MapDataRepository) {
+        val change = changeInProgressForRepository.remove(repo.id)!!
+        val result = change.result
         val added = HashMap<URI, MapDataResource>()
         val updated = HashMap<URI, MapDataResource>()
         val removed = result.oldResources.toMutableMap()
@@ -249,6 +255,7 @@ class MapDataManager(config: Config) : LifecycleOwner {
 
         internal val toResolve: MutableMap<URI, MapDataResource> = HashMap()
         internal var result: ResolveRepositoryChangeResult
+        internal val stringValue: String
 
         init {
             val oldResources = resourcesForRepo(repository)
@@ -264,6 +271,7 @@ class MapDataManager(config: Config) : LifecycleOwner {
                 }
             }
             result = ResolveRepositoryChangeResult(repository, oldResources, newResources, resolved)
+            stringValue = "${javaClass.simpleName} repo ${repository.id} resolving\n  ${toResolve.keys}"
         }
 
 
@@ -285,7 +293,7 @@ class MapDataManager(config: Config) : LifecycleOwner {
                     return provider.resolveResource(resource)
                 }
             }
-            throw MapDataResolveException(uri, "no cache provider could handle file $resource")
+            throw MapDataResolveException(uri, "no cache provider could handle resource $resource")
         }
 
         override fun doInBackground(vararg nothing: Void): ResolveRepositoryChangeResult {
@@ -294,18 +302,18 @@ class MapDataManager(config: Config) : LifecycleOwner {
                     val unresolved = next()
                     try {
                         val resolved = resolveWithFirstCapableProvider(unresolved)
-                        result.resolved[unresolved] = resolved
+                        result!!.resolved[unresolved] = resolved
                     }
                     catch (e: MapDataResolveException) {
-                        result.failed[unresolved] = e
+                        result!!.failed[unresolved] = e
                     }
                     remove()
                 }
-                return result
+                return result!!
             }
         }
 
-        override fun onCancelled(result: ResolveRepositoryChangeResult) {
+        override fun onCancelled(cancelledResult: ResolveRepositoryChangeResult?) {
             toResolve.values.iterator().run {
                 while (hasNext()) {
                     val resource = next()
@@ -332,6 +340,10 @@ class MapDataManager(config: Config) : LifecycleOwner {
                     toResolve.remove(it.uri)
                 }
             })
+        }
+
+        override fun toString(): String {
+            return stringValue
         }
     }
 

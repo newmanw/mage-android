@@ -958,7 +958,6 @@ public class MapDataManagerTest {
             while (lastResolve.get() != null) {
                 lastResolveRetrieved.await(oneSecond(), TimeUnit.MILLISECONDS);
             }
-            // TODO: restore condition to allow return
             resolveLock.unlock();
             return resolved;
         });
@@ -1026,7 +1025,8 @@ public class MapDataManagerTest {
         deactivateExecutorAndWait();
 
         assertThat(resolveOrder, hasSize(3));
-        verify(catProvider, times(3)).resolveResource(any());
+        verify(catProvider, times(2)).resolveResource(resourceWithUri(resolveOrder.get(0).getUri()));
+        verify(catProvider, times(1)).resolveResource(resourceWithUri(resolveOrder.get(1).getUri()));
         verify(listener).onMapDataUpdated(updateCaptor.capture());
         MapDataManager.MapDataUpdate update = updateCaptor.getValue();
         assertThat(update.getAdded(), is(resolvedResources));
@@ -1037,17 +1037,7 @@ public class MapDataManagerTest {
     }
 
     @Test
-    public void doesNotAddResolvedResourcesFromCancelledChangeToNextChangeIfResourcesWereUpdated() {
-        fail("unimplemented");
-    }
-
-    @Test
-    public void doesNotAddResolvedResourcesFromCancelledChangeToNextChangeIfResourcesWereRemoved() {
-        fail("unimplemented");
-    }
-
-    @Test
-    public void handlesRepositoryChangeWithUnresolvedResourceThatWasResolvedInPendingChange() {
+    public void handlesRepositoryChangeWithUnresolvedResourceThatWasResolvedInPendingChangeConcurrently() throws InterruptedException, MapDataResolveException {
         fail("unimplemented");
     }
 
@@ -1062,7 +1052,86 @@ public class MapDataManagerTest {
     }
 
     @Test
-    public void handlesRepositoryChangeThatFiresBeforePreviousChangeBegins() {
+    public void doesNotResolveMultipleChangesFromOneRepositoryConcurrently() throws MapDataResolveException, InterruptedException {
+
+        Lock resolveLock = new ReentrantLock();
+        AtomicBoolean firstResolveBlocked = new AtomicBoolean(false);
+        Condition firstResolveChanged = resolveLock.newCondition();
+
+        MapDataResource res1 = repo2.buildResource("res1.cat", null).finish();
+        MapDataResource res2 = repo2.buildResource("res2.cat", null).finish();
+        MapDataResource res3 = repo2.buildResource("res3.cat", null).finish();
+
+        when(catProvider.resolveResource(res1)).then(invocation -> {
+            resolveLock.lock();
+            try {
+                firstResolveBlocked.set(true);
+                firstResolveChanged.signal();
+                while (firstResolveBlocked.get()) {
+                    firstResolveChanged.await();
+                }
+                return repo2.resolveResource(res1, catProvider);
+            }
+            finally {
+                resolveLock.unlock();
+            }
+        });
+
+        activateExecutor();
+
+        AsyncTesting.waitForMainThreadToRun(() -> {
+            repo2.setValue(setOf(res1));
+            verify(executor, times(1)).execute(any());
+        });
+
+        resolveLock.lock();
+        try {
+            while (!firstResolveBlocked.get()) {
+                firstResolveChanged.await();
+            }
+        }
+        finally {
+            resolveLock.unlock();
+        }
+
+        AsyncTesting.waitForMainThreadToRun(() -> {
+            repo2.setValue(setOf(res2));
+            verify(executor, times(1)).execute(any());
+        });
+
+        AsyncTesting.waitForMainThreadToRun(() -> {
+            repo2.setValue(setOf(res3));
+            verify(executor, times(1)).execute(any());
+        });
+
+        MapDataResource res3Resolved = repo2.resolveResource(res3, catProvider);
+        when(catProvider.resolveResource(res3)).thenReturn(res3Resolved);
+
+        resolveLock.lock();
+        try {
+            firstResolveBlocked.set(false);
+            firstResolveChanged.signal();
+        }
+        finally {
+            resolveLock.unlock();
+        }
+
+        mainLooperAssertion.assertOnMainThreadThatWithin(oneSecond(), manager::getResources, hasEntry(is(res3.getUri()), sameInstance(res3Resolved)));
+
+        verify(catProvider).resolveResource(res1);
+        verify(catProvider).resolveResource(res3);
+        verify(catProvider, never()).resolveResource(res2);
+        assertThat(manager.getResources().keySet(), hasSize(1));
+        verify(listener).onMapDataUpdated(updateCaptor.capture());
+        MapDataManager.MapDataUpdate update = updateCaptor.getValue();
+        assertThat(update.getAdded().keySet(), hasSize(1));
+        assertThat(update.getAdded(), hasEntry(is(res3.getUri()), sameInstance(res3Resolved)));
+        assertThat(update.getUpdated(), is(emptyMap()));
+        assertThat(update.getRemoved(), is(emptyMap()));
+    }
+
+    @Test
+    public void stopsResolvingChangeWhenSameRepositoryFiresChangeConcurrently() {
         fail("unimplemented");
     }
 
