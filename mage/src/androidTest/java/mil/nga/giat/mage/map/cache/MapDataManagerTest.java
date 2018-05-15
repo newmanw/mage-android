@@ -930,7 +930,8 @@ public class MapDataManagerTest {
             assertThat(update.getAdded(), is(mapOf(res1, res2)));
             assertThat(update.getUpdated(), is(emptyMap()));
             assertThat(update.getRemoved(), is(emptyMap()));
-            assertThat(manager.getResources(), hasEntry(is(res1.getUri()), sameInstance(res1Resolved)));
+            assertThat(manager.getResources(), hasEntry(is(res1.getUri()), equalTo(res1Resolved)));
+            assertThat(manager.getResources().get(res1.getUri()).getResolved(), sameInstance(res1Resolved.getResolved()));
             assertThat(manager.getResources(), hasEntry(is(res2.getUri()), sameInstance(res2Resolved)));
         });
     }
@@ -1032,13 +1033,75 @@ public class MapDataManagerTest {
         assertThat(update.getAdded(), is(resolvedResources));
         assertThat(update.getUpdated(), is(emptyMap()));
         assertThat(update.getRemoved(), is(emptyMap()));
-        assertThat(manager.getResources(), hasEntry(is(res1.getUri()), sameInstance(resolvedResources.get(res1.getUri()))));
-        assertThat(manager.getResources(), hasEntry(is(res2.getUri()), sameInstance(resolvedResources.get(res2.getUri()))));
+        assertThat(manager.getResources().get(res1.getUri()).getResolved(), sameInstance(res1Resolved.getResolved()));
+        assertThat(manager.getResources().get(res2.getUri()).getResolved(), sameInstance(res2Resolved.getResolved()));
     }
 
     @Test
     public void handlesRepositoryChangeWithUnresolvedResourceThatWasResolvedInPendingChangeConcurrently() throws InterruptedException, MapDataResolveException {
-        fail("unimplemented");
+        Lock resolveLock = new ReentrantLock();
+        AtomicBoolean resolveBlocked = new AtomicBoolean(false);
+        Condition resolveCondition = resolveLock.newCondition();
+        MapDataResource res1 = repo1.buildResource("res1.cat", null).finish();
+        MapDataResource res1Resolved = repo1.resolveResource(res1, catProvider, "res1/layer1");
+
+        when(catProvider.resolveResource(same(res1))).then(invoc -> {
+            resolveLock.lock();
+            resolveBlocked.set(true);
+            resolveCondition.signal();
+            while (resolveBlocked.get()) {
+                resolveCondition.await(oneSecond(), TimeUnit.MILLISECONDS);
+            }
+            resolveLock.unlock();
+            return res1Resolved;
+        });
+
+        activateExecutor();
+
+        repo1.postValue(setOf(res1));
+
+        resolveLock.lock();
+        try {
+            while (!resolveBlocked.get()) {
+                resolveCondition.await(oneSecond(), TimeUnit.MILLISECONDS);
+            }
+        }
+        finally {
+            resolveLock.unlock();
+        }
+
+        MapDataResource res1Again = new MapDataResource(res1.getUri(), repo1, res1.getContentTimestamp());
+
+        AsyncTesting.waitForMainThreadToRun(() -> {
+            repo1.setValue(setOf(res1Again));
+        });
+
+        assertThat(manager.getResources(), is(emptyMap()));
+
+        resolveLock.lock();
+        try {
+            resolveBlocked.set(false);
+            resolveCondition.signal();
+        }
+        finally {
+            resolveLock.unlock();
+        }
+
+        mainLooperAssertion.assertOnMainThreadThatWithin(oneSecond(), manager::getResources, is(mapOf(res1Resolved)));
+
+        deactivateExecutorAndWait();
+
+        verify(catProvider, times(1)).resolveResource(res1);
+        verify(catProvider, never()).resolveResource(same(res1Again));
+        verify(listener).onMapDataUpdated(updateCaptor.capture());
+        MapDataManager.MapDataUpdate update = updateCaptor.getValue();
+        assertThat(update.getAdded(), is(mapOf(res1Resolved)));
+        MapDataResource finalResource = update.getAdded().get(res1.getUri());
+        assertThat(finalResource, not(sameInstance(res1Resolved)));
+        assertThat(finalResource.getResolved(), sameInstance(res1Resolved.getResolved()));
+        assertThat(update.getUpdated(), is(emptyMap()));
+        assertThat(update.getRemoved(), is(emptyMap()));
+        assertThat(manager.getResources(), hasEntry(is(res1.getUri()), sameInstance(finalResource)));
     }
 
     @Test
@@ -1053,7 +1116,6 @@ public class MapDataManagerTest {
 
     @Test
     public void doesNotResolveMultipleChangesFromOneRepositoryConcurrently() throws MapDataResolveException, InterruptedException {
-
         Lock resolveLock = new ReentrantLock();
         AtomicBoolean firstResolveBlocked = new AtomicBoolean(false);
         Condition firstResolveChanged = resolveLock.newCondition();

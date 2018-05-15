@@ -336,7 +336,7 @@ class MapDataManager(config: Config) : LifecycleOwner {
             cancelledChange.result.resolved.values.forEach({
                 val unresolved = toResolve[it.uri]
                 if (unresolved != null && unresolved.contentTimestamp <= it.contentTimestamp) {
-                    result.resolved[unresolved] = it
+                    result.resolved[unresolved] = unresolved.resolve(it.resolved!!)
                     toResolve.remove(it.uri)
                 }
             })
