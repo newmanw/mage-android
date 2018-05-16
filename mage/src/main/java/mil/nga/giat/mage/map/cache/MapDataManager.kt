@@ -53,6 +53,12 @@ class MapDataManager(config: Config) : LifecycleOwner {
         listeners.remove(listener)
     }
 
+    /**
+     * Attempt to import the data the given resource URI references.  If a potential path to importing the data
+     * exists, begin the asynchronous import process.
+     *
+     * @return true if an async import operation will begin, false if the resource cannot be imported
+     */
     fun tryImportResource(resourceUri: URI): Boolean {
         for (repo in repositories) {
             if (repo.ownsResource(resourceUri)) {
@@ -69,7 +75,7 @@ class MapDataManager(config: Config) : LifecycleOwner {
 
     /**
      * Discover new resources available in known [locations][MapDataRepository], then remove defunct resources.
-     * Asynchronous notifications to [listeners][.addUpdateListener]
+     * Asynchronous notifications to [listeners][addUpdateListener]
      * will result, one notification per refresh, per listener.  Only one refresh can be active at any moment.
      */
     fun refreshMapData() {
@@ -253,7 +259,7 @@ class MapDataManager(config: Config) : LifecycleOwner {
             changedResources: Set<MapDataResource>)
         : AsyncTask<Void, Void, ResolveRepositoryChangeResult>() {
 
-        internal val toResolve: MutableMap<URI, MapDataResource> = HashMap()
+        internal val toResolve: SortedSet<MapDataResource> = TreeSet({ a, b -> a.uri.compareTo(b.uri) })
         internal var result: ResolveRepositoryChangeResult
         internal val stringValue: String
 
@@ -264,14 +270,14 @@ class MapDataManager(config: Config) : LifecycleOwner {
             for (resource in changedResources) {
                 newResources[resource.uri] = resource
                 if (resource.resolved == null) {
-                    toResolve[resource.uri] = resource
+                    toResolve.add(resource)
                 }
                 else {
                     resolved[resource] = resource
                 }
             }
             result = ResolveRepositoryChangeResult(repository, oldResources, newResources, resolved)
-            stringValue = "${javaClass.simpleName} repo ${repository.id} resolving\n  ${toResolve.keys}"
+            stringValue = "${javaClass.simpleName} repo ${repository.id} resolving\n  ${toResolve.map { it.uri }}"
         }
 
 
@@ -297,7 +303,7 @@ class MapDataManager(config: Config) : LifecycleOwner {
         }
 
         override fun doInBackground(vararg nothing: Void): ResolveRepositoryChangeResult {
-            toResolve.values.iterator().run {
+            toResolve.iterator().run {
                 while (hasNext() && !isCancelled) {
                     val unresolved = next()
                     try {
@@ -314,7 +320,7 @@ class MapDataManager(config: Config) : LifecycleOwner {
         }
 
         override fun onCancelled(cancelledResult: ResolveRepositoryChangeResult?) {
-            toResolve.values.iterator().run {
+            toResolve.iterator().run {
                 while (hasNext()) {
                     val resource = next()
                     result.cancelled[resource] = resource
@@ -333,13 +339,16 @@ class MapDataManager(config: Config) : LifecycleOwner {
             if (status != Status.PENDING) {
                 throw IllegalStateException("attempt to initialize progress from cancelled change after this change already began")
             }
-            cancelledChange.result.resolved.values.forEach({
-                val unresolved = toResolve[it.uri]
-                if (unresolved != null && unresolved.contentTimestamp <= it.contentTimestamp) {
-                    result.resolved[unresolved] = unresolved.resolve(it.resolved!!)
-                    toResolve.remove(it.uri)
+            toResolve.iterator().run {
+                while (hasNext()) {
+                    val unresolvedResource = next()
+                    val resolvedResource = cancelledChange.result.resolved[unresolvedResource]
+                    if (resolvedResource != null && resolvedResource.contentTimestamp >= unresolvedResource.contentTimestamp) {
+                        result.resolved[unresolvedResource] = unresolvedResource.resolve(resolvedResource.resolved!!)
+                        remove()
+                    }
                 }
-            })
+            }
         }
 
         override fun toString(): String {

@@ -35,11 +35,10 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.CyclicBarrier;
+import java.util.TreeSet;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -47,7 +46,6 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
@@ -70,7 +68,6 @@ import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.anyMap;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doAnswer;
@@ -806,13 +803,6 @@ public class MapDataManagerTest {
         });
     }
 
-    /**
-     * TODO: let MapDataManager resolve the resource with existing Resolved instance or let the
-     * MapDataProvider make that decision and go through the same path?  for now, the former,
-     * but consider situations when the latter makes more sense than saving the cycles by
-     * reusing the Resolved instance.
-     * @throws MapDataResolveException
-     */
     @Test
     public void resolvesUpdatedUnresolvedResourcesWithExistingDataWhenContentTimestampDidNotChange() throws MapDataResolveException, InterruptedException {
         MapDataResource res1Resolved = repo1.buildResource("res1.dog", dogProvider).layers("R1/L1").finish();
@@ -859,6 +849,39 @@ public class MapDataManagerTest {
         });
     }
 
+    @Test
+    public void resolvesResourcesAscendingLexicalOrderOfUris() throws MapDataResolveException, InterruptedException {
+        MapDataResource res1 = repo1.buildResource("a.cat", null).finish();
+        MapDataResource res2 = repo1.buildResource("a.dog", null).finish();
+        MapDataResource res3 = repo1.buildResource("b.dog", null).finish();
+        List<MapDataResource> outOfOrder = Arrays.asList(res3, res1, res2);
+
+        when(catProvider.resolveResource(res1)).thenReturn(repo1.resolveResource(res1, catProvider));
+        when(dogProvider.resolveResource(res2)).thenReturn(repo1.resolveResource(res2, dogProvider));
+        when(dogProvider.resolveResource(res3)).thenReturn(repo1.resolveResource(res3, dogProvider));
+
+        Set<MapDataResource> resources = new TreeSet<MapDataResource>((a, b) -> outOfOrder.indexOf(a) - outOfOrder.indexOf(b));
+        resources.addAll(outOfOrder);
+
+        int i = 0;
+        for (MapDataResource resourceInSet : resources) {
+            assertThat(resourceInSet, sameInstance(outOfOrder.get(i++)));
+        }
+
+        activateExecutor();
+
+        repo1.postValue(resources);
+
+        mainLooperAssertion.assertOnMainThreadThatWithin(oneSecond(), manager::getResources, is(mapOf(res1, res2, res3)));
+
+        deactivateExecutorAndWait();
+
+        InOrder resolveOrder = inOrder(catProvider, dogProvider);
+        resolveOrder.verify(catProvider).resolveResource(res1);
+        resolveOrder.verify(dogProvider).resolveResource(res2);
+        resolveOrder.verify(dogProvider).resolveResource(res3);
+    }
+
     /*
      The concurrency meat: What happens when a repository fires a change while
      resources are resolving from a previous change?
@@ -866,13 +889,14 @@ public class MapDataManagerTest {
      fires results in MapDataManager conducting a serial loop over the sequence of
      the repository's resources to resolve them, then firing an update once the
      change is wholly processed.  The alternative would be that MapDataManager could
-     resolve all resources from a single repository change, or multiple changes
+     begin resolving all resources from a single repository change, or multiple changes
      concurrently, which would invalidate the following tests, as well as potentially
      increase the number of updates MapDataManager fires, or overly complicate the
      mechanism of collating or grouping the updates.  Maybe that doesn't matter for
      practical purposes.  Granted this is a bit of an arbitrary granularity of
      grouping repository changes into MapDataUpdate events, but it's easier to manage
-     and seems natural to me.
+     and maps directly to the LiveData notifications that come from the MapDataRepository
+     implementations.
      */
 
     @Test
@@ -1105,7 +1129,87 @@ public class MapDataManagerTest {
     }
 
     @Test
-    public void handlesRepositoryChangeThatRemovesResourcesWhileResolvingConcurrently() {
+    public void handlesRepositoryChangeThatRemovesResourcesWhileResolvingConcurrently() throws InterruptedException, MapDataResolveException {
+//        Lock resolveLock = new ReentrantLock();
+//        AtomicReference<MapDataResource> lastResolve = new AtomicReference<>();
+//        Condition lastResolveChanged = resolveLock.newCondition();
+//        Condition lastResolveRetrieved = resolveLock.newCondition();
+//        MapDataResource res1 = repo1.buildResource("res1.cat", null).finish();
+//        MapDataResource res1Resolved = repo1.resolveResource(res1, catProvider, "res1/layer1");
+//        MapDataResource res2 = repo1.buildResource("res2.cat", null).finish();
+//        MapDataResource res2Resolved = repo1.resolveResource(res2, catProvider, "res2/layer1");
+//        Map<URI, MapDataResource> unresolvedResources = new HashMap<>(mapOf(res1, res2));
+//        Map<URI, MapDataResource> resolvedResources = new HashMap<>(mapOf(res1Resolved, res2Resolved));
+//        List<MapDataResource> resolveOrder = new ArrayList<>();
+//
+//        when(catProvider.resolveResource(any())).then(invoc -> {
+//            resolveLock.lock();
+//            MapDataResource unresolved = invoc.getArgument(0);
+//            MapDataResource resolved = resolvedResources.get(unresolved.getUri());
+//            lastResolve.set(resolved);
+//            lastResolveChanged.signal();
+//            while (lastResolve.get() != null) {
+//                lastResolveRetrieved.await(oneSecond(), TimeUnit.MILLISECONDS);
+//            }
+//            resolveLock.unlock();
+//            return resolved;
+//        });
+//
+//        activateExecutor();
+//
+//        repo1.postValue(setOf(res1, res2));
+//
+//        resolveLock.lock();
+//        try {
+//            while (lastResolve.get() == null) {
+//                lastResolveChanged.await(oneSecond(), TimeUnit.MILLISECONDS);
+//            }
+//            resolveOrder.add(lastResolve.get());
+//        }
+//        finally {
+//            resolveLock.unlock();
+//        }
+//
+//        MapDataResource firstResolved = resolveOrder.get(0);
+//
+//        assertThat(unresolvedResources.remove(firstResolved.getUri()), sameInstance(firstResolved));
+//
+//        AsyncTesting.waitForMainThreadToRun(() -> {
+//            repo1.setValue(new HashSet<>(unresolvedResources.values()));
+//        });
+//
+//        resolveLock.lock();
+//        try {
+//            MapDataResource waitingToReturn = resolveOrder.get(1);
+//            if (!lastResolve.compareAndSet(waitingToReturn, null)) {
+//                fail("unexpected last resolved resource: " + lastResolve.get());
+//            }
+//            lastResolveRetrieved.signal();
+//            while (lastResolve.get() == null) {
+//                lastResolveChanged.await(oneSecond(), TimeUnit.MILLISECONDS);
+//            }
+//            resolveOrder.add(lastResolve.getAndSet(null));
+//            lastResolveRetrieved.signal();
+//        }
+//        finally {
+//            resolveLock.unlock();
+//        }
+//
+//        mainLooperAssertion.assertOnMainThreadThatWithin(oneSecond(), manager::getResources, is(mapOf(res1Resolved, res2Resolved)));
+//
+//        deactivateExecutorAndWait();
+//
+//        assertThat(resolveOrder, hasSize(3));
+//        verify(catProvider, times(2)).resolveResource(resourceWithUri(resolveOrder.get(0).getUri()));
+//        verify(catProvider, times(1)).resolveResource(resourceWithUri(resolveOrder.get(1).getUri()));
+//        verify(listener).onMapDataUpdated(updateCaptor.capture());
+//        MapDataManager.MapDataUpdate update = updateCaptor.getValue();
+//        assertThat(update.getAdded(), is(resolvedResources));
+//        assertThat(update.getUpdated(), is(emptyMap()));
+//        assertThat(update.getRemoved(), is(emptyMap()));
+//        assertThat(manager.getResources().get(res1.getUri()).getResolved(), sameInstance(res1Resolved.getResolved()));
+//        assertThat(manager.getResources().get(res2.getUri()).getResolved(), sameInstance(res2Resolved.getResolved()));
+
         fail("unimplemented");
     }
 
