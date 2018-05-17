@@ -308,14 +308,14 @@ class MapDataManager(config: Config) : LifecycleOwner {
                     val unresolved = next()
                     try {
                         val resolved = resolveWithFirstCapableProvider(unresolved)
-                        result!!.resolved[unresolved] = resolved
+                        result.resolved[unresolved] = resolved
                     }
                     catch (e: MapDataResolveException) {
-                        result!!.failed[unresolved] = e
+                        result.failed[unresolved] = e
                     }
                     remove()
                 }
-                return result!!
+                return result
             }
         }
 

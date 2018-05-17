@@ -23,6 +23,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatcher;
 import org.mockito.InOrder;
 import org.mockito.Mockito;
+import org.mockito.stubbing.Answer;
 import org.mockito.verification.VerificationWithTimeout;
 
 import java.io.File;
@@ -61,7 +62,6 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.sameInstance;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.containsInAnyOrder;
-import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasEntry;
 import static org.hamcrest.Matchers.hasSize;
@@ -1312,8 +1312,80 @@ public class MapDataManagerTest {
     }
 
     @Test
-    public void handlesRepositoryChangeThatResolvesResourcesWhileResolvingConcurrently() {
-        fail("unimplemented");
+    public void handlesRepositoryChangeThatResolvesResourcesWhileResolvingConcurrently() throws MapDataResolveException, InterruptedException {
+        Lock resolveLock = new ReentrantLock();
+        AtomicBoolean resolveBlocked = new AtomicBoolean(false);
+        Condition resolveCondition = resolveLock.newCondition();
+        MapDataResource res1 = repo1.buildResource("res1.cat", null).finish();
+        MapDataResource res1RepoResolved = repo1.resolveResource(res1, catProvider, "res1/fromRepo");
+        MapDataResource res1ProviderResolved = repo1.resolveResource(res1, catProvider, "res1/fromProvider");
+        MapDataResource res2 = repo1.buildResource("res2.dog", null).finish();
+        MapDataResource res2RepoResolved = repo1.resolveResource(res2, dogProvider, "res2/fromRepo");
+        MapDataResource res2ProviderResolved = repo1.resolveResource(res2, dogProvider, "res2/fromProvider");
+        Map<URI, MapDataResource> providerResolvedResources = mapOf(res1ProviderResolved, res2ProviderResolved);
+
+        Answer<MapDataResource> resolveAnswer = invoc -> {
+            resolveLock.lock();
+            resolveBlocked.set(true);
+            resolveCondition.signal();
+            while (resolveBlocked.get()) {
+                resolveCondition.await(oneSecond(), TimeUnit.MILLISECONDS);
+            }
+            resolveLock.unlock();
+            MapDataResource unresolvedResource = invoc.getArgument(0);
+            MapDataResource resolvedResource = providerResolvedResources.get(unresolvedResource.getUri());
+            return resolvedResource;
+        };
+
+        when(catProvider.resolveResource(any())).then(resolveAnswer);
+        when(dogProvider.resolveResource(any())).then(resolveAnswer);
+
+        activateExecutor();
+
+        repo1.postValue(setOf(res1, res2));
+
+        resolveLock.lock();
+        while (!resolveBlocked.get()) {
+            resolveCondition.await(oneSecond(), TimeUnit.MILLISECONDS);
+        }
+        resolveLock.unlock();
+
+        AsyncTesting.waitForMainThreadToRun(() -> {
+            repo1.setValue(setOf(res1RepoResolved, res2));
+        });
+
+        resolveLock.lock();
+        resolveBlocked.set(false);
+        resolveCondition.signal();
+        while (!resolveBlocked.get()) {
+            resolveCondition.await(oneSecond(), TimeUnit.MILLISECONDS);
+        }
+        resolveLock.unlock();
+
+        AsyncTesting.waitForMainThreadToRun(() -> {
+            repo1.setValue(setOf(res1RepoResolved, res2RepoResolved));
+        });
+
+        resolveLock.lock();
+        resolveBlocked.set(false);
+        resolveCondition.signal();
+        resolveLock.unlock();
+
+        mainLooperAssertion.assertOnMainThreadThatWithin(oneSecond(), manager::getResources, is(mapOf(res1RepoResolved, res2RepoResolved)));
+
+        deactivateExecutorAndWait();
+
+        assertThat(manager.getResources(), hasEntry(is(res1.getUri()), sameInstance(res1RepoResolved)));
+        assertThat(manager.getResources(), hasEntry(is(res2.getUri()), sameInstance(res2RepoResolved)));
+        assertThat(manager.getResources().get(res1.getUri()).getResolved(), sameInstance(res1RepoResolved.getResolved()));
+        assertThat(manager.getResources().get(res2.getUri()).getResolved(), sameInstance(res2RepoResolved.getResolved()));
+        verify(catProvider).resolveResource(res1);
+        verify(dogProvider).resolveResource(res2);
+        verify(listener).onMapDataUpdated(updateCaptor.capture());
+        MapDataManager.MapDataUpdate update = updateCaptor.getValue();
+        assertThat(update.getAdded(), is(mapOf(res1RepoResolved, res2RepoResolved)));
+        assertThat(update.getAdded(), hasEntry(is(res1.getUri()), sameInstance(res1RepoResolved)));
+        assertThat(update.getAdded(), hasEntry(is(res2.getUri()), sameInstance(res2RepoResolved)));
     }
 
     @Test
