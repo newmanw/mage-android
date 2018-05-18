@@ -1467,11 +1467,6 @@ public class MapDataManagerTest {
     }
 
     @Test
-    public void stopsResolvingChangeWhenSameRepositoryFiresChangeConcurrently() {
-        fail("unimplemented");
-    }
-
-    @Test
     public void providesResolvedResourcesToRepositoryForRefresh() {
         fail("unimplemented");
     }
