@@ -52,6 +52,7 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
+import mil.nga.giat.mage.data.Resource;
 import mil.nga.giat.mage.test.AsyncTesting;
 
 import static java.util.Collections.emptyMap;
@@ -95,10 +96,12 @@ public class MapDataManagerTest {
     static abstract class CatProvider implements MapDataProvider {}
     static abstract class DogProvider implements MapDataProvider {}
 
+
     private static class TestDirRepository extends MapDataRepository {
 
         private final File dir;
         private Status status = Status.Success;
+        private int refreshCount = 0;
 
         TestDirRepository(File dir) {
             this.dir = dir;
@@ -138,10 +141,7 @@ public class MapDataManagerTest {
 
         @Override
         public void refreshAvailableMapData(Map<URI, MapDataResource> existingResolved, Executor executor) {
-            status = Status.Loading;
-            executor.execute(() -> {
-
-            });
+            refreshCount++;
         }
 
         @Override
@@ -512,6 +512,77 @@ public class MapDataManagerTest {
         verify(repo2).refreshAvailableMapData(anyMap(), same(executor));
         verify(executor, never()).execute(any());
         verify(listener, never()).onMapDataUpdated(any());
+    }
+
+    @Test
+    public void providesResolvedResourcesToRepositoryForRefresh() {
+        fail("unimplemented");
+    }
+
+    @Test
+    @UiThreadTest
+    public void doesNotRefreshRepositoryThatIsLoading() {
+        repo1.setStatus(Resource.Status.Loading);
+        manager.refreshMapData();
+
+        assertThat(repo1.refreshCount, is(0));
+        assertThat(repo2.refreshCount, is(1));
+
+        repo1.setStatus(Resource.Status.Success);
+        manager.refreshMapData();
+
+        assertThat(repo1.refreshCount, is(1));
+        assertThat(repo2.refreshCount, is(2));
+    }
+
+    @Test
+    public void doesNotRefreshRepositoryWithAChangeInProgress() throws MapDataResolveException, InterruptedException {
+        MapDataResource res1 = repo1.buildResource("res.cat", null).finish();
+        Lock lock = new ReentrantLock();
+        Condition resolveCondition = lock.newCondition();
+        AtomicBoolean resolveBlocked = new AtomicBoolean(false);
+
+        when(catProvider.resolveResource(res1)).then(invocation -> {
+            lock.lock();
+            resolveBlocked.set(true);
+            resolveCondition.signal();
+            while (resolveBlocked.get()) {
+                resolveCondition.await(oneSecond(), TimeUnit.MILLISECONDS);
+            }
+            lock.unlock();
+            return repo1.resolveResource(res1, catProvider);
+        });
+
+        activateExecutor();
+        repo1.postValue(setOf(res1));
+
+        lock.lock();
+        while (!resolveBlocked.get()) {
+            resolveCondition.await(oneSecond(), TimeUnit.MILLISECONDS);
+        }
+        lock.unlock();
+
+        AsyncTesting.waitForMainThreadToRun(() -> {
+            manager.refreshMapData();
+
+            assertThat(repo1.getStatus(), not(Resource.Status.Loading));
+            assertThat(repo1.refreshCount, is(0));
+            assertThat(repo2.refreshCount, is(1));
+        });
+
+        lock.lock();
+        resolveBlocked.set(false);
+        resolveCondition.signal();
+        lock.unlock();
+
+        mainLooperAssertion.assertOnMainThreadThatWithin(oneSecond(), manager::getResources, is(mapOf(res1)));
+
+        AsyncTesting.waitForMainThreadToRun(() -> {
+            manager.refreshMapData();
+
+            assertThat(repo1.refreshCount, is(1));
+            assertThat(repo2.refreshCount, is(2));
+        });
     }
 
     @Test
@@ -1464,25 +1535,6 @@ public class MapDataManagerTest {
         assertThat(update.getAdded(), hasEntry(is(res3.getUri()), sameInstance(res3Resolved)));
         assertThat(update.getUpdated(), is(emptyMap()));
         assertThat(update.getRemoved(), is(emptyMap()));
-    }
-
-    @Test
-    public void providesResolvedResourcesToRepositoryForRefresh() {
-        fail("unimplemented");
-    }
-
-    /**
-     * TODO: evaluate whether these next three are the way we want this to behave.
-     * LiveData.setData() will notify observers serially, so should the MapDataUpdate
-     * events be collated or just dispatch updates always as they come, regardless of
-     * resolved state and other refreshing repositories? should MapDataManager let
-     * repositories handle whether to execute a refresh when one is already in progress?
-     * maybe it's all just fine.
-     */
-
-    @Test
-    public void doesNotRefreshRepositoryThatIsAlreadyRefreshing() {
-        fail("unimplemented");
     }
 
 

@@ -9,6 +9,7 @@ import android.arch.lifecycle.Observer
 import android.os.AsyncTask
 import android.support.annotation.MainThread
 import com.google.android.gms.maps.GoogleMap
+import mil.nga.giat.mage.data.Resource
 import java.io.File
 import java.net.URI
 import java.util.*
@@ -80,7 +81,9 @@ class MapDataManager(config: Config) : LifecycleOwner {
      */
     fun refreshMapData() {
         for (repo in repositories) {
-            repo.refreshAvailableMapData(resourcesForRepo(repo), executor)
+            if (repo.status != Resource.Status.Loading && changeInProgressForRepository[repo.id] == null) {
+                repo.refreshAvailableMapData(resourcesForRepo(repo), executor)
+            }
         }
     }
 
