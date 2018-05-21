@@ -102,6 +102,7 @@ public class MapDataManagerTest {
         private final File dir;
         private Status status = Status.Success;
         private int refreshCount = 0;
+        private Map<URI, MapDataResource> lastRefreshSeed;
 
         TestDirRepository(File dir) {
             this.dir = dir;
@@ -141,6 +142,7 @@ public class MapDataManagerTest {
 
         @Override
         public void refreshAvailableMapData(Map<URI, MapDataResource> existingResolved, Executor executor) {
+            lastRefreshSeed = existingResolved;
             refreshCount++;
         }
 
@@ -515,8 +517,29 @@ public class MapDataManagerTest {
     }
 
     @Test
-    public void providesResolvedResourcesToRepositoryForRefresh() {
-        fail("unimplemented");
+    public void providesResolvedResourcesToRepositoryForRefresh() throws InterruptedException {
+        MapDataResource res1 = repo1.buildResource("res1.dog", dogProvider).finish();
+        MapDataResource res2 = repo1.buildResource("res2.cat", catProvider).finish();
+        MapDataResource res3 = repo2.buildResource("res3.cat", catProvider).finish();
+
+        activateExecutor();
+
+        repo1.postValue(setOf(res1, res2));
+        repo2.postValue(setOf(res3));
+
+        mainLooperAssertion.assertOnMainThreadThatWithin(oneSecond(), manager::getResources, is(mapOf(res1, res2, res3)));
+
+        deactivateExecutorAndWait();
+
+        manager.refreshMapData();
+
+        assertThat(repo1.lastRefreshSeed, allOf(
+            is(mapOf(res1, res2)),
+            hasEntry(is(res1.getUri()), sameInstance(res1)),
+            hasEntry(is(res2.getUri()), sameInstance(res2))));
+        assertThat(repo2.lastRefreshSeed, allOf(
+            is(mapOf(res3)),
+            hasEntry(is(res3.getUri()), sameInstance(res3))));
     }
 
     @Test
