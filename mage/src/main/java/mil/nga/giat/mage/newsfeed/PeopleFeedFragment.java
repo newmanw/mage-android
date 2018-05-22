@@ -305,11 +305,6 @@ public class PeopleFeedFragment extends Fragment implements OnItemClickListener,
 	}
 
 	@Override
-	public void onError(Throwable error) {
-		
-	}
-
-	@Override
 	public void onLocationCreated(Collection<Location> location) {
 		updateTimeFilter(getTimeFilterId());
 	}

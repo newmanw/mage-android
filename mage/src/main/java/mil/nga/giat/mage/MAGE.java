@@ -342,11 +342,6 @@ public class MAGE extends MultiDexApplication implements ISessionEventListener, 
 	}
 
 	@Override
-	public void onError(Throwable error) {
-		// TODO Auto-generated method stub
-	}
-
-	@Override
 	public void onTokenExpired() {
 		destroyFetching();
 		destroyPushing();

@@ -455,10 +455,6 @@ public class ObservationFeedFragment extends Fragment implements IObservationEve
 	}
 
 	@Override
-	public void onError(Throwable error) {
-	}
-
-	@Override
 	public void onObservationCreated(final Collection<Observation> observations, Boolean sendUserNotifcations) {
 		getActivity().runOnUiThread(new Runnable() {
 			@Override

@@ -92,10 +92,4 @@ public class ObservationNotificationListener implements IObservationEventListene
 	public void onObservationDeleted(Observation observation) {
 		//do nothing
 	}
-
-	@Override
-	public void onError(Throwable throwable) {
-		//do nothing
-	}
-
 }

@@ -1262,10 +1262,6 @@ public class MapFragment extends Fragment implements
 		preferences.edit().putString(getResources().getString(R.string.recentMapXYZKey), xyz).apply();
 	}
 
-	@Override
-	public void onError(Throwable error) {
-	}
-
 	private int getTimePeriodFilterPreferenceValue(int timeFilterPrefKeyResId) {
 		Resources res = getResources();
 		String prefKey = res.getString(timeFilterPrefKeyResId);

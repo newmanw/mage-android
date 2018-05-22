@@ -216,10 +216,6 @@ public class ObservationViewActivity extends AppCompatActivity implements OnMapR
 			@Override
 			public void onObservationDeleted(Observation observation) {
 			}
-
-			@Override
-			public void onError(Throwable error) {
-			}
 		};
 
 		ObservationHelper.getInstance(getApplicationContext()).addListener(observationEventListener);
