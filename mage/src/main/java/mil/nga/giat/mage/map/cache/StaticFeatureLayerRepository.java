@@ -42,15 +42,16 @@ import mil.nga.giat.mage.sdk.datastore.staticfeature.StaticFeatureHelper;
 import mil.nga.giat.mage.sdk.datastore.staticfeature.StaticFeatureProperty;
 import mil.nga.giat.mage.sdk.datastore.user.Event;
 import mil.nga.giat.mage.sdk.datastore.user.EventHelper;
+import mil.nga.giat.mage.sdk.event.IEventEventListener;
 import mil.nga.giat.mage.sdk.exceptions.LayerException;
 import mil.nga.giat.mage.sdk.http.resource.LayerResource;
 import mil.nga.giat.mage.sdk.login.LoginTaskFactory;
 
 
 @MainThread
-public class MAGEStaticFeatureLayerRepository extends MapDataRepository implements MapDataProvider {
+public class StaticFeatureLayerRepository extends MapDataRepository implements MapDataProvider, IEventEventListener {
 
-    private static final String LOG_NAME = MAGEStaticFeatureLayerRepository.class.getName();
+    private static final String LOG_NAME = StaticFeatureLayerRepository.class.getName();
     private static final URI RESOURCE_URI;
     static {
         try {
@@ -63,13 +64,13 @@ public class MAGEStaticFeatureLayerRepository extends MapDataRepository implemen
     private static final String RESOURCE_NAME = "Event Layers";
 
     @SuppressLint("StaticFieldLeak")
-    private static MAGEStaticFeatureLayerRepository instance = null;
+    private static StaticFeatureLayerRepository instance = null;
 
     public static synchronized void initialize(Application context) {
-        instance = new MAGEStaticFeatureLayerRepository(context);
+        instance = new StaticFeatureLayerRepository(context);
     }
 
-    public static MAGEStaticFeatureLayerRepository getInstance() {
+    public static StaticFeatureLayerRepository getInstance() {
         return instance;
     }
 
@@ -83,7 +84,7 @@ public class MAGEStaticFeatureLayerRepository extends MapDataRepository implemen
     private Map<Layer, FetchLayerFeatures> pendingFeatureLoads = new LinkedHashMap<>();
     private boolean cancelling;
 
-    private MAGEStaticFeatureLayerRepository(Application context) {
+    private StaticFeatureLayerRepository(Application context) {
         this.context = context;
         this.layerService = new LayerResource(context);
     }
@@ -91,7 +92,7 @@ public class MAGEStaticFeatureLayerRepository extends MapDataRepository implemen
     @NotNull
     @Override
     public Status getStatus() {
-        return null;
+        return Status.Loading;
     }
 
     @Override
@@ -122,7 +123,7 @@ public class MAGEStaticFeatureLayerRepository extends MapDataRepository implemen
 
     @Override
     public boolean canHandleResource(MapDataResource resource) {
-        return false;
+        return RESOURCE_URI.equals(resource.getUri());
     }
 
     @Override
@@ -251,6 +252,12 @@ public class MAGEStaticFeatureLayerRepository extends MapDataRepository implemen
         cancelling = false;
     }
 
+    @Override
+    public void onEventChanged() {
+        refreshAvailableMapData(Collections.emptyMap(), AsyncTask.THREAD_POOL_EXECUTOR);
+    }
+
+    @SuppressLint("StaticFieldLeak")
     private class PurgeAllLayers extends AsyncTask<Void, Void, Executor> {
 
         private final Executor afterPurgeExecutor;
@@ -276,6 +283,7 @@ public class MAGEStaticFeatureLayerRepository extends MapDataRepository implemen
         }
     }
 
+    @SuppressLint("StaticFieldLeak")
     private class SyncEventLayers extends AsyncTask<Void, Void, Collection<Layer>> {
 
         private final Event event;
@@ -335,6 +343,7 @@ public class MAGEStaticFeatureLayerRepository extends MapDataRepository implemen
         }
     }
 
+    @SuppressLint("StaticFieldLeak")
     private class FetchLayerFeatures extends AsyncTask<Void, IconResolve, Layer> {
 
         private final Layer layer;
@@ -342,7 +351,7 @@ public class MAGEStaticFeatureLayerRepository extends MapDataRepository implemen
 
         private FetchLayerFeatures(Layer layer) {
             this.layer = layer;
-            this.resolvedIcons = new HashMap<>(MAGEStaticFeatureLayerRepository.this.resolvedIcons);
+            this.resolvedIcons = new HashMap<>(StaticFeatureLayerRepository.this.resolvedIcons);
         }
 
         @Override
@@ -388,7 +397,7 @@ public class MAGEStaticFeatureLayerRepository extends MapDataRepository implemen
         protected void onProgressUpdate(IconResolve... values) {
             IconResolve iconResolve = values[0];
             if (iconResolve.iconUrlStr != null) {
-                MAGEStaticFeatureLayerRepository.this.resolvedIcons.put(iconResolve.iconUrlStr, iconResolve);
+                StaticFeatureLayerRepository.this.resolvedIcons.put(iconResolve.iconUrlStr, iconResolve);
             }
         }
 
@@ -486,7 +495,7 @@ public class MAGEStaticFeatureLayerRepository extends MapDataRepository implemen
         private final Layer subject;
 
         private LayerDescriptor(Layer subject) {
-            super(subject.getName(), RESOURCE_URI, MAGEStaticFeatureLayerRepository.class);
+            super(subject.getName(), RESOURCE_URI, StaticFeatureLayerRepository.class);
             this.subject = subject;
         }
     }

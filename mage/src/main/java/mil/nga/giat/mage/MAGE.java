@@ -8,7 +8,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
-import android.os.AsyncTask;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.support.multidex.MultiDexApplication;
@@ -41,7 +40,7 @@ import mil.nga.giat.mage.sdk.event.ISessionEventListener;
 import mil.nga.giat.mage.sdk.exceptions.UserException;
 import mil.nga.giat.mage.sdk.fetch.LocationFetchIntentService;
 import mil.nga.giat.mage.sdk.fetch.ObservationFetchIntentService;
-import mil.nga.giat.mage.map.cache.MAGEStaticFeatureLayerRepository;
+import mil.nga.giat.mage.map.cache.StaticFeatureLayerRepository;
 import mil.nga.giat.mage.sdk.http.HttpClientManager;
 import mil.nga.giat.mage.sdk.http.resource.UserResource;
 import mil.nga.giat.mage.sdk.location.LocationService;
@@ -117,7 +116,7 @@ public class MAGE extends MultiDexApplication implements ISessionEventListener, 
 			.repositories(LocalStorageMapDataRepository.getInstance())
 			.updatePermission(new MapDataManager.CreateUpdatePermission(){}));
 
-        MAGEStaticFeatureLayerRepository.initialize(this);
+        StaticFeatureLayerRepository.initialize(this);
 
 		registerActivityLifecycleCallbacks(this);
 
@@ -142,7 +141,7 @@ public class MAGE extends MultiDexApplication implements ISessionEventListener, 
 
 		// Pull static layers and features just once
 		// TODO: static feature powers activate
-//		MAGEStaticFeatureLayerRepository.getInstance().syncEventLayers(AsyncTask.THREAD_POOL_EXECUTOR);
+//		StaticFeatureLayerRepository.getInstance().syncEventLayers(AsyncTask.THREAD_POOL_EXECUTOR);
 
 		InitializeMAGEWearBridge.startBridgeIfWearBuild(getApplicationContext());
 	}
@@ -273,7 +272,7 @@ public class MAGE extends MultiDexApplication implements ISessionEventListener, 
 	 * Stop Tasks responsible for fetching Observations and Locations from the server.
 	 */
 	private void destroyFetching() {
-		MAGEStaticFeatureLayerRepository.getInstance().cancelSync();
+		StaticFeatureLayerRepository.getInstance().cancelSync();
 		if(locationFetchIntent != null) {
 			stopService(locationFetchIntent);
 			locationFetchIntent = null;
