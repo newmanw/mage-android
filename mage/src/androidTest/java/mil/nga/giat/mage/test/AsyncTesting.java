@@ -4,14 +4,10 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 
-import org.hamcrest.Description;
 import org.hamcrest.Matcher;
-import org.hamcrest.TypeSafeMatcher;
 import org.junit.Assert;
 import org.junit.rules.ExternalResource;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.util.concurrent.FutureTask;
 import java.util.function.Supplier;
 
@@ -53,14 +49,14 @@ public class AsyncTesting {
         private Handler.Callback callback;
 
         /**
-         *
+         * Block the calling thread until the given assertion either matches or the given timeout passes.
          * @param timeout timeout in milliseconds
          * @param actual a {@link Supplier} for the actual value, which can be a lambda or method reference
          * @param matcher the matcher to apply to the actual value
          * @param <T> the type of value to match
          * @throws InterruptedException if the calling thread gets interrupted while waiting for the assertion
          */
-        public <T> void assertOnMainThreadThatWithin(long timeout, Supplier<T> actual, Matcher<T> matcher) throws InterruptedException {
+        public <T> void assertThatWithin(long timeout, Supplier<T> actual, Matcher<T> matcher) throws InterruptedException {
             TimedAssertion<T> assertion = new TimedAssertion<>(timeout, matcher, actual);
             Message matchMessage = assertionHandler.obtainMessage(CHECK_MATCH, assertion);
             assertionHandler.sendMessage(matchMessage);

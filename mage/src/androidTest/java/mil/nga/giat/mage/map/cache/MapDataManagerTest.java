@@ -328,7 +328,7 @@ public class MapDataManagerTest {
     public TestName testName = new TestName();
 
     @Rule
-    public AsyncTesting.MainLooperAssertion mainLooperAssertion = new AsyncTesting.MainLooperAssertion();
+    public AsyncTesting.MainLooperAssertion onMainLooper = new AsyncTesting.MainLooperAssertion();
 
     private File cacheDir1;
     private File cacheDir2;
@@ -527,7 +527,7 @@ public class MapDataManagerTest {
         repo1.postValue(setOf(res1, res2));
         repo2.postValue(setOf(res3));
 
-        mainLooperAssertion.assertOnMainThreadThatWithin(oneSecond(), manager::getResources, is(mapOf(res1, res2, res3)));
+        onMainLooper.assertThatWithin(oneSecond(), manager::getResources, is(mapOf(res1, res2, res3)));
 
         deactivateExecutorAndWait();
 
@@ -598,7 +598,7 @@ public class MapDataManagerTest {
         resolveCondition.signal();
         lock.unlock();
 
-        mainLooperAssertion.assertOnMainThreadThatWithin(oneSecond(), manager::getResources, is(mapOf(res1)));
+        onMainLooper.assertThatWithin(oneSecond(), manager::getResources, is(mapOf(res1)));
 
         AsyncTesting.waitForMainThreadToRun(() -> {
             manager.refreshMapData();
@@ -923,7 +923,7 @@ public class MapDataManagerTest {
 
         repo1.postValue(setOf(res1Unresolved));
 
-        mainLooperAssertion.assertOnMainThreadThatWithin(oneSecond(), manager::getResources,
+        onMainLooper.assertThatWithin(oneSecond(), manager::getResources,
             hasEntry(is(res1Resolved.getUri()),
                 allOf(
                     not(sameInstance(res1Resolved)),
@@ -968,7 +968,7 @@ public class MapDataManagerTest {
 
         repo1.postValue(resources);
 
-        mainLooperAssertion.assertOnMainThreadThatWithin(oneSecond(), manager::getResources, is(mapOf(res1, res2, res3)));
+        onMainLooper.assertThatWithin(oneSecond(), manager::getResources, is(mapOf(res1, res2, res3)));
 
         deactivateExecutorAndWait();
 
@@ -1040,7 +1040,7 @@ public class MapDataManagerTest {
         res1ResolveBlockingCondition.signal();
         resolveLock.unlock();
 
-        mainLooperAssertion.assertOnMainThreadThatWithin(1000, manager::getResources, is(mapOf(res1, res2)));
+        onMainLooper.assertThatWithin(1000, manager::getResources, is(mapOf(res1, res2)));
 
         deactivateExecutorAndWait();
 
@@ -1141,7 +1141,7 @@ public class MapDataManagerTest {
 
         resolveVerification.verify(catProvider).resolveResource(firstUnresolvedUpdated);
 
-        mainLooperAssertion.assertOnMainThreadThatWithin(oneSecond(), manager::getResources, is(mapOf(res1Resolved, res2Resolved)));
+        onMainLooper.assertThatWithin(oneSecond(), manager::getResources, is(mapOf(res1Resolved, res2Resolved)));
 
         deactivateExecutorAndWait();
 
@@ -1207,7 +1207,7 @@ public class MapDataManagerTest {
             resolveLock.unlock();
         }
 
-        mainLooperAssertion.assertOnMainThreadThatWithin(oneSecond(), manager::getResources, is(mapOf(res1Resolved)));
+        onMainLooper.assertThatWithin(oneSecond(), manager::getResources, is(mapOf(res1Resolved)));
 
         deactivateExecutorAndWait();
 
@@ -1273,7 +1273,7 @@ public class MapDataManagerTest {
             resolveLock.unlock();
         }
 
-        mainLooperAssertion.assertOnMainThreadThatWithin(oneSecond(), manager::getResources, is(mapOf(res2Resolved)));
+        onMainLooper.assertThatWithin(oneSecond(), manager::getResources, is(mapOf(res2Resolved)));
 
         deactivateExecutorAndWait();
 
@@ -1335,7 +1335,7 @@ public class MapDataManagerTest {
             resolveLock.unlock();
         }
 
-        mainLooperAssertion.assertOnMainThreadThatWithin(oneSecond(), manager::getResources, is(mapOf(res1Resolved)));
+        onMainLooper.assertThatWithin(oneSecond(), manager::getResources, is(mapOf(res1Resolved)));
 
         deactivateExecutorAndWait();
 
@@ -1465,7 +1465,7 @@ public class MapDataManagerTest {
         resolveCondition.signal();
         resolveLock.unlock();
 
-        mainLooperAssertion.assertOnMainThreadThatWithin(oneSecond(), manager::getResources, is(mapOf(res1RepoResolved, res2RepoResolved)));
+        onMainLooper.assertThatWithin(oneSecond(), manager::getResources, is(mapOf(res1RepoResolved, res2RepoResolved)));
 
         deactivateExecutorAndWait();
 
@@ -1546,7 +1546,7 @@ public class MapDataManagerTest {
             resolveLock.unlock();
         }
 
-        mainLooperAssertion.assertOnMainThreadThatWithin(oneSecond(), manager::getResources, hasEntry(is(res3.getUri()), sameInstance(res3Resolved)));
+        onMainLooper.assertThatWithin(oneSecond(), manager::getResources, hasEntry(is(res3.getUri()), sameInstance(res3Resolved)));
 
         verify(catProvider).resolveResource(res1);
         verify(catProvider).resolveResource(res3);
