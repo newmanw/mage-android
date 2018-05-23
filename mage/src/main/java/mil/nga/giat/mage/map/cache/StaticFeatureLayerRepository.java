@@ -20,7 +20,6 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -34,7 +33,6 @@ import java.util.Set;
 import java.util.concurrent.Executor;
 
 import mil.nga.giat.mage.sdk.connectivity.ConnectivityUtility;
-import mil.nga.giat.mage.sdk.datastore.DaoStore;
 import mil.nga.giat.mage.sdk.datastore.layer.Layer;
 import mil.nga.giat.mage.sdk.datastore.layer.LayerHelper;
 import mil.nga.giat.mage.sdk.datastore.staticfeature.StaticFeature;
@@ -50,6 +48,16 @@ import mil.nga.giat.mage.sdk.login.LoginTaskFactory;
 
 @MainThread
 public class StaticFeatureLayerRepository extends MapDataRepository implements MapDataProvider, IEventEventListener {
+
+    /**
+     * TODO: This interface exists solely for the ability to inject the statement
+     * {@code !ConnectivityUtility.isOnline(context) || LoginTaskFactory.getInstance(context).isLocalLogin()}
+     * for testing {@link StaticFeatureLayerRepository}.  Hopefully something better and global to the rest
+     * of the app that allows injection comes along eventually.
+     */
+    public interface NetworkCondition {
+        boolean isConnected();
+    }
 
     private static final String LOG_NAME = StaticFeatureLayerRepository.class.getName();
     private static final URI RESOURCE_URI;
@@ -67,15 +75,25 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
     private static StaticFeatureLayerRepository instance = null;
 
     public static synchronized void initialize(Application context) {
-        instance = new StaticFeatureLayerRepository(context);
+        EventHelper eventHelper = EventHelper.getInstance(context);
+        LayerHelper layerHelper = LayerHelper.getInstance(context);
+        StaticFeatureHelper featureHelper = StaticFeatureHelper.getInstance(context);
+        LayerResource layerResource = new LayerResource(context);
+        File iconsDir = new File(context.getFilesDir(), "icons/staticfeatures");
+        NetworkCondition network = () -> !ConnectivityUtility.isOnline(context) || LoginTaskFactory.getInstance(context).isLocalLogin();
+        instance = new StaticFeatureLayerRepository(eventHelper, layerHelper, featureHelper, layerResource, iconsDir, network);
     }
 
     public static StaticFeatureLayerRepository getInstance() {
         return instance;
     }
 
-    private final Application context;
+    private final EventHelper eventHelper;
+    private final LayerHelper layerHelper;
+    private final StaticFeatureHelper featureHelper;
     private final LayerResource layerService;
+    private final File iconsDir;
+    private final NetworkCondition network;
     private final Map<String, IconResolve> resolvedIcons = new HashMap<>();
     private Event currentEvent;
     private PurgeAllLayers pendingPurge;
@@ -84,9 +102,13 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
     private Map<Layer, FetchLayerFeatures> pendingFeatureLoads = new LinkedHashMap<>();
     private boolean cancelling;
 
-    private StaticFeatureLayerRepository(Application context) {
-        this.context = context;
-        this.layerService = new LayerResource(context);
+    public StaticFeatureLayerRepository(EventHelper eventHelper, LayerHelper layerHelper, StaticFeatureHelper featureHelper, LayerResource layerService, File iconsDir, NetworkCondition network) {
+        this.eventHelper = eventHelper;
+        this.layerHelper = layerHelper;
+        this.featureHelper = featureHelper;
+        this.layerService = layerService;
+        this.iconsDir = iconsDir;
+        this.network = network;
     }
 
     @NotNull
@@ -108,12 +130,12 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
 
     @Override
     public boolean ownsResource(URI resourceUri) {
-        return false;
+        return RESOURCE_URI.equals(resourceUri);
     }
 
     @Override
     public void refreshAvailableMapData(Map<URI, MapDataResource> resolvedResources, Executor executor) {
-        Event currentEventTest = EventHelper.getInstance(context).getCurrentEvent();
+        Event currentEventTest = eventHelper.getCurrentEvent();
         if (currentEvent != null && currentEvent.equals(currentEventTest) && isSyncingLayers()) {
             return;
         }
@@ -269,7 +291,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
         @Override
         protected Executor doInBackground(Void... nothing) {
             try {
-                LayerHelper.getInstance(context).deleteAll();
+                layerHelper.deleteAll();
             }
             catch (LayerException e) {
                 Log.e(LOG_NAME, "error purging layers", e);
@@ -294,12 +316,10 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
 
         @Override
         protected Collection<Layer> doInBackground(Void... nothing) {
-            if (!ConnectivityUtility.isOnline(context) || LoginTaskFactory.getInstance(context).isLocalLogin()) {
+            if (!network.isConnected()) {
                 Log.d(LOG_NAME, "disconnected, skipping static layer fetch");
                 return Collections.emptyList();
             }
-
-            LayerHelper layerHelper = LayerHelper.getInstance(context);
 
             Collection<Layer> remoteLayers;
             try {
@@ -383,10 +403,10 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
 
             Layer layerWithFeatures = null;
             try {
-                layerWithFeatures = StaticFeatureHelper.getInstance(context).createAll(staticFeatures, layer);
-                DaoStore.getInstance(context).getLayerDao().update(layer);
+                layerWithFeatures = featureHelper.createAll(staticFeatures, layer);
+                layerHelper.update(layerWithFeatures);
             }
-            catch (SQLException e) {
+            catch (LayerException e) {
                 Log.e(LOG_NAME, "failed to mark the layer record as loaded: " + layer.getName(), e);
             }
 
@@ -437,7 +457,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
                 return new IconResolve(null, iconUrlStr);
             }
             fileName = fileName.replaceAll("^/+", "");
-            File iconFile = new File(context.getFilesDir() + "/icons/staticfeatures", fileName);
+            File iconFile = new File(iconsDir, fileName);
             if (!iconFile.exists()) {
                 InputStream inputStream;
                 try {
