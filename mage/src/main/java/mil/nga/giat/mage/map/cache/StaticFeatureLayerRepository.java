@@ -20,16 +20,11 @@ import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.Executor;
 
 import mil.nga.giat.mage.sdk.connectivity.ConnectivityUtility;
@@ -96,10 +91,8 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
     private final NetworkCondition network;
     private final Map<String, IconResolve> resolvedIcons = new HashMap<>();
     private Event currentEvent;
-    private PurgeAllLayers pendingPurge;
-    private SyncEventLayers pendingLayerSync;
-    private Executor currentSyncExecutor;
-    private Map<Layer, FetchLayerFeatures> pendingFeatureLoads = new LinkedHashMap<>();
+    private RefreshCurrentEventLayers refreshInProgress;
+    private RefreshCurrentEventLayers pendingRefresh;
     private boolean cancelling;
 
     public StaticFeatureLayerRepository(EventHelper eventHelper, LayerHelper layerHelper, StaticFeatureHelper featureHelper, LayerResource layerService, File iconsDir, NetworkCondition network) {
@@ -114,18 +107,21 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
     @NotNull
     @Override
     public Status getStatus() {
-        return Status.Loading;
+        if (refreshInProgress != null) {
+            return Status.Loading;
+        }
+        return Status.Success;
     }
 
     @Override
     public int getStatusCode() {
-        return 0;
+        return getStatus().ordinal();
     }
 
     @Nullable
     @Override
     public String getStatusMessage() {
-        return null;
+        return getStatus().toString();
     }
 
     @Override
@@ -136,11 +132,12 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
     @Override
     public void refreshAvailableMapData(Map<URI, MapDataResource> resolvedResources, Executor executor) {
         Event currentEventTest = eventHelper.getCurrentEvent();
-        if (currentEvent != null && currentEvent.equals(currentEventTest) && isSyncingLayers()) {
+        if (currentEvent != null && currentEvent.equals(currentEventTest) && getStatus() == Status.Loading) {
             return;
         }
         currentEvent = currentEventTest;
-        cancelThenStartNewSync(executor);
+        refreshInProgress = new RefreshCurrentEventLayers(executor, currentEvent);
+        refreshInProgress.begin();
     }
 
     @Override
@@ -158,159 +155,94 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
         return null;
     }
 
-    public void purgeAndRefreshAllLayers(Executor executor) {
-        if (pendingPurge != null) {
-            return;
-        }
-        pendingPurge = new PurgeAllLayers(executor);
-        cancelThenStartNewSync(executor);
-    }
-
-    public void loadFeaturesOfLayer(Layer layer, Executor executor) {
-        if (isLoadingFeatures(layer)) {
-            return;
-        }
-        pendingFeatureLoads.put(layer, new FetchLayerFeatures(layer));
-        proceedIfReady();
-    }
-
-    public void cancelSync() {
-        cancelling = false;
-        resolvedIcons.clear();
-        if (pendingLayerSync != null) {
-            cancelling = pendingLayerSync.cancel(false);
-        }
-        for (FetchLayerFeatures featuresTask : pendingFeatureLoads.values()) {
-            cancelling = cancelling || featuresTask.cancel(false);
-        }
-    }
-
-    /**
-     * Return true if a sync, purge, or cancellation is pending.  This is independent
-     * of loading features.
-     *
-     * @return
-     */
-    public boolean isSyncingLayers() {
-        return cancelling || pendingPurge != null ||
-            (pendingLayerSync != null && pendingLayerSync.getStatus() != AsyncTask.Status.PENDING);
-    }
-
-    public boolean isLoadingFeatures() {
-        return !pendingFeatureLoads.isEmpty();
-    }
-
-    public boolean isLoadingFeatures(Layer layer) {
-        return pendingFeatureLoads.get(layer) != null;
-    }
-
-    private void cancelThenStartNewSync(Executor executor) {
-        cancelSync();
-        currentSyncExecutor = executor;
-        pendingLayerSync = new SyncEventLayers(currentEvent);
-        proceedIfReady();
-    }
-
-    private void onLayersPurged() {
-        pendingPurge = null;
-        proceedIfReady();
-    }
-
-    private void onLayerSyncFinished(SyncEventLayers finished, Collection<Layer> layers) {
-        if (finished == pendingLayerSync) {
-            pendingLayerSync = null;
-        }
-        if (finished.isCancelled()) {
-            updateCancellation();
-        }
-        else {
-            Set<MapLayerDescriptor> descriptors = new HashSet<>();
-            for (Layer layer : layers) {
-                descriptors.add(new LayerDescriptor(layer));
-            }
-            MapDataResource.Resolved resolved = new MapDataResource.Resolved(RESOURCE_NAME, getClass(), descriptors);
-            MapDataResource resource = new MapDataResource(RESOURCE_URI, this, System.currentTimeMillis(), resolved);
-            setValue(Collections.singleton(resource));
-        }
-        proceedIfReady();
-    }
-
-    private void onFeatureLoadFinished(FetchLayerFeatures finished, Layer layer) {
-        pendingFeatureLoads.remove(layer);
-        if (finished.isCancelled()) {
-            updateCancellation();
-        }
-        else {
-            // TODO: cancellation api
-//            for (OnStaticLayersListener listener : listeners) {
-//                listener.onFeaturesLoaded(layer);
-//            }
-        }
-        proceedIfReady();
-    }
-
-    private void proceedIfReady() {
-        if (isSyncingLayers() || isLoadingFeatures()) {
-            return;
-        }
-        if (pendingPurge != null) {
-            pendingPurge.executeOnExecutor(currentSyncExecutor);
-        }
-        else if (pendingLayerSync != null && pendingLayerSync.getStatus() != AsyncTask.Status.RUNNING) {
-            pendingLayerSync.executeOnExecutor(currentSyncExecutor);
-        }
-        else {
-            List<FetchLayerFeatures> defendConcurrentModificationException = new ArrayList<>(pendingFeatureLoads.values());
-            for (FetchLayerFeatures featureLoad : defendConcurrentModificationException) {
-                featureLoad.executeOnExecutor(currentSyncExecutor);
-            }
-        }
-    }
-
-    private void updateCancellation() {
-        if (isLoadingFeatures()) {
-            return;
-        }
-        cancelling = false;
-    }
-
     @Override
     public void onEventChanged() {
         refreshAvailableMapData(Collections.emptyMap(), AsyncTask.THREAD_POOL_EXECUTOR);
     }
 
-    @SuppressLint("StaticFieldLeak")
-    private class PurgeAllLayers extends AsyncTask<Void, Void, Executor> {
+    public void disable() {
+        // TODO: cancel syncing in progress and disallow future syncing
+    }
 
-        private final Executor afterPurgeExecutor;
+    private void onLayerFetchFinished() {
+        Collection<Layer> fetchedLayers = refreshInProgress.layerFetch.fetchedLayers;
+        if (fetchedLayers.isEmpty()) {
+            refreshInProgress = null;
+            return;
+        }
+        for (Layer layer : refreshInProgress.layerFetch.fetchedLayers) {
+            SyncLayerFeatures featureFetch = new SyncLayerFeatures(layer);
+            refreshInProgress.featureFetchForLayer.put(layer.getRemoteId(), featureFetch);
+            featureFetch.executeOnExecutor(refreshInProgress.executor);
+        }
+    }
 
-        private PurgeAllLayers(Executor afterPurgeExecutor) {
-            this.afterPurgeExecutor = afterPurgeExecutor;
+    private void onFeaturesSynced(SyncLayerFeatures sync) {
+        SyncLayerFeatures removed = refreshInProgress.featureFetchForLayer.remove(sync.layer.getRemoteId());
+        if (removed != sync) {
+            throw new IllegalStateException("feature sync finished for layer " +
+                sync.layer.getRemoteId() + " but did not match the expected feature sync instance");
+        }
+        if (refreshInProgress.isFinished()) {
+            refreshInProgress = null;
+        }
+    }
+
+    @MainThread
+    private class RefreshCurrentEventLayers {
+
+        final Executor executor;
+        final Event event;
+        final FetchEventLayers layerFetch;
+        final Map<String, SyncLayerFeatures> featureFetchForLayer = new HashMap<>();
+        private boolean cancelled = false;
+
+        private RefreshCurrentEventLayers(Executor executor, Event event) {
+            this.executor = executor;
+            this.event = event;
+            this.layerFetch = new FetchEventLayers(event);
         }
 
-        @Override
-        protected Executor doInBackground(Void... nothing) {
-            try {
-                layerHelper.deleteAll();
-            }
-            catch (LayerException e) {
-                Log.e(LOG_NAME, "error purging layers", e);
-            }
-            return afterPurgeExecutor;
+        private void begin() {
+            layerFetch.executeOnExecutor(executor);
         }
 
-        @Override
-        protected void onPostExecute(Executor afterPurgeExecutor) {
-            onLayersPurged();
+        private boolean cancel() {
+            if (isFinished()) {
+                return false;
+            }
+            cancelled = true;
+            if (isStarted()) {
+                layerFetch.cancel(false);
+                Iterator<SyncLayerFeatures> featureFetches = featureFetchForLayer.values().iterator();
+                while (featureFetches.hasNext()) {
+                    featureFetches.next().cancel(false);
+                    featureFetches.remove();
+                }
+            }
+            return true;
+        }
+
+        private boolean isStarted() {
+            return layerFetch.getStatus() != AsyncTask.Status.PENDING;
+        }
+
+        private boolean isFinished() {
+            return layerFetch.getStatus() == AsyncTask.Status.FINISHED && featureFetchForLayer.isEmpty();
+        }
+
+        private boolean isCancelled() {
+            return cancelled;
         }
     }
 
     @SuppressLint("StaticFieldLeak")
-    private class SyncEventLayers extends AsyncTask<Void, Void, Collection<Layer>> {
+    private class FetchEventLayers extends AsyncTask<Void, Void, Collection<Layer>> {
 
         private final Event event;
+        private Collection<Layer> fetchedLayers;
 
-        private SyncEventLayers(Event event) {
+        private FetchEventLayers(Event event) {
             this.event = event;
         }
 
@@ -320,56 +252,56 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
                 Log.d(LOG_NAME, "disconnected, skipping static layer fetch");
                 return Collections.emptyList();
             }
-
-            Collection<Layer> remoteLayers;
             try {
-                remoteLayers = layerService.getLayers(event);
+                return layerService.getLayers(event);
             }
             catch (IOException e) {
                 Log.e(LOG_NAME,"error fetching static layers", e);
-                return Collections.emptyList();
             }
+            return null;
 
-            Iterator<Layer> layerIter = remoteLayers.iterator();
-            while (!isCancelled() && layerIter.hasNext()) {
-                Layer layer = layerIter.next();
-                try {
-                    layerHelper.create(layer);
-                }
-                catch (LayerException e) {
-                    Log.e(LOG_NAME, "error creating static layer " + layer.getName() + " (" + layer.getRemoteId() + ")", e);
-                }
-            }
-
-            Collection<Layer> localLayers = null;
-            try {
-                localLayers = layerHelper.readAll();
-            }
-            catch (LayerException e) {
-                Log.e(LOG_NAME, "error reading layers from database after fectch", e);
-            }
-
-            return localLayers;
+//            Iterator<Layer> layerIter = remoteLayers.iterator();
+//            while (!isCancelled() && layerIter.hasNext()) {
+//                Layer layer = layerIter.next();
+//                try {
+//                    layerHelper.create(layer);
+//                }
+//                catch (LayerException e) {
+//                    Log.e(LOG_NAME, "error creating static layer " + layer.getName() + " (" + layer.getRemoteId() + ")", e);
+//                }
+//            }
+//
+//            Collection<Layer> localLayers = null;
+//            try {
+//                localLayers = layerHelper.readAll();
+//            }
+//            catch (LayerException e) {
+//                Log.e(LOG_NAME, "error reading layers from database after fectch", e);
+//            }
+//
+//            return localLayers;
         }
 
         @Override
         protected void onPostExecute(Collection<Layer> layers) {
-            onLayerSyncFinished(this, layers);
+            fetchedLayers = layers;
+            onLayerFetchFinished();
         }
 
         @Override
         protected void onCancelled(Collection<Layer> layers) {
-            onLayerSyncFinished(this, layers);
+            onPostExecute(layers);
         }
     }
 
     @SuppressLint("StaticFieldLeak")
-    private class FetchLayerFeatures extends AsyncTask<Void, IconResolve, Layer> {
+    private class SyncLayerFeatures extends AsyncTask<Void, IconResolve, Layer> {
 
         private final Layer layer;
         private final Map<String, IconResolve> resolvedIcons;
+        private Layer syncedLayer;
 
-        private FetchLayerFeatures(Layer layer) {
+        private SyncLayerFeatures(Layer layer) {
             this.layer = layer;
             this.resolvedIcons = new HashMap<>(StaticFeatureLayerRepository.this.resolvedIcons);
         }
@@ -384,22 +316,22 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
                 return null;
             }
 
-            Iterator<StaticFeature> featureIter = staticFeatures.iterator();
-            while (!isCancelled() && featureIter.hasNext()) {
-                StaticFeature feature = featureIter.next();
-                IconResolve iconResolve = resolveIconForFeature(feature);
-                if (iconResolve.iconUrlStr != null) {
-                    resolvedIcons.put(iconResolve.iconUrlStr, iconResolve);
-                }
-                if (iconResolve.iconFileName != null) {
-                    feature.setLocalPath(iconResolve.iconFileName);
-                }
-                publishProgress(iconResolve);
-            }
-
-            if (isCancelled()) {
-                return layer;
-            }
+//            Iterator<StaticFeature> featureIter = staticFeatures.iterator();
+//            while (!isCancelled() && featureIter.hasNext()) {
+//                StaticFeature feature = featureIter.next();
+//                IconResolve iconResolve = resolveIconForFeature(feature);
+//                if (iconResolve.iconUrlStr != null) {
+//                    resolvedIcons.put(iconResolve.iconUrlStr, iconResolve);
+//                }
+//                if (iconResolve.iconFileName != null) {
+//                    feature.setLocalPath(iconResolve.iconFileName);
+//                }
+//                publishProgress(iconResolve);
+//            }
+//
+//            if (isCancelled()) {
+//                return layer;
+//            }
 
             Layer layerWithFeatures = null;
             try {
@@ -407,7 +339,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
                 layerHelper.update(layerWithFeatures);
             }
             catch (LayerException e) {
-                Log.e(LOG_NAME, "failed to mark the layer record as loaded: " + layer.getName(), e);
+                Log.e(LOG_NAME, "failed to save fetched features for layer " + layer.getName(), e);
             }
 
             return layerWithFeatures;
@@ -423,12 +355,13 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
 
         @Override
         protected void onPostExecute(Layer layer) {
-            onFeatureLoadFinished(this, layer);
+            syncedLayer = layer;
+            onFeaturesSynced(this);
         }
 
         @Override
         protected void onCancelled(Layer layer) {
-            onFeatureLoadFinished(this, layer);
+            onPostExecute(layer);
         }
 
         private IconResolve resolveIconForFeature(StaticFeature feature) {

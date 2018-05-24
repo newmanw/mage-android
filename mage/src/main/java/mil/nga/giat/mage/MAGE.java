@@ -272,7 +272,7 @@ public class MAGE extends MultiDexApplication implements ISessionEventListener, 
 	 * Stop Tasks responsible for fetching Observations and Locations from the server.
 	 */
 	private void destroyFetching() {
-		StaticFeatureLayerRepository.getInstance().cancelSync();
+		StaticFeatureLayerRepository.getInstance().disable();
 		if(locationFetchIntent != null) {
 			stopService(locationFetchIntent);
 			locationFetchIntent = null;
