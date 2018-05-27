@@ -28,7 +28,9 @@ import java.util.Map;
 import mil.nga.giat.mage.map.marker.StaticGeometryCollection;
 import mil.nga.giat.mage.sdk.datastore.layer.Layer;
 import mil.nga.giat.mage.sdk.datastore.staticfeature.StaticFeature;
+import mil.nga.giat.mage.sdk.datastore.staticfeature.StaticFeatureHelper;
 import mil.nga.giat.mage.sdk.datastore.staticfeature.StaticFeatureProperty;
+import mil.nga.giat.mage.sdk.exceptions.StaticFeatureException;
 import mil.nga.wkb.geom.Geometry;
 import mil.nga.wkb.geom.GeometryType;
 import mil.nga.wkb.geom.LineString;
@@ -53,9 +55,14 @@ public class StaticFeatureLoadTask extends AsyncTask<Layer, Object, Layer> {
 		Layer layer = layers[0];
 		String layerId = layer.getId().toString();
 
-		Log.d(LOG_NAME, "static feature layer: " + layer.getName() + " is enabled, it has " + layer.getStaticFeatures().size() + " features");
-
-		Iterator<StaticFeature> features = layer.getStaticFeatures().iterator();
+		Iterator<StaticFeature> features = null;
+		try {
+			features = StaticFeatureHelper.getInstance(context).readAll(layer.getId()).iterator();
+		}
+		catch (StaticFeatureException e) {
+			Log.e(LOG_NAME, "failed to load static features for layer " + layer.getName(), e);
+			return layer;
+		}
 		while (features.hasNext() && !isCancelled()) {
 			StaticFeature feature = features.next();
 			Geometry geometry = feature.getGeometry();
