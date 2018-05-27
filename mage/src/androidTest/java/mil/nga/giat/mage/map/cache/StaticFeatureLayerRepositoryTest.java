@@ -4,7 +4,6 @@ import android.arch.lifecycle.Lifecycle;
 import android.arch.lifecycle.LifecycleOwner;
 import android.arch.lifecycle.LifecycleRegistry;
 import android.arch.lifecycle.Observer;
-import android.os.AsyncTask;
 import android.support.annotation.NonNull;
 import android.support.test.filters.SmallTest;
 import android.support.test.runner.AndroidJUnit4;
@@ -18,12 +17,15 @@ import org.junit.rules.TestName;
 import org.junit.runner.RunWith;
 import org.mockito.InOrder;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
 import java.net.URI;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -34,22 +36,22 @@ import mil.nga.giat.mage.sdk.datastore.layer.Layer;
 import mil.nga.giat.mage.sdk.datastore.layer.LayerHelper;
 import mil.nga.giat.mage.sdk.datastore.staticfeature.StaticFeature;
 import mil.nga.giat.mage.sdk.datastore.staticfeature.StaticFeatureHelper;
+import mil.nga.giat.mage.sdk.datastore.staticfeature.StaticFeatureProperty;
 import mil.nga.giat.mage.sdk.datastore.user.Event;
 import mil.nga.giat.mage.sdk.datastore.user.EventHelper;
 import mil.nga.giat.mage.sdk.exceptions.LayerException;
+import mil.nga.giat.mage.sdk.exceptions.StaticFeatureException;
 import mil.nga.giat.mage.sdk.http.resource.LayerResource;
 import mil.nga.giat.mage.test.AsyncTesting;
 import mil.nga.wkb.geom.Point;
 
 import static java.util.Collections.emptyMap;
-import static java.util.Collections.emptySet;
 import static org.hamcrest.Matchers.is;
-import static org.hamcrest.Matchers.not;
-import static org.hamcrest.Matchers.nullValue;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -61,8 +63,26 @@ import static org.mockito.Mockito.when;
 @SmallTest
 public class StaticFeatureLayerRepositoryTest {
 
+    private static class TestLayer extends Layer {
+
+        private Long id;
+
+        TestLayer(String remoteId, String type, String name, Event event) {
+            super(remoteId, type, name, event);
+        }
+
+        public TestLayer setId(Long x) {
+            id = x;
+            return this;
+        }
+
+        public Long getId() {
+            return id;
+        }
+    }
+
     private static long oneSecond() {
-        return 1000;
+        return 300000;
     }
 
     @Rule
@@ -174,13 +194,18 @@ public class StaticFeatureLayerRepositoryTest {
     }
 
     @Test
-    public void savesFetchedLayersWithFeaturesAfterFetchingFeatures() throws IOException, InterruptedException {
+    public void savesFetchedLayersWithFeaturesAfterFetchingFeatures() throws IOException, InterruptedException, LayerException {
 
         Layer layer = new Layer("1", "test", "test1", currentEvent);
         when(layerService.getLayers(currentEvent)).thenReturn(Collections.singleton(layer));
         Collection<StaticFeature> features = Collections.singleton(
             new StaticFeature("1.1", new Point(1, 2), layer));
         when(layerService.getFeatures(layer)).thenReturn(features);
+        when(layerHelper.create(layer)).thenReturn(layer);
+        when(featureHelper.createAll(features, layer)).then((invocation) -> {
+            layer.setLoaded(true);
+            return layer;
+        });
 
         AsyncTesting.waitForMainThreadToRun(() -> {
             repo.refreshAvailableMapData(emptyMap(), executor);
@@ -191,17 +216,34 @@ public class StaticFeatureLayerRepositoryTest {
 
         awaitThreadPoolTermination();
 
-        verify(featureHelper).createAll(features, layer);
+        InOrder saveOrder = inOrder(featureHelper, layerHelper);
+        saveOrder.verify(layerHelper).delete(layer.getId());
+        saveOrder.verify(layerHelper).create(layer);
+        saveOrder.verify(featureHelper).createAll(features, layer);
+        saveOrder.verify(layerHelper).update(layer);
+        assertTrue(layer.isLoaded());
+
+        fail("need to verify layer.isLoaded() is true, probably by doing readAll() after refresh and using that to set the value of the repo LiveData");
     }
 
     @Test
-    public void fetchesAndSavesIconFilesForFeaturesAfterSavingFetchedFeatures() throws IOException, InterruptedException {
+    public void fetchesAndSavesIconFilesForFeaturesAfterSavingFetchedFeatures() throws IOException, InterruptedException, LayerException, StaticFeatureException {
 
         Layer layer = new Layer("1", "test", "test1", currentEvent);
+        Layer createdLayer = new TestLayer("1", "test", "test1", currentEvent).setId(1234L);
+        StaticFeature feature = new StaticFeature("1.1", new Point(1, 2), layer);
+        String iconUrl = "http://test.mage/icons/test/point.png";
+        StaticFeatureProperty iconProperty = new StaticFeatureProperty(StaticFeatureLayerRepository.PROP_ICON_URL, iconUrl);
+        feature.getProperties().add(iconProperty);
+        List<StaticFeature> features = Collections.singletonList(feature);
+        ByteArrayInputStream iconBytes = new ByteArrayInputStream("test icon".getBytes());
+
         when(layerService.getLayers(currentEvent)).thenReturn(Collections.singleton(layer));
-        Collection<StaticFeature> features = Collections.singleton(
-            new StaticFeature("1.1", new Point(1, 2), layer));
         when(layerService.getFeatures(layer)).thenReturn(features);
+        when(layerService.getFeatureIcon(iconUrl)).thenReturn(iconBytes);
+        when(layerHelper.create(layer)).thenReturn(createdLayer);
+        when(featureHelper.createAll(features, createdLayer)).thenReturn(createdLayer);
+        when(featureHelper.readAll(createdLayer.getId())).thenReturn(features);
 
         AsyncTesting.waitForMainThreadToRun(() -> {
             repo.refreshAvailableMapData(emptyMap(), executor);
@@ -212,14 +254,23 @@ public class StaticFeatureLayerRepositoryTest {
 
         awaitThreadPoolTermination();
 
-        verify(featureHelper).createAll(features, layer);
-
-        fail("unimplemented");
+        verify(layerHelper, never()).delete(any());
+        InOrder fetchOrder = inOrder(layerHelper, featureHelper, layerService);
+        fetchOrder.verify(layerHelper).create(layer);
+        fetchOrder.verify(featureHelper).createAll(features, createdLayer);
+        fetchOrder.verify(layerService).getFeatureIcon(iconUrl);
+        File iconFile = new File(iconsDir, "icons/test/point.png");
+        assertTrue(iconFile.exists());
+        FileReader reader = new FileReader(iconFile);
+        char[] content = new char[9];
+        reader.read(content);
+        assertThat(reader.read(), is(-1));
+        assertThat(String.valueOf(content), is("test icon"));
     }
 
     @Test
     public void doesNotFetchSameIconUrlTwiceAfterSavingIcon() {
-
+        fail("unimplemented");
     }
 
     @Test
@@ -249,6 +300,11 @@ public class StaticFeatureLayerRepositoryTest {
 
     @Test
     public void handlesRejectedExecutionOnExecutor() {
+        fail("unimplemented");
+    }
+
+    @Test
+    public void finishesProperlyWhenTheLastLayerSyncFinishesButIsStillResolvingIconsForPreviousLayer() {
         fail("unimplemented");
     }
 }

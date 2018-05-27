@@ -37,12 +37,15 @@ import mil.nga.giat.mage.sdk.datastore.user.Event;
 import mil.nga.giat.mage.sdk.datastore.user.EventHelper;
 import mil.nga.giat.mage.sdk.event.IEventEventListener;
 import mil.nga.giat.mage.sdk.exceptions.LayerException;
+import mil.nga.giat.mage.sdk.exceptions.StaticFeatureException;
 import mil.nga.giat.mage.sdk.http.resource.LayerResource;
 import mil.nga.giat.mage.sdk.login.LoginTaskFactory;
 
 
 @MainThread
 public class StaticFeatureLayerRepository extends MapDataRepository implements MapDataProvider, IEventEventListener {
+
+    public static final String PROP_ICON_URL = "styleiconstyleiconhref";
 
     /**
      * TODO: This interface exists solely for the ability to inject the statement
@@ -89,13 +92,11 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
     private final LayerResource layerService;
     private final File iconsDir;
     private final NetworkCondition network;
-    private final Map<String, IconResolve> resolvedIcons = new HashMap<>();
     private Event currentEvent;
     private RefreshCurrentEventLayers refreshInProgress;
     private RefreshCurrentEventLayers pendingRefresh;
-    private boolean cancelling;
 
-    public StaticFeatureLayerRepository(EventHelper eventHelper, LayerHelper layerHelper, StaticFeatureHelper featureHelper, LayerResource layerService, File iconsDir, NetworkCondition network) {
+    StaticFeatureLayerRepository(EventHelper eventHelper, LayerHelper layerHelper, StaticFeatureHelper featureHelper, LayerResource layerService, File iconsDir, NetworkCondition network) {
         this.eventHelper = eventHelper;
         this.layerHelper = layerHelper;
         this.featureHelper = featureHelper;
@@ -181,7 +182,24 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
         SyncLayerFeatures removed = refreshInProgress.featureFetchForLayer.remove(sync.layer.getRemoteId());
         if (removed != sync) {
             throw new IllegalStateException("feature sync finished for layer " +
-                sync.layer.getRemoteId() + " but did not match the expected feature sync instance");
+                sync.layer.getRemoteId() + " but did not match the expected feature sync in progress");
+        }
+        if (sync.syncedLayer == null) {
+            if (refreshInProgress.isFinished()) {
+                refreshInProgress = null;
+            }
+            return;
+        }
+        SyncFeatureIcons iconSync = new SyncFeatureIcons(sync.syncedLayer);
+        refreshInProgress.iconFetchForLayer.put(sync.syncedLayer.getRemoteId(), iconSync);
+        iconSync.executeOnExecutor(refreshInProgress.executor);
+    }
+
+    private void onFeatureIconsSynced(SyncFeatureIcons sync) {
+        SyncFeatureIcons removed = refreshInProgress.iconFetchForLayer.remove(sync.layer.getRemoteId());
+        if (removed != sync) {
+            throw new IllegalStateException("icon sync finished for layer " +
+                sync.layer.getRemoteId() + " but did not match the expected icon sync in progress");
         }
         if (refreshInProgress.isFinished()) {
             refreshInProgress = null;
@@ -195,6 +213,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
         final Event event;
         final FetchEventLayers layerFetch;
         final Map<String, SyncLayerFeatures> featureFetchForLayer = new HashMap<>();
+        final Map<String, SyncFeatureIcons> iconFetchForLayer = new HashMap<>();
         private boolean cancelled = false;
 
         private RefreshCurrentEventLayers(Executor executor, Event event) {
@@ -228,7 +247,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
         }
 
         private boolean isFinished() {
-            return layerFetch.getStatus() == AsyncTask.Status.FINISHED && featureFetchForLayer.isEmpty();
+            return layerFetch.getStatus() == AsyncTask.Status.FINISHED && featureFetchForLayer.isEmpty() && iconFetchForLayer.isEmpty();
         }
 
         private boolean isCancelled() {
@@ -259,27 +278,6 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
                 Log.e(LOG_NAME,"error fetching static layers", e);
             }
             return null;
-
-//            Iterator<Layer> layerIter = remoteLayers.iterator();
-//            while (!isCancelled() && layerIter.hasNext()) {
-//                Layer layer = layerIter.next();
-//                try {
-//                    layerHelper.create(layer);
-//                }
-//                catch (LayerException e) {
-//                    Log.e(LOG_NAME, "error creating static layer " + layer.getName() + " (" + layer.getRemoteId() + ")", e);
-//                }
-//            }
-//
-//            Collection<Layer> localLayers = null;
-//            try {
-//                localLayers = layerHelper.readAll();
-//            }
-//            catch (LayerException e) {
-//                Log.e(LOG_NAME, "error reading layers from database after fectch", e);
-//            }
-//
-//            return localLayers;
         }
 
         @Override
@@ -298,12 +296,10 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
     private class SyncLayerFeatures extends AsyncTask<Void, IconResolve, Layer> {
 
         private final Layer layer;
-        private final Map<String, IconResolve> resolvedIcons;
         private Layer syncedLayer;
 
         private SyncLayerFeatures(Layer layer) {
             this.layer = layer;
-            this.resolvedIcons = new HashMap<>(StaticFeatureLayerRepository.this.resolvedIcons);
         }
 
         @Override
@@ -315,53 +311,80 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
             catch (IOException e) {
                 return null;
             }
-
-//            Iterator<StaticFeature> featureIter = staticFeatures.iterator();
-//            while (!isCancelled() && featureIter.hasNext()) {
-//                StaticFeature feature = featureIter.next();
-//                IconResolve iconResolve = resolveIconForFeature(feature);
-//                if (iconResolve.iconUrlStr != null) {
-//                    resolvedIcons.put(iconResolve.iconUrlStr, iconResolve);
-//                }
-//                if (iconResolve.iconFileName != null) {
-//                    feature.setLocalPath(iconResolve.iconFileName);
-//                }
-//                publishProgress(iconResolve);
-//            }
-//
-//            if (isCancelled()) {
-//                return layer;
-//            }
-
-            Layer layerWithFeatures = null;
             try {
-                layerWithFeatures = featureHelper.createAll(staticFeatures, layer);
-                layerHelper.update(layerWithFeatures);
+                if (layer.getId() != null) {
+                    layerHelper.delete(layer.getId());
+                }
+                Layer layerWithFeatures = layerHelper.create(layer);
+                return featureHelper.createAll(staticFeatures, layerWithFeatures);
             }
             catch (LayerException e) {
-                Log.e(LOG_NAME, "failed to save fetched features for layer " + layer.getName(), e);
+                Log.e(LOG_NAME, "failed to save fetched layer " + layer.getName() + " (" + layer.getRemoteId() + ")", e);
             }
-
-            return layerWithFeatures;
+            return null;
         }
 
         @Override
-        protected void onProgressUpdate(IconResolve... values) {
-            IconResolve iconResolve = values[0];
-            if (iconResolve.iconUrlStr != null) {
-                StaticFeatureLayerRepository.this.resolvedIcons.put(iconResolve.iconUrlStr, iconResolve);
-            }
-        }
-
-        @Override
-        protected void onPostExecute(Layer layer) {
-            syncedLayer = layer;
+        protected void onPostExecute(Layer result) {
+            this.syncedLayer = result;
             onFeaturesSynced(this);
         }
 
         @Override
-        protected void onCancelled(Layer layer) {
-            onPostExecute(layer);
+        protected void onCancelled(Layer result) {
+            onPostExecute(result);
+        }
+    }
+
+    @SuppressLint("StaticFieldLeak")
+    private class SyncFeatureIcons extends AsyncTask<Void, Void, Void> {
+
+        private final Layer layer;
+        private final Map<String, IconResolve> resolvedIcons = new HashMap<>();
+
+        private SyncFeatureIcons(Layer layer) {
+            this.layer = layer;
+        }
+
+        @Override
+        protected Void doInBackground(Void... nothing) {
+            Collection<StaticFeature> features;
+            try {
+                features = featureHelper.readAll(layer.getId());
+            }
+            catch (StaticFeatureException e) {
+                Log.e(LOG_NAME, "error reading static features from database for layer " + layer.getName() + " (" + layer.getRemoteId() + ")");
+                return null;
+            }
+            Iterator<StaticFeature> featureIter = features.iterator();
+            while (!isCancelled() && featureIter.hasNext()) {
+                StaticFeature feature = featureIter.next();
+                IconResolve iconResolve = resolveIconForFeature(feature);
+                if (iconResolve.iconUrlStr != null) {
+                    resolvedIcons.put(iconResolve.iconUrlStr, iconResolve);
+                }
+                if (iconResolve.iconFileName != null) {
+                    feature.setLocalPath(iconResolve.iconFileName);
+                    try {
+                        featureHelper.update(feature);
+                    }
+                    catch (Exception e) {
+                        Log.e(LOG_NAME,"error saving local path to static feature record " +
+                            feature.getRemoteId() + " in layer " + layer.getRemoteId(), e);
+                    }
+                }
+            }
+            return null;
+        }
+
+        @Override
+        protected void onPostExecute(Void nothing) {
+            onFeatureIconsSynced(this);
+        }
+
+        @Override
+        protected void onCancelled(Void nothing) {
+            onFeatureIconsSynced(this);
         }
 
         private IconResolve resolveIconForFeature(StaticFeature feature) {
