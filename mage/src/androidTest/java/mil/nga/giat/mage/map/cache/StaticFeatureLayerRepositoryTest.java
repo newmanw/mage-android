@@ -55,6 +55,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -269,17 +270,65 @@ public class StaticFeatureLayerRepositoryTest {
     }
 
     @Test
-    public void doesNotFetchSameIconUrlTwiceAfterSavingIcon() {
-        fail("unimplemented");
-    }
+    public void doesNotFetchSameIconUrlAgainAfterSavingIcon() throws IOException, LayerException, StaticFeatureException, InterruptedException {
 
-    @Test
-    public void savesFetchedIconsToTheFileSystem() {
-        fail("unimplemented");
+        Layer layer1 = new Layer("1", "test", "test1", currentEvent);
+        Layer layer2 = new Layer("2", "test", "test2", currentEvent);
+        Layer createdLayer1 = new TestLayer("1", "test", "test1", currentEvent).setId(1234L);
+        Layer createdLayer2 = new TestLayer("2", "test", "test2", currentEvent).setId(4567L);
+        StaticFeature feature1 = new StaticFeature("1.1", new Point(1, 1), layer1);
+        StaticFeature feature2 = new StaticFeature("1.2", new Point(1, 2), layer1);
+        StaticFeature feature3 = new StaticFeature("2.1", new Point(2, 1), layer2);
+        String iconUrl = "http://test.mage/icons/test/point.png";
+        feature1.getProperties().add(new StaticFeatureProperty(StaticFeatureLayerRepository.PROP_ICON_URL, iconUrl));
+        feature2.getProperties().add(new StaticFeatureProperty(StaticFeatureLayerRepository.PROP_ICON_URL, iconUrl));
+        feature3.getProperties().add(new StaticFeatureProperty(StaticFeatureLayerRepository.PROP_ICON_URL, iconUrl));
+        ByteArrayInputStream iconBytes = new ByteArrayInputStream("test icon".getBytes());
+        List<StaticFeature> features1 = Arrays.asList(feature1, feature2);
+        List<StaticFeature> features2 = Collections.singletonList(feature3);
+
+        when(layerService.getLayers(currentEvent)).thenReturn(Arrays.asList(layer1, layer2));
+        when(layerService.getFeatures(layer1)).thenReturn(features1);
+        when(layerService.getFeatures(layer2)).thenReturn(features2);
+        when(layerService.getFeatureIcon(iconUrl)).thenReturn(iconBytes);
+        when(layerHelper.create(layer1)).thenReturn(createdLayer1);
+        when(layerHelper.create(layer2)).thenReturn(createdLayer2);
+        when(featureHelper.createAll(features1, createdLayer1)).thenReturn(createdLayer1);
+        when(featureHelper.createAll(features2, createdLayer2)).thenReturn(createdLayer2);
+        when(featureHelper.readAll(createdLayer1.getId())).thenReturn(features1);
+        when(featureHelper.readAll(createdLayer2.getId())).thenReturn(features2);
+
+        AsyncTesting.waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+
+        awaitThreadPoolTermination();
+
+        verify(layerService, times(1)).getFeatureIcon(iconUrl);
+        File iconFile = new File(iconsDir, "icons/test/point.png");
+        assertTrue(iconFile.exists());
+        FileReader reader = new FileReader(iconFile);
+        char[] content = new char[9];
+        reader.read(content);
+        assertThat(reader.read(), is(-1));
+        assertThat(String.valueOf(content), is("test icon"));
     }
 
     @Test
     public void doesNotAttemptToFetchWhenOffline() {
+        fail("unimplemented");
+    }
+
+    @Test
+    public void setsTheLiveDataValueAfterTheRefreshFinishes() {
+        fail("unimplemented");
+    }
+
+    @Test
+    public void usesLocalDataForFirstRefreshWhenOffline() {
         fail("unimplemented");
     }
 
