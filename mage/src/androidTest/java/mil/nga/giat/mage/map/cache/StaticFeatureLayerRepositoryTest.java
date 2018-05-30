@@ -43,6 +43,7 @@ import mil.nga.giat.mage.sdk.exceptions.LayerException;
 import mil.nga.giat.mage.sdk.exceptions.StaticFeatureException;
 import mil.nga.giat.mage.sdk.http.resource.LayerResource;
 import mil.nga.giat.mage.test.AsyncTesting;
+import mil.nga.wkb.geom.Geometry;
 import mil.nga.wkb.geom.Point;
 
 import static java.util.Collections.emptyMap;
@@ -52,6 +53,7 @@ import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -72,13 +74,33 @@ public class StaticFeatureLayerRepositoryTest {
             super(remoteId, type, name, event);
         }
 
-        public TestLayer setId(Long x) {
+        @Override
+        public Long getId() {
+            return id;
+        }
+
+        TestLayer setId(Long x) {
             id = x;
             return this;
         }
+    }
 
+    private static class TestStaticFeature extends StaticFeature {
+
+        private Long id;
+
+        TestStaticFeature(String remoteId, Geometry geom, Layer layer) {
+            super(remoteId, geom, layer);
+        }
+
+        @Override
         public Long getId() {
             return id;
+        }
+
+        TestStaticFeature setId(Long id) {
+            this.id = id;
+            return this;
         }
     }
 
@@ -195,9 +217,9 @@ public class StaticFeatureLayerRepositoryTest {
     }
 
     @Test
-    public void savesFetchedLayersWithFeaturesAfterFetchingFeatures() throws IOException, InterruptedException, LayerException {
+    public void savesFetchedLayersAndFeaturesAfterFetchingFeatures() throws IOException, InterruptedException, LayerException, StaticFeatureException {
 
-        Layer layer = new Layer("1", "test", "test1", currentEvent);
+        TestLayer layer = new TestLayer("1", "test", "test1", currentEvent);
         when(layerService.getLayers(currentEvent)).thenReturn(Collections.singleton(layer));
         Collection<StaticFeature> features = Collections.singleton(
             new StaticFeature("1.1", new Point(1, 2), layer));
@@ -205,7 +227,7 @@ public class StaticFeatureLayerRepositoryTest {
         when(layerHelper.create(layer)).thenReturn(layer);
         when(featureHelper.createAll(features, layer)).then((invocation) -> {
             layer.setLoaded(true);
-            return layer;
+            return features;
         });
 
         AsyncTesting.waitForMainThreadToRun(() -> {
@@ -218,21 +240,18 @@ public class StaticFeatureLayerRepositoryTest {
         awaitThreadPoolTermination();
 
         InOrder saveOrder = inOrder(featureHelper, layerHelper);
-        saveOrder.verify(layerHelper).delete(layer.getId());
         saveOrder.verify(layerHelper).create(layer);
         saveOrder.verify(featureHelper).createAll(features, layer);
-        saveOrder.verify(layerHelper).update(layer);
         assertTrue(layer.isLoaded());
-
-        fail("need to verify layer.isLoaded() is true, probably by doing readAll() after refresh and using that to set the value of the repo LiveData");
     }
 
     @Test
-    public void fetchesAndSavesIconFilesForFeaturesAfterSavingFetchedFeatures() throws IOException, InterruptedException, LayerException, StaticFeatureException {
+    public void fetchesAndSavesIconFilesForFeaturesAfterSavingFetchedFeatures() throws Exception {
 
         Layer layer = new Layer("1", "test", "test1", currentEvent);
         Layer createdLayer = new TestLayer("1", "test", "test1", currentEvent).setId(1234L);
-        StaticFeature feature = new StaticFeature("1.1", new Point(1, 2), layer);
+        TestStaticFeature feature = new TestStaticFeature("1.1", new Point(1, 2), layer);
+        StaticFeature createdFeature = new TestStaticFeature("1.1", new Point(1, 2), layer).setId(1L);
         String iconUrl = "http://test.mage/icons/test/point.png";
         StaticFeatureProperty iconProperty = new StaticFeatureProperty(StaticFeatureLayerRepository.PROP_ICON_URL, iconUrl);
         feature.getProperties().add(iconProperty);
@@ -243,8 +262,13 @@ public class StaticFeatureLayerRepositoryTest {
         when(layerService.getFeatures(layer)).thenReturn(features);
         when(layerService.getFeatureIcon(iconUrl)).thenReturn(iconBytes);
         when(layerHelper.create(layer)).thenReturn(createdLayer);
-        when(featureHelper.createAll(features, createdLayer)).thenReturn(createdLayer);
+        when(featureHelper.createAll(features, createdLayer)).then(invocation -> {
+            feature.setId(321L);
+            return features;
+        });
         when(featureHelper.readAll(createdLayer.getId())).thenReturn(features);
+        when(featureHelper.read(321L)).thenReturn(feature);
+        when(featureHelper.update(feature)).thenReturn(feature);
 
         AsyncTesting.waitForMainThreadToRun(() -> {
             repo.refreshAvailableMapData(emptyMap(), executor);
@@ -256,11 +280,14 @@ public class StaticFeatureLayerRepositoryTest {
         awaitThreadPoolTermination();
 
         verify(layerHelper, never()).delete(any());
-        InOrder fetchOrder = inOrder(layerHelper, featureHelper, layerService);
-        fetchOrder.verify(layerHelper).create(layer);
-        fetchOrder.verify(featureHelper).createAll(features, createdLayer);
-        fetchOrder.verify(layerService).getFeatureIcon(iconUrl);
+        InOrder order = inOrder(layerHelper, featureHelper, layerService);
+        order.verify(layerHelper).create(layer);
+        order.verify(featureHelper).createAll(features, createdLayer);
+        order.verify(layerService).getFeatureIcon(iconUrl);
+        order.verify(featureHelper).read(321L);
+        order.verify(featureHelper).update(feature);
         File iconFile = new File(iconsDir, "icons/test/point.png");
+        assertThat(feature.getLocalPath(), is(iconFile.getAbsolutePath()));
         assertTrue(iconFile.exists());
         FileReader reader = new FileReader(iconFile);
         char[] content = new char[9];
@@ -293,8 +320,8 @@ public class StaticFeatureLayerRepositoryTest {
         when(layerService.getFeatureIcon(iconUrl)).thenReturn(iconBytes);
         when(layerHelper.create(layer1)).thenReturn(createdLayer1);
         when(layerHelper.create(layer2)).thenReturn(createdLayer2);
-        when(featureHelper.createAll(features1, createdLayer1)).thenReturn(createdLayer1);
-        when(featureHelper.createAll(features2, createdLayer2)).thenReturn(createdLayer2);
+        when(featureHelper.createAll(features1, createdLayer1)).thenReturn(features1);
+        when(featureHelper.createAll(features2, createdLayer2)).thenReturn(features2);
         when(featureHelper.readAll(createdLayer1.getId())).thenReturn(features1);
         when(featureHelper.readAll(createdLayer2.getId())).thenReturn(features2);
 
@@ -307,6 +334,8 @@ public class StaticFeatureLayerRepositoryTest {
 
         awaitThreadPoolTermination();
 
+        verify(layerService).getFeatures(layer1);
+        verify(layerService).getFeatures(layer2);
         verify(layerService, times(1)).getFeatureIcon(iconUrl);
         File iconFile = new File(iconsDir, "icons/test/point.png");
         assertTrue(iconFile.exists());
@@ -333,6 +362,26 @@ public class StaticFeatureLayerRepositoryTest {
     }
 
     @Test
+    public void deletesLayersAfterFeatureFetch() throws Exception {
+
+        TestLayer layer = new TestLayer("abcd", "test", "layer 1", currentEvent);
+        when(layerService.getLayers(currentEvent)).thenReturn(Collections.singleton(layer));
+        when(layerHelper.read("abcd")).then(invoc -> layer.setId(123L));
+        when(layerHelper.create(layer)).then(invoc -> layer.setId(1234L));
+        when(layerService.getFeatures(layer)).thenReturn(Collections.emptySet());
+
+        AsyncTesting.waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+
+        verify(layerHelper).read("abcd");
+        verify(layerHelper).delete(123L);
+    }
+
+    @Test
     public void doesNotDeleteLayersIfLayerFetchFailed() {
         fail("unimplemented");
     }
@@ -354,6 +403,26 @@ public class StaticFeatureLayerRepositoryTest {
 
     @Test
     public void finishesProperlyWhenTheLastLayerSyncFinishesButIsStillResolvingIconsForPreviousLayer() {
+        fail("unimplemented");
+    }
+
+    @Test
+    public void handlesLayerFetchFailure() {
+        fail("unimplemented");
+    }
+
+    @Test
+    public void handlesFeatureFetchFailure() {
+        fail("unimplemented");
+    }
+
+    @Test
+    public void handlesIconFetchFailure() {
+        fail("unimplemented");
+    }
+
+    @Test
+    public void handlesDatabaseErrors() {
         fail("unimplemented");
     }
 }

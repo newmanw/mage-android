@@ -23,8 +23,10 @@ import java.net.URL;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executor;
 
 import mil.nga.giat.mage.sdk.connectivity.ConnectivityUtility;
@@ -173,13 +175,13 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
         }
         for (Layer layer : refreshInProgress.layerFetch.fetchedLayers) {
             SyncLayerFeatures featureFetch = new SyncLayerFeatures(layer);
-            refreshInProgress.featureFetchForLayer.put(layer.getRemoteId(), featureFetch);
+            refreshInProgress.featureSyncForLayer.put(layer.getRemoteId(), featureFetch);
             featureFetch.executeOnExecutor(refreshInProgress.executor);
         }
     }
 
     private void onFeaturesSynced(SyncLayerFeatures sync) {
-        SyncLayerFeatures removed = refreshInProgress.featureFetchForLayer.remove(sync.layer.getRemoteId());
+        SyncLayerFeatures removed = refreshInProgress.featureSyncForLayer.remove(sync.layer.getRemoteId());
         if (removed != sync) {
             throw new IllegalStateException("feature sync finished for layer " +
                 sync.layer.getRemoteId() + " but did not match the expected feature sync in progress");
@@ -190,21 +192,42 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
             }
             return;
         }
-        SyncFeatureIcons iconSync = new SyncFeatureIcons(sync.syncedLayer);
-        refreshInProgress.iconFetchForLayer.put(sync.syncedLayer.getRemoteId(), iconSync);
-        iconSync.executeOnExecutor(refreshInProgress.executor);
-    }
-
-    private void onFeatureIconsSynced(SyncFeatureIcons sync) {
-        SyncFeatureIcons removed = refreshInProgress.iconFetchForLayer.remove(sync.layer.getRemoteId());
-        if (removed != sync) {
-            throw new IllegalStateException("icon sync finished for layer " +
-                sync.layer.getRemoteId() + " but did not match the expected icon sync in progress");
+        for (Map.Entry<String, Set<Long>> entry : sync.featuresForIconUrl.entrySet()) {
+            Set<Long> features = refreshInProgress.featuresForIconUrl.get(entry.getKey());
+            if (features == null) {
+                features = new HashSet<>();
+                refreshInProgress.featuresForIconUrl.put(entry.getKey(), features);
+            }
+            features.addAll(entry.getValue());
+        }
+        if (!refreshInProgress.featureSyncForLayer.isEmpty()) {
+            return;
+        }
+        Iterator<String> iconUrlCursor = refreshInProgress.featuresForIconUrl.keySet().iterator();
+        while (iconUrlCursor.hasNext()) {
+            String iconUrl = iconUrlCursor.next();
+            Set<Long> featureIds = refreshInProgress.featuresForIconUrl.get(iconUrl);
+            SyncIconToFeatures iconSync = new SyncIconToFeatures(iconUrl, featureIds);
+            refreshInProgress.iconSyncForIconUrl.put(iconUrl, iconSync);
+            iconSync.executeOnExecutor(refreshInProgress.executor);
+            iconUrlCursor.remove();
         }
         if (refreshInProgress.isFinished()) {
             refreshInProgress = null;
         }
     }
+
+    private void onFeatureIconsSynced(SyncIconToFeatures sync) {
+        SyncIconToFeatures removed = refreshInProgress.iconSyncForIconUrl.remove(sync.iconUrlStr);
+        if (sync != removed) {
+            throw new IllegalStateException("icon sync finished for url " +
+                sync.iconUrlStr + " but did not match the expected icon sync in progress");
+        }
+        if (refreshInProgress.isFinished()) {
+            refreshInProgress = null;
+        }
+    }
+
 
     @MainThread
     private class RefreshCurrentEventLayers {
@@ -212,8 +235,9 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
         final Executor executor;
         final Event event;
         final FetchEventLayers layerFetch;
-        final Map<String, SyncLayerFeatures> featureFetchForLayer = new HashMap<>();
-        final Map<String, SyncFeatureIcons> iconFetchForLayer = new HashMap<>();
+        final Map<String, SyncLayerFeatures> featureSyncForLayer = new HashMap<>();
+        final Map<String, Set<Long>> featuresForIconUrl = new HashMap<>();
+        final Map<String, SyncIconToFeatures> iconSyncForIconUrl = new HashMap<>();
         private boolean cancelled = false;
 
         private RefreshCurrentEventLayers(Executor executor, Event event) {
@@ -233,7 +257,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
             cancelled = true;
             if (isStarted()) {
                 layerFetch.cancel(false);
-                Iterator<SyncLayerFeatures> featureFetches = featureFetchForLayer.values().iterator();
+                Iterator<SyncLayerFeatures> featureFetches = featureSyncForLayer.values().iterator();
                 while (featureFetches.hasNext()) {
                     featureFetches.next().cancel(false);
                     featureFetches.remove();
@@ -247,7 +271,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
         }
 
         private boolean isFinished() {
-            return layerFetch.getStatus() == AsyncTask.Status.FINISHED && featureFetchForLayer.isEmpty() && iconFetchForLayer.isEmpty();
+            return layerFetch.getStatus() == AsyncTask.Status.FINISHED && featureSyncForLayer.isEmpty() && iconSyncForIconUrl.isEmpty();
         }
 
         private boolean isCancelled() {
@@ -293,10 +317,11 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
     }
 
     @SuppressLint("StaticFieldLeak")
-    private class SyncLayerFeatures extends AsyncTask<Void, IconResolve, Layer> {
+    private class SyncLayerFeatures extends AsyncTask<Void, Map<String, Set<Long>>, Layer> {
 
         private final Layer layer;
         private Layer syncedLayer;
+        private Map<String, Set<Long>> featuresForIconUrl;
 
         private SyncLayerFeatures(Layer layer) {
             this.layer = layer;
@@ -312,16 +337,42 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
                 return null;
             }
             try {
-                if (layer.getId() != null) {
-                    layerHelper.delete(layer.getId());
+                Layer existing = layerHelper.read(layer.getRemoteId());
+                if (existing != null) {
+                    layerHelper.delete(existing.getId());
                 }
                 Layer layerWithFeatures = layerHelper.create(layer);
-                return featureHelper.createAll(staticFeatures, layerWithFeatures);
+                Map<String, Set<Long>> featuresForIconUrl = new HashMap<>();
+                staticFeatures = featureHelper.createAll(staticFeatures, layerWithFeatures);
+                for (StaticFeature feature : staticFeatures) {
+                    StaticFeatureProperty iconUrlProp = feature.getPropertiesMap().get(PROP_ICON_URL);
+                    if (iconUrlProp != null && iconUrlProp.getValue() != null) {
+                        String iconUrl = iconUrlProp.getValue();
+                        Set<Long> featureIds = featuresForIconUrl.get(iconUrl);
+                        if (featureIds == null) {
+                            featureIds = new HashSet<>();
+                            featuresForIconUrl.put(iconUrl, featureIds);
+                        }
+                        featureIds.add(feature.getId());
+                    }
+                }
+                //noinspection unchecked
+                publishProgress(featuresForIconUrl);
+                return layerWithFeatures;
             }
             catch (LayerException e) {
                 Log.e(LOG_NAME, "failed to save fetched layer " + layer.getName() + " (" + layer.getRemoteId() + ")", e);
             }
+            catch (StaticFeatureException e) {
+                Log.e(LOG_NAME, "failed to save static features for layer " + layer.getName() + " (" + layer.getRemoteId() + ")", e);
+            }
             return null;
+        }
+
+        @Override
+        @SafeVarargs
+        protected final void onProgressUpdate(Map<String, Set<Long>>... update) {
+            featuresForIconUrl = update[0];
         }
 
         @Override
@@ -337,43 +388,44 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
     }
 
     @SuppressLint("StaticFieldLeak")
-    private class SyncFeatureIcons extends AsyncTask<Void, Void, Void> {
+    private class SyncIconToFeatures extends AsyncTask<Void, Void, Void> {
 
-        private final Layer layer;
-        private final Map<String, IconResolve> resolvedIcons = new HashMap<>();
+        private final String iconUrlStr;
+        private final Set<Long> featureIds;
+        private Exception iconResolveFailure;
+        private Map<Long, Exception> featureUpdateFailures;
 
-        private SyncFeatureIcons(Layer layer) {
-            this.layer = layer;
+        private SyncIconToFeatures(String iconUrlStr, Set<Long> featureIds) {
+            this.iconUrlStr = iconUrlStr;
+            this.featureIds = featureIds;
         }
 
         @Override
         protected Void doInBackground(Void... nothing) {
-            Collection<StaticFeature> features;
+            File iconFile;
             try {
-                features = featureHelper.readAll(layer.getId());
+                iconFile = resolveIcon();
             }
-            catch (StaticFeatureException e) {
-                Log.e(LOG_NAME, "error reading static features from database for layer " + layer.getName() + " (" + layer.getRemoteId() + ")");
+            catch (Exception e) {
+                Log.e(LOG_NAME, "error resolving icon url " + iconUrlStr, e);
+                iconResolveFailure = e;
                 return null;
             }
-            Iterator<StaticFeature> featureIter = features.iterator();
-            while (!isCancelled() && featureIter.hasNext()) {
-                StaticFeature feature = featureIter.next();
-                IconResolve iconResolve = resolveIconForFeature(feature);
-                if (iconResolve.iconUrlStr != null) {
-                    resolvedIcons.put(iconResolve.iconUrlStr, iconResolve);
+            String iconPath = iconFile.getAbsolutePath();
+            @SuppressLint("UseSparseArrays")
+            Map<Long, Exception> updateFailures = new HashMap<>();
+            for (Long featureId : featureIds) {
+                try {
+                    StaticFeature feature = featureHelper.read(featureId);
+                    feature.setLocalPath(iconPath);
+                    featureHelper.update(feature);
                 }
-                if (iconResolve.iconFileName != null) {
-                    feature.setLocalPath(iconResolve.iconFileName);
-                    try {
-                        featureHelper.update(feature);
-                    }
-                    catch (Exception e) {
-                        Log.e(LOG_NAME,"error saving local path to static feature record " +
-                            feature.getRemoteId() + " in layer " + layer.getRemoteId(), e);
-                    }
+                catch (Exception e) {
+                    Log.e(LOG_NAME, "error updating local icon path of static feature " + featureId, e);
+                    updateFailures.put(featureId, e);
                 }
             }
+            featureUpdateFailures = updateFailures;
             return null;
         }
 
@@ -387,71 +439,50 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
             onFeatureIconsSynced(this);
         }
 
-        private IconResolve resolveIconForFeature(StaticFeature feature) {
-            StaticFeatureProperty iconProperty = feature.getPropertiesMap().get("styleiconstyleiconhref");
-            if (iconProperty == null) {
-                return new IconResolve(null, null);
-            }
-            String iconUrlStr = iconProperty.getValue();
-            if (iconUrlStr == null) {
-                return new IconResolve(null, null);
-            }
-            IconResolve result = resolvedIcons.get(iconUrlStr);
-            if (result != null) {
-                return result;
-            }
+        private File resolveIcon() throws Exception {
             URL iconUrl;
             try {
                 iconUrl = new URL(iconUrlStr);
             }
             catch (MalformedURLException e) {
-                Log.e(LOG_NAME, "bad icon url for static feature " + feature.getRemoteId() + " of layer " + feature.getLayer().getName() + " (" + feature.getLayer().getRemoteId() + ")", e);
-                return new IconResolve(null, iconUrlStr);
+                throw e;
             }
             String fileName = iconUrl.getPath();
             if (fileName == null) {
-                return new IconResolve(null, iconUrlStr);
+                throw new IllegalArgumentException("icon url has no path component: " + iconUrlStr);
             }
             fileName = fileName.replaceAll("^/+", "");
             File iconFile = new File(iconsDir, fileName);
-            if (!iconFile.exists()) {
-                InputStream inputStream;
+            if (iconFile.exists()) {
+                return iconFile;
+            }
+            InputStream inputStream = layerService.getFeatureIcon(iconUrlStr);
+            if (!iconFile.getParentFile().mkdirs()) {
+                throw new IOException("error creating parent dir for icon: " + iconFile);
+            }
+            FileOutputStream iconOut = null;
+            try {
+                iconOut = new FileOutputStream(iconFile);
+                ByteStreams.copy(inputStream, iconOut);
+            }
+            catch (IOException e) {
+                if (iconFile.exists() && !iconFile.delete()) {
+                    Log.e(LOG_NAME, "failed to delete icon file after bad file write: " + iconFile);
+                }
+                throw new IOException("error writing icon file " + iconFile, e);
+            }
+            finally {
                 try {
-                    inputStream = layerService.getFeatureIcon(iconUrlStr);
+                    if (iconOut != null) {
+                        iconOut.close();
+                    }
                 }
                 catch (IOException e) {
-                    Log.e(LOG_NAME, "error fetching icon " + iconUrlStr, e);
-                    return new IconResolve(null, iconUrlStr);
-                }
-                if (!iconFile.getParentFile().mkdirs()) {
-                    Log.e(LOG_NAME,"error creating parent dir for icon: " + iconFile);
-                    return new IconResolve(null, iconUrlStr);
-                }
-                FileOutputStream iconOut = null;
-                try {
-                    iconOut = new FileOutputStream(iconFile);
-                    ByteStreams.copy(inputStream, iconOut);
-                }
-                catch (IOException e) {
-                    Log.e(LOG_NAME, "error writing icon file " + iconFile, e);
-                    if (iconFile.exists() && !iconFile.delete()) {
-                        Log.e(LOG_NAME, "failed to delete icon file after bad file write: " + iconFile);
-                    }
-                    return new IconResolve(null, iconUrlStr);
-                }
-                finally {
-                    try {
-                        if (iconOut != null) {
-                            iconOut.close();
-                        }
-                    }
-                    catch (IOException e) {
-                        // sigh
-                        Log.e(LOG_NAME,"error finally closing icon file stream: " + iconFile, e);
-                    }
+                    // sigh
+                    Log.e(LOG_NAME,"error finally closing icon file stream: " + iconFile, e);
                 }
             }
-            return new IconResolve(iconFile.getAbsolutePath(), iconUrlStr);
+            return iconFile;
         }
     }
 
