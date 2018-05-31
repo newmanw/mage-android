@@ -6,6 +6,7 @@ import android.app.Application;
 import android.os.AsyncTask;
 import android.support.annotation.MainThread;
 import android.support.annotation.Nullable;
+import android.support.v7.util.DiffUtil;
 import android.util.Log;
 
 import com.google.common.io.ByteStreams;
@@ -92,8 +93,8 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
     private final LayerHelper layerHelper;
     private final StaticFeatureHelper featureHelper;
     private final LayerResource layerService;
-    private final File iconsDir;
     private final NetworkCondition network;
+    private final File iconsDir;
     private Event currentEvent;
     private RefreshCurrentEventLayers refreshInProgress;
     private RefreshCurrentEventLayers pendingRefresh;
@@ -140,7 +141,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
         }
         currentEvent = currentEventTest;
         refreshInProgress = new RefreshCurrentEventLayers(executor, currentEvent);
-        refreshInProgress.begin();
+        refreshInProgress.layerFetch.executeOnExecutor(executor);
     }
 
     @Override
@@ -168,15 +169,16 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
     }
 
     private void onLayerFetchFinished() {
-        Collection<Layer> fetchedLayers = refreshInProgress.layerFetch.fetchedLayers;
-        if (fetchedLayers.isEmpty()) {
-            refreshInProgress = null;
-            return;
-        }
-        for (Layer layer : refreshInProgress.layerFetch.fetchedLayers) {
+        FetchEventLayers fetch = refreshInProgress.layerFetch;
+        refreshInProgress.layerFetch = null;
+        Collection<Layer> fetchedLayers = fetch.fetchedLayers;
+        for (Layer layer : fetchedLayers) {
             SyncLayerFeatures featureFetch = new SyncLayerFeatures(layer);
             refreshInProgress.featureSyncForLayer.put(layer.getRemoteId(), featureFetch);
             featureFetch.executeOnExecutor(refreshInProgress.executor);
+        }
+        if (refreshInProgress.isFinished()) {
+            finishRefresh();
         }
     }
 
@@ -186,13 +188,8 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
             throw new IllegalStateException("feature sync finished for layer " +
                 sync.layer.getRemoteId() + " but did not match the expected feature sync in progress");
         }
-        if (sync.syncedLayer == null) {
-            if (refreshInProgress.isFinished()) {
-                refreshInProgress = null;
-            }
-            return;
-        }
-        for (Map.Entry<String, Set<Long>> entry : sync.featuresForIconUrl.entrySet()) {
+        Map<String, Set<Long>> featuresForIconUrl = sync.result.featuresForIconUrl;
+        for (Map.Entry<String, Set<Long>> entry : featuresForIconUrl.entrySet()) {
             Set<Long> features = refreshInProgress.featuresForIconUrl.get(entry.getKey());
             if (features == null) {
                 features = new HashSet<>();
@@ -200,6 +197,10 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
             }
             features.addAll(entry.getValue());
         }
+        // TODO: this is basically a barrier that prevents starting to sync icons until all features have been saved
+        // and could be improved by starting the icon syncs immediately, but that requires a bit more work to
+        // ensure that icon URLs are only fetched once in the course of a refresh and updating all the features
+        // when an icon URL is resolved, or maybe this is just good enough
         if (!refreshInProgress.featureSyncForLayer.isEmpty()) {
             return;
         }
@@ -213,7 +214,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
             iconUrlCursor.remove();
         }
         if (refreshInProgress.isFinished()) {
-            refreshInProgress = null;
+            finishRefresh();
         }
     }
 
@@ -223,21 +224,29 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
             throw new IllegalStateException("icon sync finished for url " +
                 sync.iconUrlStr + " but did not match the expected icon sync in progress");
         }
-        if (refreshInProgress.isFinished()) {
-            refreshInProgress = null;
-        }
+        finishRefresh();
     }
 
+    private void onMapDataCreated(SyncMapDataFromDatabase sync) {
+        refreshInProgress = null;
+        setValue(Collections.singleton(sync.mapData));
+    }
+
+    private void finishRefresh() {
+        refreshInProgress.syncMapData = new SyncMapDataFromDatabase(refreshInProgress.event);
+        refreshInProgress.syncMapData.executeOnExecutor(refreshInProgress.executor);
+    }
 
     @MainThread
     private class RefreshCurrentEventLayers {
 
-        final Executor executor;
-        final Event event;
-        final FetchEventLayers layerFetch;
-        final Map<String, SyncLayerFeatures> featureSyncForLayer = new HashMap<>();
-        final Map<String, Set<Long>> featuresForIconUrl = new HashMap<>();
-        final Map<String, SyncIconToFeatures> iconSyncForIconUrl = new HashMap<>();
+        private final Executor executor;
+        private final Event event;
+        private final Map<String, SyncLayerFeatures> featureSyncForLayer = new HashMap<>();
+        private final Map<String, Set<Long>> featuresForIconUrl = new HashMap<>();
+        private final Map<String, SyncIconToFeatures> iconSyncForIconUrl = new HashMap<>();
+        private FetchEventLayers layerFetch;
+        private SyncMapDataFromDatabase syncMapData;
         private boolean cancelled = false;
 
         private RefreshCurrentEventLayers(Executor executor, Event event) {
@@ -246,17 +255,15 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
             this.layerFetch = new FetchEventLayers(event);
         }
 
-        private void begin() {
-            layerFetch.executeOnExecutor(executor);
-        }
-
         private boolean cancel() {
             if (isFinished()) {
                 return false;
             }
             cancelled = true;
             if (isStarted()) {
-                layerFetch.cancel(false);
+                if (layerFetch != null) {
+                    layerFetch.cancel(false);
+                }
                 Iterator<SyncLayerFeatures> featureFetches = featureSyncForLayer.values().iterator();
                 while (featureFetches.hasNext()) {
                     featureFetches.next().cancel(false);
@@ -271,7 +278,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
         }
 
         private boolean isFinished() {
-            return layerFetch.getStatus() == AsyncTask.Status.FINISHED && featureSyncForLayer.isEmpty() && iconSyncForIconUrl.isEmpty();
+            return layerFetch == null && featureSyncForLayer.isEmpty() && iconSyncForIconUrl.isEmpty();
         }
 
         private boolean isCancelled() {
@@ -292,16 +299,32 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
         @Override
         protected Collection<Layer> doInBackground(Void... nothing) {
             if (!network.isConnected()) {
-                Log.d(LOG_NAME, "disconnected, skipping static layer fetch");
-                return Collections.emptyList();
+                return Collections.emptySet();
             }
             try {
-                return layerService.getLayers(event);
+                Collection<Layer> remoteLayers = layerService.getLayers(event);
+                if (remoteLayers.isEmpty()) {
+                    layerHelper.deleteByEvent(event);
+                    return remoteLayers;
+                }
+                Collection<Layer> localLayers = layerHelper.readByEvent(event);
+                if (localLayers.isEmpty()) {
+                    return remoteLayers;
+                }
+                Set<Layer> layersToDelete = new HashSet<>(localLayers);
+                layersToDelete.removeAll(remoteLayers);
+                for (Layer localLayer : layersToDelete) {
+                    layerHelper.delete(localLayer.getId());
+                }
+                return remoteLayers;
             }
             catch (IOException e) {
                 Log.e(LOG_NAME,"error fetching static layers", e);
             }
-            return null;
+            catch (LayerException e) {
+                Log.e(LOG_NAME, "error deleting layers for event " + event.getName() + " (" + event.getRemoteId() + ") after empty fetch result");
+            }
+            return Collections.emptySet();
         }
 
         @Override
@@ -316,24 +339,29 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
         }
     }
 
+    /**
+     * Fetch the features for the given layer from the server and save them to the database,
+     * deleting the existing layer and features if applicable.  Also, compute the icon URLs
+     * that need to be resolved and saved to the feature records.
+     */
     @SuppressLint("StaticFieldLeak")
-    private class SyncLayerFeatures extends AsyncTask<Void, Map<String, Set<Long>>, Layer> {
+    private class SyncLayerFeatures extends AsyncTask<Void, Void, SyncLayerFeaturesResult> {
 
         private final Layer layer;
-        private Layer syncedLayer;
-        private Map<String, Set<Long>> featuresForIconUrl;
+        private SyncLayerFeaturesResult result;
 
         private SyncLayerFeatures(Layer layer) {
             this.layer = layer;
         }
 
         @Override
-        protected Layer doInBackground(Void... nothing) {
+        protected SyncLayerFeaturesResult doInBackground(Void... nothing) {
             Collection<StaticFeature> staticFeatures;
             try {
                 staticFeatures = layerService.getFeatures(layer);
             }
             catch (IOException e) {
+                Log.e(LOG_NAME, "error fetching features for layer " + layer.getRemoteId(), e);
                 return null;
             }
             try {
@@ -357,8 +385,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
                     }
                 }
                 //noinspection unchecked
-                publishProgress(featuresForIconUrl);
-                return layerWithFeatures;
+                return new SyncLayerFeaturesResult(layerWithFeatures, featuresForIconUrl);
             }
             catch (LayerException e) {
                 Log.e(LOG_NAME, "failed to save fetched layer " + layer.getName() + " (" + layer.getRemoteId() + ")", e);
@@ -370,20 +397,24 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
         }
 
         @Override
-        @SafeVarargs
-        protected final void onProgressUpdate(Map<String, Set<Long>>... update) {
-            featuresForIconUrl = update[0];
-        }
-
-        @Override
-        protected void onPostExecute(Layer result) {
-            this.syncedLayer = result;
+        protected void onPostExecute(SyncLayerFeaturesResult result) {
+            this.result = result;
             onFeaturesSynced(this);
         }
 
         @Override
-        protected void onCancelled(Layer result) {
+        protected void onCancelled(SyncLayerFeaturesResult result) {
             onPostExecute(result);
+        }
+    }
+
+    private static class SyncLayerFeaturesResult {
+        private final Layer syncedLayer;
+        private final Map<String, Set<Long>> featuresForIconUrl;
+
+        private SyncLayerFeaturesResult(Layer syncedLayer, Map<String, Set<Long>> featuresForIconUrl) {
+            this.syncedLayer = syncedLayer;
+            this.featuresForIconUrl = featuresForIconUrl;
         }
     }
 
@@ -392,8 +423,8 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
 
         private final String iconUrlStr;
         private final Set<Long> featureIds;
-        private Exception iconResolveFailure;
-        private Map<Long, Exception> featureUpdateFailures;
+        private volatile Exception iconResolveFailure;
+        private volatile Map<Long, Exception> featureUpdateFailures;
 
         private SyncIconToFeatures(String iconUrlStr, Set<Long> featureIds) {
             this.iconUrlStr = iconUrlStr;
@@ -486,14 +517,44 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
         }
     }
 
-    private static class IconResolve {
+    @SuppressLint("StaticFieldLeak")
+    private class SyncMapDataFromDatabase extends AsyncTask<Void, LayerException, MapDataResource> {
 
-        private final String iconFileName;
-        private final String iconUrlStr;
+        private final Event event;
+        private MapDataResource mapData;
+        private LayerException failure;
 
-        private IconResolve(String iconFileName, String iconUrlStr) {
-            this.iconFileName = iconFileName;
-            this.iconUrlStr = iconUrlStr;
+        private SyncMapDataFromDatabase(Event event) {
+            this.event = event;
+        }
+
+        @Override
+        protected MapDataResource doInBackground(Void[] nothing) {
+            try {
+                Collection<Layer> layers = layerHelper.readByEvent(event);
+                Set<LayerDescriptor> descriptors = new HashSet<>(layers.size());
+                for (Layer layer : layers) {
+                    descriptors.add(new LayerDescriptor(layer));
+                }
+                MapDataResource.Resolved resolvedLayers = new MapDataResource.Resolved(RESOURCE_NAME, StaticFeatureLayerRepository.class, descriptors);
+                return new MapDataResource(RESOURCE_URI, StaticFeatureLayerRepository.this, 0, resolvedLayers);
+            }
+            catch (LayerException e) {
+                onProgressUpdate(e);
+            }
+            return new MapDataResource(RESOURCE_URI, StaticFeatureLayerRepository.this, 0,
+                new MapDataResource.Resolved(RESOURCE_NAME, StaticFeatureLayerRepository.class));
+        }
+
+        @Override
+        protected void onProgressUpdate(LayerException... values) {
+            failure = values[0];
+        }
+
+        @Override
+        protected void onPostExecute(MapDataResource resource) {
+            mapData = resource;
+            onMapDataCreated(this);
         }
     }
 
@@ -502,8 +563,14 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
         private final Layer subject;
 
         private LayerDescriptor(Layer subject) {
-            super(subject.getName(), RESOURCE_URI, StaticFeatureLayerRepository.class);
+            super(subject.getRemoteId(), RESOURCE_URI, StaticFeatureLayerRepository.class);
             this.subject = subject;
+        }
+
+        @NotNull
+        @Override
+        public String getLayerTitle() {
+            return subject.getName();
         }
     }
 }

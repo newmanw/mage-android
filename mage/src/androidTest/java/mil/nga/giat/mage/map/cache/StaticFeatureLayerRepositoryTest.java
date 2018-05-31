@@ -15,7 +15,11 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import org.junit.rules.TestName;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.InOrder;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -47,7 +51,13 @@ import mil.nga.wkb.geom.Geometry;
 import mil.nga.wkb.geom.Point;
 
 import static java.util.Collections.emptyMap;
+import static java.util.Collections.emptySet;
+import static mil.nga.giat.mage.test.AsyncTesting.waitForMainThreadToRun;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.sameInstance;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
@@ -110,43 +120,51 @@ public class StaticFeatureLayerRepositoryTest {
 
     @Rule
     public TestName testName = new TestName();
-
     @Rule
     public TemporaryFolder iconsDirRule = new TemporaryFolder();
-
     @Rule
     public AsyncTesting.MainLooperAssertion onMainThread = new AsyncTesting.MainLooperAssertion();
 
-    private Event currentEvent;
+    @Mock
     private EventHelper eventHelper;
+    @Mock
     private LayerHelper layerHelper;
+    @Mock
     private StaticFeatureHelper featureHelper;
+    @Mock
     private LayerResource layerService;
-    private File iconsDir;
-    private StaticFeatureLayerRepository.NetworkCondition network;
-    private StaticFeatureLayerRepository repo;
-    private LifecycleOwner observerLifecycle;
+    @Mock
     private Observer<Set<MapDataResource>> observer;
+    @Mock
+    private StaticFeatureLayerRepository.NetworkCondition network;
+
+    @Captor
+    private ArgumentCaptor<Set<MapDataResource>> observed;
+
+    private Event currentEvent;
+    private File iconsDir;
+    private StaticFeatureLayerRepository repo;
     private ThreadPoolExecutor executor;
 
     @Before
     public void setupRepo() throws IOException {
-        currentEvent = new Event(testName.getMethodName(), testName.getMethodName(), testName.getMethodName(), "", "");
-        eventHelper = mock(EventHelper.class);
-        layerHelper = mock(LayerHelper.class);
-        featureHelper = mock(StaticFeatureHelper.class);
-        layerService = mock(LayerResource.class);
+        MockitoAnnotations.initMocks(this);
         iconsDir = iconsDirRule.newFolder("icons");
-        network = mock(StaticFeatureLayerRepository.NetworkCondition.class);
+        currentEvent = new Event(testName.getMethodName(), testName.getMethodName(), testName.getMethodName(), "", "");
         repo = new StaticFeatureLayerRepository(eventHelper, layerHelper, featureHelper, layerService, iconsDir, network);
-        observerLifecycle = new LifecycleOwner() {
-            private Lifecycle myLifecycle = new LifecycleRegistry(this);
+        LifecycleOwner observerLifecycle = new LifecycleOwner() {
+            private LifecycleRegistry lifecycle = new LifecycleRegistry(this);
+
+            {
+                lifecycle.markState(Lifecycle.State.RESUMED);
+            }
+
             @NonNull
             public Lifecycle getLifecycle() {
-                return myLifecycle;
+                return lifecycle;
             }
         };
-        observer = mock(Observer.class);
+        repo.observe(observerLifecycle, observer);
         executor = new ThreadPoolExecutor(4, 4, 0, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(16));
 
         when(network.isConnected()).thenReturn(true);
@@ -182,11 +200,18 @@ public class StaticFeatureLayerRepositoryTest {
     }
 
     @Test
+    public void initialDataIsNull() {
+        waitForMainThreadToRun(() -> {
+            assertThat(repo.getValue(), nullValue());
+        });
+    }
+
+    @Test
     public void fetchesCurrentEventLayersFromServer() throws IOException, InterruptedException {
 
         when(layerService.getLayers(currentEvent)).thenReturn(Collections.emptySet());
 
-        AsyncTesting.waitForMainThreadToRun(() -> {
+        waitForMainThreadToRun(() -> {
             repo.refreshAvailableMapData(emptyMap(), executor);
             assertThat(repo.getStatus(), is(Resource.Status.Loading));
         });
@@ -202,7 +227,7 @@ public class StaticFeatureLayerRepositoryTest {
         Layer layer = new Layer("1", "test", "test1", currentEvent);
         when(layerService.getLayers(currentEvent)).thenReturn(Collections.singleton(layer));
 
-        AsyncTesting.waitForMainThreadToRun(() -> {
+        waitForMainThreadToRun(() -> {
             repo.refreshAvailableMapData(emptyMap(), executor);
             assertThat(repo.getStatus(), is(Resource.Status.Loading));
         });
@@ -230,7 +255,7 @@ public class StaticFeatureLayerRepositoryTest {
             return features;
         });
 
-        AsyncTesting.waitForMainThreadToRun(() -> {
+        waitForMainThreadToRun(() -> {
             repo.refreshAvailableMapData(emptyMap(), executor);
             assertThat(repo.getStatus(), is(Resource.Status.Loading));
         });
@@ -270,7 +295,7 @@ public class StaticFeatureLayerRepositoryTest {
         when(featureHelper.read(321L)).thenReturn(feature);
         when(featureHelper.update(feature)).thenReturn(feature);
 
-        AsyncTesting.waitForMainThreadToRun(() -> {
+        waitForMainThreadToRun(() -> {
             repo.refreshAvailableMapData(emptyMap(), executor);
             assertThat(repo.getStatus(), is(Resource.Status.Loading));
         });
@@ -325,7 +350,7 @@ public class StaticFeatureLayerRepositoryTest {
         when(featureHelper.readAll(createdLayer1.getId())).thenReturn(features1);
         when(featureHelper.readAll(createdLayer2.getId())).thenReturn(features2);
 
-        AsyncTesting.waitForMainThreadToRun(() -> {
+        waitForMainThreadToRun(() -> {
             repo.refreshAvailableMapData(emptyMap(), executor);
             assertThat(repo.getStatus(), is(Resource.Status.Loading));
         });
@@ -347,12 +372,65 @@ public class StaticFeatureLayerRepositoryTest {
     }
 
     @Test
-    public void doesNotAttemptToFetchWhenOffline() {
-        fail("unimplemented");
+    public void deletesLayersThatExistedInTheDatabaseButNotInTheFetchedLayers() throws LayerException, IOException, InterruptedException {
+
+        List<Layer> localLayers = Arrays.asList(
+            new TestLayer("layer1", "test", "layer1", currentEvent).setId(100L),
+            new TestLayer("layer2", "test", "layer1", currentEvent).setId(200L));
+        List<Layer> remoteLayers = Arrays.asList(
+            new Layer("layer1", "test", "layer1", currentEvent),
+            new Layer("layer3", "test", "layer3", currentEvent));
+        when(layerHelper.readByEvent(currentEvent)).thenReturn(localLayers);
+        when(layerService.getLayers(currentEvent)).thenReturn(remoteLayers);
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+
+        verify(layerHelper).delete(200L);
     }
 
     @Test
-    public void setsTheLiveDataValueAfterTheRefreshFinishes() {
+    public void deletesLayersThatExistedInTheDatabaseWhenLayerFetchReturnsNoLayers() throws IOException, InterruptedException, LayerException {
+
+        when(layerService.getLayers(currentEvent)).thenReturn(emptySet());
+        when(layerHelper.readByEvent(currentEvent)).thenReturn(emptySet());
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+
+        verify(layerHelper).deleteByEvent(currentEvent);
+    }
+
+    @Test
+    public void setsTheLiveDataValueAfterTheRefreshFinishes() throws InterruptedException {
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+
+        verify(observer).onChanged(observed.capture());
+        @SuppressWarnings("unchecked")
+        Set<MapDataResource> resources = observed.getValue();
+        assertThat(resources, hasSize(1));
+        assertThat(repo.getValue(), sameInstance(resources));
+        MapDataResource res = (MapDataResource) resources.toArray()[0];
+        assertThat(res.getResolved(), notNullValue());
+        assertThat(res.getResolved().getLayerDescriptors(), is(emptyMap()));
+    }
+
+    @Test
+    public void doesNotAttemptToFetchWhenOffline() {
         fail("unimplemented");
     }
 
@@ -370,7 +448,7 @@ public class StaticFeatureLayerRepositoryTest {
         when(layerHelper.create(layer)).then(invoc -> layer.setId(1234L));
         when(layerService.getFeatures(layer)).thenReturn(Collections.emptySet());
 
-        AsyncTesting.waitForMainThreadToRun(() -> {
+        waitForMainThreadToRun(() -> {
             repo.refreshAvailableMapData(emptyMap(), executor);
             assertThat(repo.getStatus(), is(Resource.Status.Loading));
         });
