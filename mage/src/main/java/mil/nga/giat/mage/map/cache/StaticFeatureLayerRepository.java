@@ -188,7 +188,10 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
             throw new IllegalStateException("feature sync finished for layer " +
                 sync.layer.getRemoteId() + " but did not match the expected feature sync in progress");
         }
-        Map<String, Set<Long>> featuresForIconUrl = sync.result.featuresForIconUrl;
+        Map<String, Set<Long>> featuresForIconUrl = Collections.emptyMap();
+        if (sync.result != null) {
+            featuresForIconUrl = sync.result.featuresForIconUrl;
+        }
         for (Map.Entry<String, Set<Long>> entry : featuresForIconUrl.entrySet()) {
             Set<Long> features = refreshInProgress.featuresForIconUrl.get(entry.getKey());
             if (features == null) {
