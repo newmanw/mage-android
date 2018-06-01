@@ -69,6 +69,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
 
@@ -530,8 +531,19 @@ public class StaticFeatureLayerRepositoryTest {
     }
 
     @Test
-    public void doesNotAttemptToFetchWhenOffline() {
-        fail("unimplemented");
+    public void doesNotAttemptToFetchWhenOffline() throws InterruptedException, IOException {
+
+        when(network.isConnected()).thenReturn(false);
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+
+        verify(network).isConnected();
+        verifyZeroInteractions(layerService);
     }
 
     @Test
