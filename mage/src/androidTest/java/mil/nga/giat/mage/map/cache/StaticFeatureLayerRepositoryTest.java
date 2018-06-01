@@ -410,6 +410,106 @@ public class StaticFeatureLayerRepositoryTest {
     }
 
     @Test
+    public void deletesLayersAfterFeatureFetch() throws Exception {
+
+        TestLayer layer = new TestLayer("abcd", "test", "layer 1", currentEvent);
+        when(layerService.getLayers(currentEvent)).thenReturn(Collections.singleton(layer));
+        when(layerHelper.read("abcd")).then(invoc -> layer.setId(123L));
+        when(layerHelper.create(layer)).then(invoc -> layer.setId(1234L));
+        when(layerService.getFeatures(layer)).thenReturn(Collections.emptySet());
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+
+        InOrder inOrder = inOrder(layerHelper, layerService);
+        inOrder.verify(layerService).getFeatures(layer);
+        inOrder.verify(layerHelper).read("abcd");
+        inOrder.verify(layerHelper).delete(123L);
+        inOrder.verify(layerHelper).create(layer);
+    }
+
+    @Test
+    public void doesNotDeleteLayersIfOffline() throws LayerException, InterruptedException, IOException {
+
+        when(network.isConnected()).thenReturn(false);
+        when(layerHelper.readByEvent(currentEvent)).thenReturn(Collections.singletonList(
+            new TestLayer("layer1", "test", "Layer 1", currentEvent).setId(123L)));
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+
+        verify(layerService, never()).getLayers(currentEvent);
+        verify(layerHelper, never()).delete(any());
+        verify(layerHelper, never()).deleteByEvent(any());
+        verify(layerHelper, never()).deleteAll();
+        assertThat(repo.getValue(), notNullValue());
+        assertThat(repo.getValue(), hasSize(1));
+        MapDataResource res = (MapDataResource) repo.getValue().toArray()[0];
+        assertThat(res.getLayers().keySet(), hasSize(1));
+        MapLayerDescriptor desc = (MapLayerDescriptor) res.getLayers().values().toArray()[0];
+        assertThat(desc.getLayerName(), is("layer1"));
+    }
+
+    @Test
+    public void doesNotDeleteLayersIfLayerFetchFailed() throws InterruptedException, IOException, LayerException {
+
+        TestLayer layer = new TestLayer("layer1", "test", "Layer 1", currentEvent).setId(123L);
+        when(layerService.getLayers(currentEvent)).thenThrow(new IOException("deliberate fail"));
+        when(layerHelper.readByEvent(currentEvent)).thenReturn(Collections.singletonList(layer));
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+
+        verify(layerHelper, never()).delete(any());
+        verify(layerHelper, never()).deleteByEvent(any());
+        verify(layerHelper, never()).deleteAll();
+        assertThat(repo.getValue(), notNullValue());
+        assertThat(repo.getValue(), hasSize(1));
+        MapDataResource res = (MapDataResource) repo.getValue().toArray()[0];
+        assertThat(res.getLayers().keySet(), hasSize(1));
+        MapLayerDescriptor desc = (MapLayerDescriptor) res.getLayers().values().toArray()[0];
+        assertThat(desc.getLayerName(), is("layer1"));
+    }
+
+    @Test
+    public void doesNotDeleteLayersWhenFeatureFetchFails() throws IOException, LayerException, InterruptedException {
+
+        TestLayer layer = new TestLayer("layer1", "test", "Layer 1", currentEvent);
+        when(layerService.getLayers(currentEvent)).thenReturn(Collections.singletonList(layer));
+        when(layerService.getFeatures(layer)).thenThrow(new IOException("deliberate fail"));
+        when(layerHelper.readByEvent(currentEvent)).then(invoc -> Collections.singletonList(layer.setId(222L)));
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+
+        verify(layerHelper, never()).delete(any());
+        verify(layerHelper, never()).deleteByEvent(any());
+        verify(layerHelper, never()).deleteAll();
+        assertThat(repo.getValue(), notNullValue());
+        assertThat(repo.getValue(), hasSize(1));
+        MapDataResource res = (MapDataResource) repo.getValue().toArray()[0];
+        assertThat(res.getLayers().keySet(), hasSize(1));
+        MapLayerDescriptor desc = (MapLayerDescriptor) res.getLayers().values().toArray()[0];
+        assertThat(desc.getLayerName(), is("layer1"));
+    }
+
+    @Test
     public void setsTheLiveDataValueAfterTheRefreshFinishes() throws InterruptedException {
 
         waitForMainThreadToRun(() -> {
@@ -440,32 +540,17 @@ public class StaticFeatureLayerRepositoryTest {
     }
 
     @Test
-    public void deletesLayersAfterFeatureFetch() throws Exception {
-
-        TestLayer layer = new TestLayer("abcd", "test", "layer 1", currentEvent);
-        when(layerService.getLayers(currentEvent)).thenReturn(Collections.singleton(layer));
-        when(layerHelper.read("abcd")).then(invoc -> layer.setId(123L));
-        when(layerHelper.create(layer)).then(invoc -> layer.setId(1234L));
-        when(layerService.getFeatures(layer)).thenReturn(Collections.emptySet());
-
-        waitForMainThreadToRun(() -> {
-            repo.refreshAvailableMapData(emptyMap(), executor);
-            assertThat(repo.getStatus(), is(Resource.Status.Loading));
-        });
-
-        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
-
-        verify(layerHelper).read("abcd");
-        verify(layerHelper).delete(123L);
-    }
-
-    @Test
-    public void doesNotDeleteLayersIfLayerFetchFailed() {
+    public void doesNotChangeLiveDataWhenLayerFetchFails() {
         fail("unimplemented");
     }
 
     @Test
-    public void doesNotDeleteLayersIfOffline() {
+    public void changesLiveDataWhenLayersChangedButFeatureFetchFails() {
+        fail("unimplemented");
+    }
+
+    @Test
+    public void changesLiveDataWhenLayersChangedButIconFetchFails() {
         fail("unimplemented");
     }
 
