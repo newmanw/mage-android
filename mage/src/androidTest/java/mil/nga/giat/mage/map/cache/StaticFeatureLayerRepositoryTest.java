@@ -26,6 +26,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -53,7 +54,10 @@ import mil.nga.wkb.geom.Point;
 import static java.util.Collections.emptyMap;
 import static java.util.Collections.emptySet;
 import static mil.nga.giat.mage.test.AsyncTesting.waitForMainThreadToRun;
+import static mil.nga.giat.mage.test.TargetSuppliesPropertyValueMatcher.withValueSuppiedBy;
+import static org.hamcrest.Matchers.hasProperty;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.hasValue;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
@@ -63,7 +67,6 @@ import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -547,8 +550,31 @@ public class StaticFeatureLayerRepositoryTest {
     }
 
     @Test
-    public void usesLocalDataForFirstRefreshWhenOffline() {
-        fail("unimplemented");
+    public void usesLocalDataForFirstRefreshWhenOffline() throws InterruptedException, LayerException, StaticFeatureException {
+
+        when(network.isConnected()).thenReturn(false);
+        List<Layer> localLayers = Arrays.asList(
+            new TestLayer("layer1", "test", "Layer 1", currentEvent).setId(111L),
+            new TestLayer("layer2", "test", "Layer 2", currentEvent).setId(222L));
+        when(layerHelper.readByEvent(currentEvent)).thenReturn(localLayers);
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+
+        verify(network).isConnected();
+        verifyZeroInteractions(layerService);
+        verify(observer).onChanged(observed.capture());
+        List<MapDataResource> resources = new ArrayList<>(observed.getValue());
+        assertThat(resources, hasSize(1));
+        MapDataResource resource = resources.get(0);
+
+        assertThat(resource.getLayers().values(), hasSize(2));
+        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("layer1"))));
+        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("layer2"))));
     }
 
     @Test
