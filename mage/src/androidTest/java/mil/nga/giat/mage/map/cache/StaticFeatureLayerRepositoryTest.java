@@ -31,6 +31,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -534,7 +535,7 @@ public class StaticFeatureLayerRepositoryTest {
     }
 
     @Test
-    public void doesNotAttemptToFetchWhenOffline() throws InterruptedException, IOException {
+    public void doesNotAttemptToFetchWhenOffline() throws InterruptedException {
 
         when(network.isConnected()).thenReturn(false);
 
@@ -550,7 +551,7 @@ public class StaticFeatureLayerRepositoryTest {
     }
 
     @Test
-    public void usesLocalDataForFirstRefreshWhenOffline() throws InterruptedException, LayerException, StaticFeatureException {
+    public void usesLocalDataForFirstRefreshWhenOffline() throws InterruptedException, LayerException {
 
         when(network.isConnected()).thenReturn(false);
         List<Layer> localLayers = Arrays.asList(
@@ -577,8 +578,98 @@ public class StaticFeatureLayerRepositoryTest {
         assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("layer2"))));
     }
 
+
     @Test
-    public void doesNotChangeLiveDataWhenLayerFetchFails() {
+    public void usesLocalDataForFirstRefreshWhenLayerFetchFails() throws InterruptedException, LayerException, IOException {
+
+        List<Layer> localLayers = Arrays.asList(
+            new TestLayer("layer1", "test", "Layer 1", currentEvent).setId(111L),
+            new TestLayer("layer2", "test", "Layer 2", currentEvent).setId(222L));
+        when(layerHelper.readByEvent(currentEvent)).thenReturn(localLayers);
+        when(layerService.getLayers(currentEvent)).thenThrow(new IOException("deliberate fail"));
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+
+        verify(layerService).getLayers(currentEvent);
+        verify(observer).onChanged(observed.capture());
+        List<MapDataResource> resources = new ArrayList<>(observed.getValue());
+        assertThat(resources, hasSize(1));
+        MapDataResource resource = resources.get(0);
+        assertThat(resource.getLayers().values(), hasSize(2));
+        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("layer1"))));
+        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("layer2"))));
+    }
+
+    @Test
+    public void usesLocalDataForFirstRefreshWhenFeatureFetchFails() throws InterruptedException, LayerException, IOException {
+
+        List<Layer> localLayers = Arrays.asList(
+            new TestLayer("layer1", "test", "Layer 1", currentEvent).setId(111L),
+            new TestLayer("layer2", "test", "Layer 2", currentEvent).setId(222L));
+        when(layerHelper.readByEvent(currentEvent)).thenReturn(localLayers);
+        List<Layer> remoteLayers = Arrays.asList(
+            new TestLayer("layer1", "test", "Layer 1", currentEvent),
+            new TestLayer("layer2", "test", "Layer 2", currentEvent),
+            new TestLayer("layer3", "test", "Layer 3", currentEvent));
+        when(layerService.getLayers(currentEvent)).thenReturn(remoteLayers);
+        when(layerService.getFeatures(any())).thenThrow(new IOException("deliberate fail"));
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+
+        verify(layerService).getLayers(currentEvent);
+        verify(layerService).getFeatures(remoteLayers.get(0));
+        verify(layerService).getFeatures(remoteLayers.get(1));
+        verify(layerService).getFeatures(remoteLayers.get(2));
+        verify(observer).onChanged(observed.capture());
+        List<MapDataResource> resources = new ArrayList<>(observed.getValue());
+        assertThat(resources, hasSize(1));
+        MapDataResource resource = resources.get(0);
+        assertThat(resource.getLayers().values(), hasSize(2));
+        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("layer1"))));
+        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("layer2"))));
+    }
+
+    @Test
+    public void doesNotChangeLiveDataWhenLayerFetchFails() throws IOException, InterruptedException, LayerException {
+
+        List<Layer> layers = Collections.singletonList(new TestLayer("layer1", "test", "Layer 1", currentEvent).setId(111L));
+        when(network.isConnected()).thenReturn(false);
+        when(layerHelper.readByEvent(currentEvent)).thenReturn(layers);
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+
+        Set<MapDataResource> resources = repo.getValue();
+        verify(observer).onChanged(observed.capture());
+        assertThat(resources, hasSize(1));
+        assertThat(observed.getValue(), sameInstance(resources));
+
+        when(network.isConnected()).thenReturn(true);
+        when(layerService.getLayers(currentEvent)).thenThrow(new IOException("deliberate fail"));
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+
+        resources = repo.getValue();
+
         fail("unimplemented");
     }
 
