@@ -699,16 +699,6 @@ public class StaticFeatureLayerRepositoryTest {
     }
 
     @Test
-    public void handlesLayerFetchFailure() {
-        fail("unimplemented");
-    }
-
-    @Test
-    public void handlesFeatureFetchFailure() {
-        fail("unimplemented");
-    }
-
-    @Test
     public void handlesIconFetchFailure() {
         fail("unimplemented");
     }

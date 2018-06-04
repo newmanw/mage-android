@@ -172,10 +172,10 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
     private void onLayerFetchFinished() {
         FetchEventLayers fetch = refreshInProgress.layerFetch;
         Collection<Layer> remoteLayers = fetch.result.layers;
-        if (remoteLayers == null || fetch.result.failure != null) {
+        if (remoteLayers == null && fetch.result.failure != null) {
             refreshInProgress.cancel();
         }
-        else {
+        else if (remoteLayers != null) {
             for (Layer layer : remoteLayers) {
                 SyncLayerFeatures featureFetch = new SyncLayerFeatures(layer);
                 refreshInProgress.featureSyncForLayer.put(layer.getRemoteId(), featureFetch);
