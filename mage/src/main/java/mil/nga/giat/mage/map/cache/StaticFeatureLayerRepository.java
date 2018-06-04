@@ -4,9 +4,10 @@ package mil.nga.giat.mage.map.cache;
 import android.annotation.SuppressLint;
 import android.app.Application;
 import android.os.AsyncTask;
+import android.os.Handler;
+import android.os.Looper;
 import android.support.annotation.MainThread;
 import android.support.annotation.Nullable;
-import android.support.v7.util.DiffUtil;
 import android.util.Log;
 
 import com.google.common.io.ByteStreams;
@@ -170,12 +171,16 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
 
     private void onLayerFetchFinished() {
         FetchEventLayers fetch = refreshInProgress.layerFetch;
-        refreshInProgress.layerFetch = null;
-        Collection<Layer> fetchedLayers = fetch.fetchedLayers;
-        for (Layer layer : fetchedLayers) {
-            SyncLayerFeatures featureFetch = new SyncLayerFeatures(layer);
-            refreshInProgress.featureSyncForLayer.put(layer.getRemoteId(), featureFetch);
-            featureFetch.executeOnExecutor(refreshInProgress.executor);
+        Collection<Layer> remoteLayers = fetch.result.layers;
+        if (remoteLayers == null || fetch.result.failure != null) {
+            refreshInProgress.cancel();
+        }
+        else {
+            for (Layer layer : remoteLayers) {
+                SyncLayerFeatures featureFetch = new SyncLayerFeatures(layer);
+                refreshInProgress.featureSyncForLayer.put(layer.getRemoteId(), featureFetch);
+                featureFetch.executeOnExecutor(refreshInProgress.executor);
+            }
         }
         if (refreshInProgress.isFinished()) {
             finishRefresh();
@@ -236,6 +241,12 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
     }
 
     private void finishRefresh() {
+        if (refreshInProgress.isCancelled() && getValue() != null) {
+            if (refreshInProgress.isFinished()) {
+                refreshInProgress = null;
+            }
+            return;
+        }
         refreshInProgress.syncMapData = new SyncMapDataFromDatabase(refreshInProgress.event);
         refreshInProgress.syncMapData.executeOnExecutor(refreshInProgress.executor);
     }
@@ -248,7 +259,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
         private final Map<String, SyncLayerFeatures> featureSyncForLayer = new HashMap<>();
         private final Map<String, Set<Long>> featuresForIconUrl = new HashMap<>();
         private final Map<String, SyncIconToFeatures> iconSyncForIconUrl = new HashMap<>();
-        private FetchEventLayers layerFetch;
+        private final FetchEventLayers layerFetch;
         private SyncMapDataFromDatabase syncMapData;
         private boolean cancelled = false;
 
@@ -258,22 +269,14 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
             this.layerFetch = new FetchEventLayers(event);
         }
 
-        private boolean cancel() {
-            if (isFinished()) {
-                return false;
+        private void cancel() {
+            layerFetch.cancel(false);
+            Iterator<SyncLayerFeatures> featureFetches = featureSyncForLayer.values().iterator();
+            while (featureFetches.hasNext()) {
+                featureFetches.next().cancel(false);
+                featureFetches.remove();
             }
             cancelled = true;
-            if (isStarted()) {
-                if (layerFetch != null) {
-                    layerFetch.cancel(false);
-                }
-                Iterator<SyncLayerFeatures> featureFetches = featureSyncForLayer.values().iterator();
-                while (featureFetches.hasNext()) {
-                    featureFetches.next().cancel(false);
-                    featureFetches.remove();
-                }
-            }
-            return true;
         }
 
         private boolean isStarted() {
@@ -281,7 +284,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
         }
 
         private boolean isFinished() {
-            return layerFetch == null && featureSyncForLayer.isEmpty() && iconSyncForIconUrl.isEmpty();
+            return layerFetch.result != null && featureSyncForLayer.isEmpty() && iconSyncForIconUrl.isEmpty();
         }
 
         private boolean isCancelled() {
@@ -290,55 +293,67 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
     }
 
     @SuppressLint("StaticFieldLeak")
-    private class FetchEventLayers extends AsyncTask<Void, Void, Collection<Layer>> {
+    private class FetchEventLayers extends AsyncTask<Void, Void, FetchEventLayersResult> {
 
         private final Event event;
-        private Collection<Layer> fetchedLayers;
+        private FetchEventLayersResult result;
 
         private FetchEventLayers(Event event) {
             this.event = event;
         }
 
         @Override
-        protected Collection<Layer> doInBackground(Void... nothing) {
+        protected FetchEventLayersResult doInBackground(Void... nothing) {
             if (!network.isConnected()) {
-                return Collections.emptySet();
+                return new FetchEventLayersResult(null, null);
             }
             try {
                 Collection<Layer> remoteLayers = layerService.getLayers(event);
                 if (remoteLayers.isEmpty()) {
                     layerHelper.deleteByEvent(event);
-                    return remoteLayers;
+                    return new FetchEventLayersResult(Collections.emptySet(), null);
                 }
                 Collection<Layer> localLayers = layerHelper.readByEvent(event);
                 if (localLayers.isEmpty()) {
-                    return remoteLayers;
+                    return new FetchEventLayersResult(remoteLayers, null);
                 }
                 Set<Layer> layersToDelete = new HashSet<>(localLayers);
                 layersToDelete.removeAll(remoteLayers);
                 for (Layer localLayer : layersToDelete) {
                     layerHelper.delete(localLayer.getId());
                 }
-                return remoteLayers;
+                return new FetchEventLayersResult(remoteLayers, null);
             }
             catch (IOException e) {
                 Log.e(LOG_NAME,"error fetching static layers", e);
+                return new FetchEventLayersResult(null, e);
             }
             catch (LayerException e) {
                 Log.e(LOG_NAME, "error deleting layers for event " + event.getName() + " (" + event.getRemoteId() + ") after empty fetch result");
+                return new FetchEventLayersResult(null, e);
             }
-            return Collections.emptySet();
         }
 
         @Override
-        protected void onPostExecute(Collection<Layer> layers) {
-            fetchedLayers = layers;
+        protected void onPostExecute(FetchEventLayersResult result) {
+            this.result = result;
             onLayerFetchFinished();
         }
 
         @Override
-        protected void onCancelled(Collection<Layer> layers) {
-            onPostExecute(layers);
+        protected void onCancelled(FetchEventLayersResult result) {
+            onPostExecute(result);
+        }
+    }
+
+    private static class FetchEventLayersResult {
+
+        private final Collection<Layer> layers;
+        private final Exception failure;
+
+        private FetchEventLayersResult(Collection<Layer> layers, Exception failure) {
+            this.layers = layers;
+            this.failure = failure;
         }
     }
 

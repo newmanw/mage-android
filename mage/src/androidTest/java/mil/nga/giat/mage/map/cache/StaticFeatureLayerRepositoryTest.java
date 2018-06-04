@@ -73,6 +73,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
 
@@ -643,7 +644,6 @@ public class StaticFeatureLayerRepositoryTest {
     public void doesNotChangeLiveDataWhenLayerFetchFails() throws IOException, InterruptedException, LayerException {
 
         List<Layer> layers = Collections.singletonList(new TestLayer("layer1", "test", "Layer 1", currentEvent).setId(111L));
-        when(network.isConnected()).thenReturn(false);
         when(layerHelper.readByEvent(currentEvent)).thenReturn(layers);
 
         waitForMainThreadToRun(() -> {
@@ -668,9 +668,9 @@ public class StaticFeatureLayerRepositoryTest {
 
         onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
 
+        verifyNoMoreInteractions(observer);
         resources = repo.getValue();
-
-        fail("unimplemented");
+        assertThat(resources, sameInstance(observed.getValue()));
     }
 
     @Test
