@@ -202,7 +202,7 @@ public class StaticFeatureLayerRepositoryTest {
     public void initialStatusIsSuccess() {
         assertThat(repo.getStatus(), is(Resource.Status.Success));
         assertThat(repo.getStatusCode(), is(Resource.Status.Success.ordinal()));
-        assertThat(repo.getStatusMessage(), is(Resource.Status.Success.toString()));
+        assertThat(repo.getStatusMessage(), is("Ready"));
     }
 
     @Test
@@ -476,7 +476,7 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getStatus(), is(Resource.Status.Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Error));
 
         verify(layerHelper, never()).delete(any());
         verify(layerHelper, never()).deleteByEvent(any());
@@ -502,7 +502,7 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getStatus(), is(Resource.Status.Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Error));
 
         verify(layerHelper, never()).delete(any());
         verify(layerHelper, never()).deleteByEvent(any());
@@ -594,7 +594,7 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getStatus(), is(Resource.Status.Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Error));
 
         verify(layerService).getLayers(currentEvent);
         verify(observer).onChanged(observed.capture());
@@ -625,7 +625,7 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getStatus(), is(Resource.Status.Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Error));
 
         verify(layerService).getLayers(currentEvent);
         verify(layerService).getFeatures(remoteLayers.get(0));
@@ -666,7 +666,7 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getStatus(), is(Resource.Status.Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Error));
 
         verifyNoMoreInteractions(observer);
         resources = repo.getValue();
@@ -674,7 +674,23 @@ public class StaticFeatureLayerRepositoryTest {
     }
 
     @Test
-    public void changesLiveDataWhenLayersChangedButFeatureFetchFails() {
+    public void changesLiveDataWhenLayersChangedButFeatureFetchFails() throws InterruptedException, LayerException, IOException {
+
+//        List<Layer> localLayers = Arrays.asList(
+//            new TestLayer("layer1", "test", "Layer 1", currentEvent),
+//            new TestLayer("layer2", "test", "Layer 2", currentEvent));
+//        when(layerHelper.readByEvent(currentEvent)).thenReturn(localLayers);
+//        when(layerService.getLayers(currentEvent)).thenReturn(
+//            Collections.singleton(new TestLayer("layer1", "test", "Layer 1", currentEvent)));
+//        when(layerService.getFeatures(any())).thenThrow(new IOException("deliberate fail"));
+//
+//        waitForMainThreadToRun(() -> {
+//            repo.refreshAvailableMapData(emptyMap(), executor);
+//            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+//        });
+//
+//        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Error));
+
         fail("unimplemented");
     }
 
