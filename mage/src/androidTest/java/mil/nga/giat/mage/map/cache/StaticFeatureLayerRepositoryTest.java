@@ -674,24 +674,68 @@ public class StaticFeatureLayerRepositoryTest {
     }
 
     @Test
+    public void doesNotCreateLocalLayersWhenFeatureFetchFails() throws InterruptedException, IOException, LayerException {
+
+        List<Layer> remoteLayers = Arrays.asList(
+            new TestLayer("layer1", "test", "Layer 1", currentEvent),
+            new TestLayer("layer2", "test", "Layer 2", currentEvent));
+        List<Layer> syncedLayers = Collections.singletonList(
+            new TestLayer("layer2", "test", "Layer 2", currentEvent).setId(222L));
+        when(layerHelper.readByEvent(currentEvent))
+            .thenReturn(emptySet())
+            .thenReturn(syncedLayers);
+        when(layerService.getLayers(currentEvent)).thenReturn(remoteLayers);
+        when(layerService.getFeatures(remoteLayers.get(0))).thenThrow(new IOException("deliberate fail"));
+        when(layerService.getFeatures(remoteLayers.get(1))).thenReturn(Collections.emptySet());
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Error));
+
+        InOrder syncOrder = inOrder(layerHelper, layerService);
+        syncOrder.verify(layerService).getLayers(currentEvent);
+        syncOrder.verify(layerHelper).readByEvent(currentEvent);
+        syncOrder.verify(layerHelper).create(remoteLayers.get(1));
+        syncOrder.verify(layerHelper).readByEvent(currentEvent);
+        syncOrder.verify(layerHelper, never()).create(remoteLayers.get(0));
+    }
+
+    @Test
     public void changesLiveDataWhenLayersChangedButFeatureFetchFails() throws InterruptedException, LayerException, IOException {
 
-//        List<Layer> localLayers = Arrays.asList(
-//            new TestLayer("layer1", "test", "Layer 1", currentEvent),
-//            new TestLayer("layer2", "test", "Layer 2", currentEvent));
-//        when(layerHelper.readByEvent(currentEvent)).thenReturn(localLayers);
-//        when(layerService.getLayers(currentEvent)).thenReturn(
-//            Collections.singleton(new TestLayer("layer1", "test", "Layer 1", currentEvent)));
-//        when(layerService.getFeatures(any())).thenThrow(new IOException("deliberate fail"));
-//
-//        waitForMainThreadToRun(() -> {
-//            repo.refreshAvailableMapData(emptyMap(), executor);
-//            assertThat(repo.getStatus(), is(Resource.Status.Loading));
-//        });
-//
-//        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Error));
+        List<Layer> localLayers = Arrays.asList(
+            new TestLayer("layer1", "test", "Layer 1", currentEvent).setId(111L),
+            new TestLayer("layer2", "test", "Layer 2", currentEvent).setId(222L));
+        List<Layer> localLayersSynced = Collections.singletonList(localLayers.get(0));
+        when(layerHelper.readByEvent(currentEvent))
+            .thenReturn(localLayers)
+            .thenReturn(localLayersSynced);
+        when(layerService.getLayers(currentEvent)).thenReturn(
+            Collections.singleton(new TestLayer("layer1", "test", "Layer 1", currentEvent)));
+        when(layerService.getFeatures(any())).thenThrow(new IOException("deliberate fail"));
 
-        fail("unimplemented");
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Error));
+
+        InOrder syncOrder = inOrder(layerHelper, layerService);
+        syncOrder.verify(layerService).getLayers(currentEvent);
+        syncOrder.verify(layerHelper).readByEvent(currentEvent);
+        syncOrder.verify(layerHelper).delete(222L);
+        syncOrder.verify(layerHelper).readByEvent(currentEvent);
+        verify(observer).onChanged(observed.capture());
+        assertThat(observed.getValue(), sameInstance(repo.getValue()));
+        assertThat(repo.getValue(), hasSize(1));
+        assertThat(repo.getValue(), notNullValue());
+        MapDataResource resource = (MapDataResource) repo.getValue().toArray()[0];
+        assertThat(resource.getLayers().values(), hasSize(1));
+        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("layer1"))));
     }
 
     @Test
