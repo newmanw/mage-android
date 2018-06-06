@@ -244,7 +244,20 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
             throw new IllegalStateException("icon sync finished for url " +
                 sync.iconUrlStr + " but did not match the expected icon sync in progress");
         }
-        finishRefresh();
+        if (sync.result.iconResolveFailure != null || sync.result.featureUpdateFailures != null) {
+            refreshInProgress.status = Status.Error;
+            if (sync.result.iconResolveFailure != null) {
+                refreshInProgress.statusMessage.add("Error fetching feature icon at " +
+                    sync.iconUrlStr + ": " + sync.result.iconResolveFailure.getLocalizedMessage());
+            }
+            else {
+                refreshInProgress.statusMessage.add("Error saving path of icon " +
+                    sync.iconUrlStr + " to features: " + sync.result.featureUpdateFailures.keySet());
+            }
+        }
+        if (refreshInProgress.isFinishedSyncing()) {
+            finishRefresh();
+        }
     }
 
     private void finishRefresh() {
@@ -479,12 +492,12 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
     }
 
     @SuppressLint("StaticFieldLeak")
-    private class SyncIconToFeatures extends AsyncTask<Void, Void, Void> {
+    private class SyncIconToFeatures extends AsyncTask<Void, Void, SyncIconToFeaturesResult> {
 
         private final String iconUrlStr;
         private final Set<Long> featureIds;
-        private volatile Exception iconResolveFailure;
-        private volatile Map<Long, Exception> featureUpdateFailures;
+        private SyncIconToFeaturesResult result;
+
 
         private SyncIconToFeatures(String iconUrlStr, Set<Long> featureIds) {
             this.iconUrlStr = iconUrlStr;
@@ -492,15 +505,14 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
         }
 
         @Override
-        protected Void doInBackground(Void... nothing) {
+        protected SyncIconToFeaturesResult doInBackground(Void... nothing) {
             File iconFile;
             try {
                 iconFile = resolveIcon();
             }
             catch (Exception e) {
                 Log.e(LOG_NAME, "error resolving icon url " + iconUrlStr, e);
-                iconResolveFailure = e;
-                return null;
+                return new SyncIconToFeaturesResult(e, null);
             }
             String iconPath = iconFile.getAbsolutePath();
             @SuppressLint("UseSparseArrays")
@@ -516,18 +528,18 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
                     updateFailures.put(featureId, e);
                 }
             }
-            featureUpdateFailures = updateFailures;
-            return null;
+            return new SyncIconToFeaturesResult(null, updateFailures.isEmpty() ? null : updateFailures);
         }
 
         @Override
-        protected void onPostExecute(Void nothing) {
+        protected void onPostExecute(SyncIconToFeaturesResult result) {
+            this.result = result;
             onFeatureIconsSynced(this);
         }
 
         @Override
-        protected void onCancelled(Void nothing) {
-            onFeatureIconsSynced(this);
+        protected void onCancelled(SyncIconToFeaturesResult result) {
+            onPostExecute(result);
         }
 
         private File resolveIcon() throws Exception {
@@ -574,6 +586,17 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
                 }
             }
             return iconFile;
+        }
+    }
+
+    private static class SyncIconToFeaturesResult {
+
+        private final Exception iconResolveFailure;
+        private final Map<Long, Exception> featureUpdateFailures;
+
+        private SyncIconToFeaturesResult(Exception iconResolveFailure, Map<Long, Exception> featureUpdateFailures) {
+            this.iconResolveFailure = iconResolveFailure;
+            this.featureUpdateFailures = featureUpdateFailures;
         }
     }
 

@@ -25,13 +25,13 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -56,7 +56,6 @@ import static java.util.Collections.emptyMap;
 import static java.util.Collections.emptySet;
 import static mil.nga.giat.mage.test.AsyncTesting.waitForMainThreadToRun;
 import static mil.nga.giat.mage.test.TargetSuppliesPropertyValueMatcher.withValueSuppiedBy;
-import static org.hamcrest.Matchers.hasProperty;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.hasValue;
 import static org.hamcrest.Matchers.is;
@@ -69,7 +68,6 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -116,6 +114,12 @@ public class StaticFeatureLayerRepositoryTest {
 
         TestStaticFeature setId(Long id) {
             this.id = id;
+            return this;
+        }
+
+        TestStaticFeature addProperty(String key, String value) {
+            StaticFeatureProperty property = new StaticFeatureProperty(key, value);
+            getProperties().add(property);
             return this;
         }
     }
@@ -334,9 +338,9 @@ public class StaticFeatureLayerRepositoryTest {
         Layer layer2 = new Layer("2", "test", "test2", currentEvent);
         Layer createdLayer1 = new TestLayer("1", "test", "test1", currentEvent).setId(1234L);
         Layer createdLayer2 = new TestLayer("2", "test", "test2", currentEvent).setId(4567L);
-        StaticFeature feature1 = new StaticFeature("1.1", new Point(1, 1), layer1);
-        StaticFeature feature2 = new StaticFeature("1.2", new Point(1, 2), layer1);
-        StaticFeature feature3 = new StaticFeature("2.1", new Point(2, 1), layer2);
+        TestStaticFeature feature1 = new TestStaticFeature("1.1", new Point(1, 1), layer1);
+        TestStaticFeature feature2 = new TestStaticFeature("1.2", new Point(1, 2), layer1);
+        TestStaticFeature feature3 = new TestStaticFeature("2.1", new Point(2, 1), layer2);
         String iconUrl = "http://test.mage/icons/test/point.png";
         feature1.getProperties().add(new StaticFeatureProperty(StaticFeatureLayerRepository.PROP_ICON_URL, iconUrl));
         feature2.getProperties().add(new StaticFeatureProperty(StaticFeatureLayerRepository.PROP_ICON_URL, iconUrl));
@@ -351,10 +355,18 @@ public class StaticFeatureLayerRepositoryTest {
         when(layerService.getFeatureIcon(iconUrl)).thenReturn(iconBytes);
         when(layerHelper.create(layer1)).thenReturn(createdLayer1);
         when(layerHelper.create(layer2)).thenReturn(createdLayer2);
-        when(featureHelper.createAll(features1, createdLayer1)).thenReturn(features1);
-        when(featureHelper.createAll(features2, createdLayer2)).thenReturn(features2);
-        when(featureHelper.readAll(createdLayer1.getId())).thenReturn(features1);
-        when(featureHelper.readAll(createdLayer2.getId())).thenReturn(features2);
+        when(featureHelper.createAll(features1, createdLayer1)).then(invoc -> {
+            feature1.setId(101L);
+            feature2.setId(102L);
+            return features1;
+        });
+        when(featureHelper.createAll(features2, createdLayer2)).then(invoc -> {
+            feature3.setId(103L);
+            return features2;
+        });
+        when(featureHelper.read(101L)).thenReturn(feature1);
+        when(featureHelper.read(102L)).thenReturn(feature2);
+        when(featureHelper.read(103L)).thenReturn(feature3);
 
         waitForMainThreadToRun(() -> {
             repo.refreshAvailableMapData(emptyMap(), executor);
@@ -739,8 +751,50 @@ public class StaticFeatureLayerRepositoryTest {
     }
 
     @Test
-    public void changesLiveDataWhenLayersChangedButIconFetchFails() {
-        fail("unimplemented");
+    public void changesLiveDataWhenLayersChangedButIconFetchFails() throws Exception {
+
+        List<Layer> localLayers = Arrays.asList(
+            new TestLayer("layer1", "test", "Layer 1", currentEvent).setId(111L),
+            new TestLayer("layer2", "test", "Layer 2", currentEvent).setId(222L));
+        TestLayer remoteLayer = new TestLayer("layer1", "test", "Layer 1", currentEvent);
+        List<Layer> remoteLayers = Collections.singletonList(remoteLayer);
+        List<StaticFeature> features = Arrays.asList(
+            new TestStaticFeature("layer1.f1", new Point(1, 2), remoteLayers.get(0))
+                .addProperty(StaticFeatureLayerRepository.PROP_ICON_URL, "http://test.mage/icons/1.png"),
+            new TestStaticFeature("layer1.f2", new Point(3, 4), remoteLayers.get(0))
+                .addProperty(StaticFeatureLayerRepository.PROP_ICON_URL, "http://test.mage/icons/2.png"));
+        InputStream iconStream = new ByteArrayInputStream("test".getBytes());
+        when(layerHelper.readByEvent(currentEvent))
+            .thenReturn(localLayers)
+            .thenReturn(Collections.singleton(
+                new TestLayer("layer1", "test", "Layer 1", currentEvent).setId(333L)));
+        when(layerService.getLayers(currentEvent)).thenReturn(remoteLayers);
+        when(layerService.getFeatures(remoteLayers.get(0))).thenReturn(features);
+        when(layerHelper.create(remoteLayers.get(0))).then(invocation -> remoteLayer.setId(333L));
+        when(featureHelper.createAll(features, remoteLayer)).then(invocation -> {
+            ((TestStaticFeature) features.get(0)).setId(3331L);
+            ((TestStaticFeature) features.get(1)).setId(3332L);
+            return features;
+        });
+        when(layerService.getFeatureIcon("http://test.mage/icons/1.png")).thenThrow(new IOException("deliberate fail"));
+        when(layerService.getFeatureIcon("http://test.mage/icons/2.png")).thenReturn(iconStream);
+        when(featureHelper.read(3332L)).thenReturn(features.get(1));
+        when(featureHelper.update(features.get(1))).thenReturn(features.get(1));
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Error));
+
+        verify(observer).onChanged(observed.capture());
+        assertThat(observed.getValue(), sameInstance(repo.getValue()));
+        assertThat(repo.getValue(), hasSize(1));
+        assertThat(repo.getValue(), notNullValue());
+        MapDataResource resource = (MapDataResource) repo.getValue().toArray()[0];
+        assertThat(resource.getLayers().values(), hasSize(1));
+        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("layer1"))));
     }
 
     @Test
