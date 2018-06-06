@@ -36,6 +36,10 @@ import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 import mil.nga.giat.mage.data.Resource;
 import mil.nga.giat.mage.sdk.datastore.layer.Layer;
@@ -798,6 +802,57 @@ public class StaticFeatureLayerRepositoryTest {
     }
 
     @Test
+    public void doesNotStartNewRefreshWhileRefreshingWhenCurrentEventDidNotChange() throws InterruptedException, IOException {
+
+        Lock fetchLock = new ReentrantLock();
+        Condition fetchCondition = fetchLock.newCondition();
+        AtomicBoolean fetchBlocked = new AtomicBoolean(false);
+
+        when(layerService.getLayers(currentEvent))
+            .then(invoc -> {
+                fetchLock.lock();
+                fetchBlocked.set(true);
+                fetchCondition.signal();
+                while (fetchBlocked.get()) {
+                    if (!fetchCondition.await(oneSecond(), TimeUnit.MILLISECONDS)) {
+                        fail("timed out waiting to unblock");
+                    }
+                }
+                fetchLock.unlock();
+                return emptySet();
+            });
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        fetchLock.lock();
+        while (!fetchBlocked.get()) {
+            fetchCondition.await(oneSecond(), TimeUnit.MILLISECONDS);
+        }
+        fetchLock.unlock();
+
+        waitForMainThreadToRun(() -> {
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        fetchLock.lock();
+        fetchBlocked.set(false);
+        fetchCondition.signal();
+        fetchLock.unlock();
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+
+        awaitThreadPoolTermination();
+
+        verify(layerService, times(1)).getLayers(any());
+        verify(observer, times(1)).onChanged(any());
+    }
+
+    @Test
     public void finishesSyncInProgressIfCurrentEventChanges() {
         fail("unimplemented");
     }
@@ -809,11 +864,6 @@ public class StaticFeatureLayerRepositoryTest {
 
     @Test
     public void finishesProperlyWhenTheLastLayerSyncFinishesButIsStillResolvingIconsForPreviousLayer() {
-        fail("unimplemented");
-    }
-
-    @Test
-    public void handlesIconFetchFailure() {
         fail("unimplemented");
     }
 

@@ -498,7 +498,6 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
         private final Set<Long> featureIds;
         private SyncIconToFeaturesResult result;
 
-
         private SyncIconToFeatures(String iconUrlStr, Set<Long> featureIds) {
             this.iconUrlStr = iconUrlStr;
             this.featureIds = featureIds;
