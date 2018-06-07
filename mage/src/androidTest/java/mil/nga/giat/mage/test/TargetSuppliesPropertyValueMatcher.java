@@ -35,6 +35,7 @@ public class TargetSuppliesPropertyValueMatcher<T, V> extends BaseMatcher<T> {
 
     @Override
     public void describeTo(Description description) {
+        description.appendText("supplied property value ");
         description.appendDescriptionOf(valueMatcher);
     }
 }
