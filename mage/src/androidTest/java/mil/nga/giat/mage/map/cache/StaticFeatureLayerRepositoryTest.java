@@ -657,10 +657,11 @@ public class StaticFeatureLayerRepositoryTest {
     }
 
     @Test
-    public void doesNotChangeLiveDataWhenLayerFetchFails() throws IOException, InterruptedException, LayerException {
+    public void doesNotChangeLiveDataWhenLayerFetchFailsAndEventDidNotChange() throws IOException, InterruptedException, LayerException {
 
         List<Layer> layers = Collections.singletonList(new TestLayer("layer1", "test", "Layer 1", currentEvent).setId(111L));
         when(layerHelper.readByEvent(currentEvent)).thenReturn(layers);
+        when(network.isConnected()).thenReturn(false);
 
         waitForMainThreadToRun(() -> {
             repo.refreshAvailableMapData(emptyMap(), executor);
@@ -671,8 +672,12 @@ public class StaticFeatureLayerRepositoryTest {
 
         Set<MapDataResource> resources = repo.getValue();
         verify(observer).onChanged(observed.capture());
+        assertThat(resources, notNullValue());
         assertThat(resources, hasSize(1));
         assertThat(observed.getValue(), sameInstance(resources));
+        MapDataResource resource = (MapDataResource) resources.toArray()[0];
+        assertThat(resource.getLayers().values(), hasSize(1));
+        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("layer1"))));
 
         when(network.isConnected()).thenReturn(true);
         when(layerService.getLayers(currentEvent)).thenThrow(new IOException("deliberate fail"));
@@ -686,7 +691,64 @@ public class StaticFeatureLayerRepositoryTest {
 
         verifyNoMoreInteractions(observer);
         resources = repo.getValue();
+        assertThat(resources, notNullValue());
+        assertThat(resources, hasSize(1));
+        resource = (MapDataResource) resources.toArray()[0];
+        assertThat(resource.getLayers().values(), hasSize(1));
+        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("layer1"))));
+        verify(layerHelper, never()).deleteByEvent(any());
+        verify(layerHelper, never()).delete(any());
+        verify(layerHelper, never()).deleteAll();
+    }
+
+    @Test
+    public void changesLiveDataWhenLayerFetchFailsAndEventChanged() throws InterruptedException, IOException, LayerException {
+
+        Event changedEvent = new Event("alt_event", "Alt Event", "", "", "");
+        List<Layer> layers1 = Collections.singletonList(new TestLayer("layer1", "test", "Layer 1", currentEvent).setId(111L));
+        List<Layer> layers2 = Collections.singletonList(new TestLayer("alt_event_layer", "test", "Event 2 Layer", changedEvent).setId(222L));
+        when(layerHelper.readByEvent(currentEvent)).thenReturn(layers1);
+        when(layerHelper.readByEvent(changedEvent)).thenReturn(layers2);
+        when(network.isConnected()).thenReturn(false);
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+
+        Set<MapDataResource> resources = repo.getValue();
+        verify(observer).onChanged(observed.capture());
+        assertThat(observed.getValue(), sameInstance(resources));
+        assertThat(resources, notNullValue());
+        assertThat(resources, hasSize(1));
+        MapDataResource resource = (MapDataResource) resources.toArray()[0];
+        assertThat(resource.getLayers().values(), hasSize(1));
+        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("layer1"))));
+
+        when(network.isConnected()).thenReturn(true);
+        when(eventHelper.getCurrentEvent()).thenReturn(changedEvent);
+        when(layerService.getLayers(changedEvent)).thenThrow(new IOException("deliberate fail"));
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Error));
+
+        verify(observer, times(2)).onChanged(observed.capture());
+        resources = repo.getValue();
         assertThat(resources, sameInstance(observed.getValue()));
+        assertThat(resources, notNullValue());
+        assertThat(resources, hasSize(1));
+        resource = (MapDataResource) resources.toArray()[0];
+        assertThat(resource.getLayers().values(), hasSize(1));
+        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("alt_event_layer"))));
+        verify(layerHelper, never()).deleteByEvent(any());
+        verify(layerHelper, never()).delete(any());
+        verify(layerHelper, never()).deleteAll();
     }
 
     @Test
@@ -853,17 +915,93 @@ public class StaticFeatureLayerRepositoryTest {
     }
 
     @Test
-    public void finishesSyncInProgressIfCurrentEventChanges() {
+    public void cancelsRefreshInProgressIfCurrentEventChangesBeforeFeatureFetch() throws InterruptedException, IOException, LayerException {
+
+        Lock fetchLock = new ReentrantLock();
+        Condition fetchCondition = fetchLock.newCondition();
+        AtomicBoolean fetchBlocked = new AtomicBoolean(false);
+
+        Event changedEvent = new Event("another-event", "Another Event", "test", "test", "test");
+        List<Layer> layers1 = Collections.singletonList(
+            new TestLayer("event1.layer1", "test", "Event 1 Layer 1", currentEvent));
+        List<Layer> layers2 = Collections.singletonList(
+            new TestLayer("event2.layer1", "test", "Event 2 Layer 1", changedEvent));
+
+        when(layerService.getLayers(currentEvent))
+            .then(invoc -> {
+                fetchLock.lock();
+                fetchBlocked.set(true);
+                fetchCondition.signal();
+                while (fetchBlocked.get()) {
+                    if (!fetchCondition.await(oneSecond(), TimeUnit.MILLISECONDS)) {
+                        fail("timed out waiting to unblock");
+                    }
+                }
+                fetchLock.unlock();
+                return layers1;
+            });
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        fetchLock.lock();
+        while (!fetchBlocked.get()) {
+            fetchCondition.await(oneSecond(), TimeUnit.MILLISECONDS);
+        }
+        fetchLock.unlock();
+
+        when(eventHelper.getCurrentEvent()).thenReturn(changedEvent);
+        when(layerService.getLayers(changedEvent)).thenReturn(layers2);
+        when(layerHelper.create(layers2.get(0))).then(invoc -> ((TestLayer)layers2.get(0)).setId(1212L));
+        when(layerHelper.readByEvent(changedEvent))
+            .thenReturn(emptySet())
+            .thenReturn(layers2);
+
+        waitForMainThreadToRun(() -> {
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        fetchLock.lock();
+        fetchBlocked.set(false);
+        fetchCondition.signal();
+        fetchLock.unlock();
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+
+        awaitThreadPoolTermination();
+
+        verify(layerService, times(1)).getLayers(currentEvent);
+        verify(layerService, times(1)).getLayers(changedEvent);
+        verify(layerService, times(2)).getLayers(any());
+        verify(layerService).getFeatures(layers2.get(0));
+        verify(layerService, never()).getFeatures(layers1.get(0));
+        verify(observer, times(1)).onChanged(observed.capture());
+        assertThat(observed.getValue(), hasSize(1));
+        MapDataResource resource = (MapDataResource) observed.getValue().toArray()[0];
+        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("event2.layer1"))));
+    }
+
+    @Test
+    public void doesNotStartPendingRefreshIfCurrentEventChangesBeforePendingRefreshStarts() {
         fail("unimplemented");
     }
 
     @Test
-    public void handlesRejectedExecutionOnExecutor() {
+    public void handlesPreemptedRefreshThatCancelsAsyncTasksBeforeTheyRunPassingNullToOnCancelled() {
         fail("unimplemented");
     }
 
     @Test
     public void finishesProperlyWhenTheLastLayerSyncFinishesButIsStillResolvingIconsForPreviousLayer() {
+        fail("unimplemented");
+    }
+
+    @Test
+    public void handlesRejectedExecutionOnExecutor() {
         fail("unimplemented");
     }
 

@@ -97,7 +97,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
     private final LayerResource layerService;
     private final NetworkCondition network;
     private final File iconsDir;
-    private Event currentEvent;
+    private Event lastSyncedEvent;
     private RefreshCurrentEventLayers refreshInProgress;
     private RefreshCurrentEventLayers pendingRefresh;
     private Resource.Status refreshStatus = Status.Success;
@@ -136,14 +136,18 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
 
     @Override
     public void refreshAvailableMapData(Map<URI, MapDataResource> resolvedResources, Executor executor) {
-        Event currentEventTest = eventHelper.getCurrentEvent();
-        if (currentEvent != null && currentEvent.equals(currentEventTest) && getStatus() == Status.Loading) {
+        // TODO: this db query should really be on background thread too
+        Event currentEvent = eventHelper.getCurrentEvent();
+        if (refreshInProgress != null && currentEvent.equals(refreshInProgress.event)) {
             return;
         }
-        currentEvent = currentEventTest;
-        refreshInProgress = new RefreshCurrentEventLayers(executor, currentEvent);
-        refreshInProgress.layerFetch.executeOnExecutor(executor);
-        refreshStatus = Status.Loading;
+        pendingRefresh = new RefreshCurrentEventLayers(executor, currentEvent);
+        if (refreshInProgress != null) {
+            refreshInProgress.cancel();
+        }
+        else {
+            beginPendingRefresh();
+        }
     }
 
     @Override
@@ -170,6 +174,16 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
         // TODO: cancel syncing in progress and disallow future syncing
     }
 
+    private void beginPendingRefresh() {
+        refreshInProgress = pendingRefresh;
+        if (pendingRefresh == null) {
+            return;
+        }
+        pendingRefresh = null;
+        refreshStatus = Status.Loading;
+        refreshInProgress.layerFetch.executeOnExecutor(refreshInProgress.executor);
+    }
+
     private void onLayerFetchFinished() {
         FetchEventLayers fetch = refreshInProgress.layerFetch;
         Collection<Layer> remoteLayers = fetch.result.layers;
@@ -178,9 +192,9 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
             refreshInProgress.status = Status.Error;
             refreshInProgress.statusMessage.add("Error fetching layers for event "
                 + refreshInProgress.event.getName() + ": " + fetch.result.failure.getLocalizedMessage());
-            finishRefresh();
+            createMapDataFromSyncedData();
         }
-        else if (remoteLayers != null && !remoteLayers.isEmpty()) {
+        else if (!refreshInProgress.isCancelled() && remoteLayers != null && !remoteLayers.isEmpty()) {
             for (Layer layer : remoteLayers) {
                 SyncLayerFeatures featureFetch = new SyncLayerFeatures(layer);
                 refreshInProgress.featureSyncForLayer.put(layer.getRemoteId(), featureFetch);
@@ -188,7 +202,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
             }
         }
         else {
-            finishRefresh();
+            createMapDataFromSyncedData();
         }
     }
 
@@ -203,7 +217,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
             refreshInProgress.statusMessage.add("Error syncing feature data for layer " + sync.layer.getName() +
                 " (" + sync.layer.getRemoteId() + "): " + sync.result.failure.getLocalizedMessage());
             if (refreshInProgress.isFinishedSyncing()) {
-                finishRefresh();
+                createMapDataFromSyncedData();
             }
             return;
         }
@@ -234,7 +248,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
             iconUrlCursor.remove();
         }
         if (refreshInProgress.isFinishedSyncing()) {
-            finishRefresh();
+            createMapDataFromSyncedData();
         }
     }
 
@@ -256,34 +270,31 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
             }
         }
         if (refreshInProgress.isFinishedSyncing()) {
-            finishRefresh();
+            createMapDataFromSyncedData();
         }
     }
 
-    private void finishRefresh() {
-        if (refreshInProgress.isCancelled() && getValue() != null) {
-            onMapDataCreated(null);
-        }
-        else {
-            refreshInProgress.syncMapData = new SyncMapDataFromDatabase(refreshInProgress.event);
-            refreshInProgress.syncMapData.executeOnExecutor(refreshInProgress.executor);
-        }
+    private void createMapDataFromSyncedData() {
+        refreshInProgress.syncMapData.executeOnExecutor(refreshInProgress.executor);
     }
 
     private void onMapDataCreated(SyncMapDataFromDatabase sync) {
-        refreshStatus = refreshInProgress.status;
+        RefreshCurrentEventLayers refresh = refreshInProgress;
+        refreshInProgress = null;
+        refreshStatus = refresh.status;
         StringBuilder message = new StringBuilder();
-        for (String messagePart : refreshInProgress.statusMessage) {
+        for (String messagePart : refresh.statusMessage) {
             if (message.length() > 0 && messagePart.length() > 0) {
                 message.append(System.lineSeparator());
             }
             message.append(messagePart);
         }
         statusMessage = message.toString();
-        refreshInProgress = null;
-        if (sync != null) {
-            setValue(Collections.singleton(sync.mapData));
+        if (!refresh.isCancelled() || (pendingRefresh == null && (!refresh.event.equals(lastSyncedEvent) || getValue() == null))) {
+            lastSyncedEvent = refresh.event;
+            setValue(Collections.singleton(sync.result.mapData));
         }
+        beginPendingRefresh();
     }
 
 
@@ -296,7 +307,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
         private final Map<String, Set<Long>> featuresForIconUrl = new HashMap<>();
         private final Map<String, SyncIconToFeatures> iconSyncForIconUrl = new HashMap<>();
         private final FetchEventLayers layerFetch;
-        private SyncMapDataFromDatabase syncMapData;
+        private final SyncMapDataFromDatabase syncMapData;
         private boolean cancelled = false;
         private Status status = Status.Success;
         private List<String> statusMessage = new ArrayList<>();
@@ -304,7 +315,8 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
         private RefreshCurrentEventLayers(Executor executor, Event event) {
             this.executor = executor;
             this.event = event;
-            this.layerFetch = new FetchEventLayers(event);
+            layerFetch = new FetchEventLayers(event);
+            syncMapData = new SyncMapDataFromDatabase(event);
         }
 
         private void cancel() {
@@ -323,7 +335,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
         }
 
         private boolean isFinishedSyncing() {
-            return featureSyncForLayer.isEmpty() && iconSyncForIconUrl.isEmpty();
+            return layerFetch.result != null && featureSyncForLayer.isEmpty() && iconSyncForIconUrl.isEmpty();
         }
 
         private boolean isCancelled() {
@@ -387,6 +399,9 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
 
         @Override
         protected void onCancelled(FetchEventLayersResult result) {
+            if (result == null) {
+                result = new FetchEventLayersResult(Collections.emptySet(), null);
+            }
             onPostExecute(result);
         }
     }
@@ -600,18 +615,17 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
     }
 
     @SuppressLint("StaticFieldLeak")
-    private class SyncMapDataFromDatabase extends AsyncTask<Void, LayerException, MapDataResource> {
+    private class SyncMapDataFromDatabase extends AsyncTask<Void, Void, SyncMapDataFromDatabaseResult> {
 
         private final Event event;
-        private MapDataResource mapData;
-        private LayerException failure;
+        private SyncMapDataFromDatabaseResult result;
 
         private SyncMapDataFromDatabase(Event event) {
             this.event = event;
         }
 
         @Override
-        protected MapDataResource doInBackground(Void[] nothing) {
+        protected SyncMapDataFromDatabaseResult doInBackground(Void[] nothing) {
             try {
                 Collection<Layer> layers = layerHelper.readByEvent(event);
                 Set<LayerDescriptor> descriptors = new HashSet<>(layers.size());
@@ -619,24 +633,32 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
                     descriptors.add(new LayerDescriptor(layer));
                 }
                 MapDataResource.Resolved resolvedLayers = new MapDataResource.Resolved(RESOURCE_NAME, StaticFeatureLayerRepository.class, descriptors);
-                return new MapDataResource(RESOURCE_URI, StaticFeatureLayerRepository.this, 0, resolvedLayers);
+                MapDataResource mapData = new MapDataResource(
+                    RESOURCE_URI, StaticFeatureLayerRepository.this, 0, resolvedLayers);
+                return new SyncMapDataFromDatabaseResult(mapData, null);
             }
             catch (LayerException e) {
-                onProgressUpdate(e);
+                MapDataResource mapData = new MapDataResource(RESOURCE_URI, StaticFeatureLayerRepository.this, 0,
+                    new MapDataResource.Resolved(RESOURCE_NAME, StaticFeatureLayerRepository.class));
+                return new SyncMapDataFromDatabaseResult(mapData, e);
             }
-            return new MapDataResource(RESOURCE_URI, StaticFeatureLayerRepository.this, 0,
-                new MapDataResource.Resolved(RESOURCE_NAME, StaticFeatureLayerRepository.class));
         }
 
         @Override
-        protected void onProgressUpdate(LayerException... values) {
-            failure = values[0];
-        }
-
-        @Override
-        protected void onPostExecute(MapDataResource resource) {
-            mapData = resource;
+        protected void onPostExecute(SyncMapDataFromDatabaseResult result) {
+            this.result = result;
             onMapDataCreated(this);
+        }
+    }
+
+    private static class SyncMapDataFromDatabaseResult {
+
+        private final MapDataResource mapData;
+        private final Exception failure;
+
+        private SyncMapDataFromDatabaseResult(MapDataResource mapData, Exception failure) {
+            this.mapData = mapData;
+            this.failure = failure;
         }
     }
 
