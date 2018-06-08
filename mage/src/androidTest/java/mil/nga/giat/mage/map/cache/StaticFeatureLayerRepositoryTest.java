@@ -16,6 +16,7 @@ import org.junit.rules.TemporaryFolder;
 import org.junit.rules.TestName;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
@@ -71,6 +72,7 @@ import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atMost;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -164,7 +166,7 @@ public class StaticFeatureLayerRepositoryTest {
     public void setupRepo() throws IOException {
         MockitoAnnotations.initMocks(this);
         iconsDir = iconsDirRule.newFolder("icons");
-        currentEvent = new Event(testName.getMethodName(), testName.getMethodName(), testName.getMethodName(), "", "");
+        currentEvent = new Event(testName.getMethodName(), "", "", "", "");
         repo = new StaticFeatureLayerRepository(eventHelper, layerHelper, featureHelper, layerService, iconsDir, network);
         LifecycleOwner observerLifecycle = new LifecycleOwner() {
             private LifecycleRegistry lifecycle = new LifecycleRegistry(this);
@@ -915,7 +917,7 @@ public class StaticFeatureLayerRepositoryTest {
     }
 
     @Test
-    public void cancelsRefreshInProgressIfCurrentEventChangesBeforeFeatureFetch() throws InterruptedException, IOException, LayerException {
+    public void cancelsRefreshInPorgressIfCurrentEventChangesDuringLayerFetch() throws InterruptedException, IOException, LayerException {
 
         Lock fetchLock = new ReentrantLock();
         Condition fetchCondition = fetchLock.newCondition();
@@ -983,6 +985,121 @@ public class StaticFeatureLayerRepositoryTest {
         assertThat(observed.getValue(), hasSize(1));
         MapDataResource resource = (MapDataResource) observed.getValue().toArray()[0];
         assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("event2.layer1"))));
+    }
+
+    @Test
+    public void cancelsRefreshInProgresIfCurrentEventChangesBeforeFirstFeatureFetch() {
+        fail("unimplemented");
+    }
+
+    @Test
+    public void finishesRefreshInProgressIfCurrentEventChangesDuringFeatureFetch() throws Exception {
+
+        Lock fetchLock = new ReentrantLock();
+        Condition fetchCondition = fetchLock.newCondition();
+        AtomicBoolean fetchBlocked = new AtomicBoolean(false);
+
+        Event changedEvent = new Event("another-event", "Another Event", "test", "test", "test");
+        List<Layer> currentLayers = Arrays.asList(
+            new TestLayer("event1.layer1", "test", "Event 1 Layer 1", currentEvent),
+            new TestLayer("event1.layer2", "test", "Event 1 Layer 2", currentEvent));
+        List<StaticFeature> features1 = Arrays.asList(
+            new TestStaticFeature("event1.layer1.f1", new Point(1, 1), currentLayers.get(0))
+                .addProperty(StaticFeatureLayerRepository.PROP_ICON_URL, "http://test.mage/icons/1.png"),
+            new TestStaticFeature("event1.layer1.f2", new Point(2,2), currentLayers.get(0)));
+        List<StaticFeature> features2 = Collections.singletonList(
+            new TestStaticFeature("event1.layer1.f1", new Point(1, 1), currentLayers.get(1)));
+        List<Layer> changedLayers = Collections.singletonList(
+            new TestLayer("event2.layer1", "test", "Event 2 Layer 1", changedEvent));
+
+        when(layerService.getLayers(currentEvent)).thenReturn(currentLayers);
+        when(layerService.getFeatures(currentLayers.get(0)))
+            .then(invoc -> {
+                fetchLock.lock();
+                fetchBlocked.set(true);
+                fetchCondition.signal();
+                while (fetchBlocked.get()) {
+                    if (!fetchCondition.await(oneSecond(), TimeUnit.MILLISECONDS)) {
+                        fail("timed out waiting to unblock");
+                    }
+                }
+                fetchLock.unlock();
+                return features1;
+            });
+        when(layerService.getFeatures(currentLayers.get(1))).thenReturn(features2);
+        when(layerHelper.create(currentLayers.get(0))).then(invoc -> ((TestLayer) currentLayers.get(0)).setId(111L));
+        when(layerHelper.create(currentLayers.get(1))).then(invoc -> ((TestLayer) currentLayers.get(1)).setId(222L));
+        when(featureHelper.createAll(features1, currentLayers.get(0))).then(invoc -> {
+            ((TestStaticFeature) features1.get(0)).setId(1111L);
+            return features1;
+        });
+        when(featureHelper.createAll(features2, currentLayers.get(1))).then(invoc -> {
+            ((TestStaticFeature) features2.get(0)).setId(1112L);
+            return features2;
+        });
+        when(layerService.getFeatureIcon("http://test.mage/icons/1.png")).thenReturn(new ByteArrayInputStream("i'm an icon".getBytes()));
+        when(featureHelper.read(1111L)).thenReturn(features1.get(0));
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        fetchLock.lock();
+        while (!fetchBlocked.get()) {
+            fetchCondition.await(oneSecond(), TimeUnit.MILLISECONDS);
+        }
+        fetchLock.unlock();
+
+        when(eventHelper.getCurrentEvent()).thenReturn(changedEvent);
+        when(layerHelper.readByEvent(currentEvent)).thenReturn(currentLayers);
+        when(layerService.getLayers(changedEvent)).thenReturn(changedLayers);
+        when(layerHelper.create(changedLayers.get(0))).then(invoc -> ((TestLayer)changedLayers.get(0)).setId(1212L));
+        when(layerHelper.readByEvent(changedEvent))
+            .thenReturn(emptySet())
+            .thenReturn(changedLayers);
+
+        waitForMainThreadToRun(() -> {
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        fetchLock.lock();
+        fetchBlocked.set(false);
+        fetchCondition.signal();
+        fetchLock.unlock();
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+
+        awaitThreadPoolTermination();
+
+        InOrder layer1Order = inOrder(layerService, layerHelper, featureHelper, observer);
+        InOrder layer2Order = inOrder(layerService, layerHelper, featureHelper, observer);
+
+        layer1Order.verify(layerService).getLayers(currentEvent);
+        layer1Order.verify(layerHelper).readByEvent(currentEvent);
+        layer1Order.verify(layerHelper).create(currentLayers.get(0));
+        layer1Order.verify(featureHelper).update(features1.get(0));
+        layer1Order.verify(layerHelper).readByEvent(currentEvent);
+        layer1Order.verify(layerService).getLayers(changedEvent);
+        layer1Order.verify(observer).onChanged(observed.capture());
+
+        layer2Order.verify(layerService).getFeatures(currentLayers.get(1));
+        layer2Order.verify(layerHelper).create(currentLayers.get(1));
+        layer2Order.verify(featureHelper).createAll(features2, currentLayers.get(1));
+        layer2Order.verify(layerService).getLayers(changedEvent);
+        layer2Order.verify(observer).onChanged(observed.getValue());
+
+        assertThat(observed.getValue(), hasSize(1));
+        MapDataResource resource = (MapDataResource) observed.getValue().toArray()[0];
+        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("event2.layer1"))));
+        assertThat(repo.getValue(), sameInstance(observed.getValue()));
+    }
+
+    @Test
+    public void finishesRefreshInProgressIfCurrentEventChangesDuringIconFetch() {
+        fail("unimplemented");
     }
 
     @Test
