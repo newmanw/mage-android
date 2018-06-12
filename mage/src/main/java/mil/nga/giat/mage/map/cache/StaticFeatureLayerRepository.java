@@ -175,6 +175,10 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
     }
 
     private void beginPendingRefresh() {
+        if (refreshInProgress != null) {
+            throw new IllegalStateException("attempt to begin pending refresh before refresh in progress completed for event " +
+                refreshInProgress.event.getRemoteId() + " (" + refreshInProgress.event.getName() + ")");
+        }
         refreshInProgress = pendingRefresh;
         if (pendingRefresh == null) {
             return;
@@ -442,7 +446,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
                 }
                 catch (IOException e) {
                     Log.e(LOG_NAME, "error fetching features for layer " + layer.getRemoteId(), e);
-                    return new SyncLayerFeaturesResult(null, null, e);
+                    return new SyncLayerFeaturesResult(Collections.emptyMap(), e);
                 }
                 try {
                     Layer existing = layerHelper.read(layer.getRemoteId());
@@ -465,25 +469,28 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
                         }
                     }
                     //noinspection unchecked
-                    return new SyncLayerFeaturesResult(layerWithFeatures, featuresForIconUrl, null);
+                    return new SyncLayerFeaturesResult(featuresForIconUrl, null);
                 }
                 catch (LayerException e) {
                     Log.e(LOG_NAME, "failed to save fetched layer " + layer.getName() + " (" + layer.getRemoteId() + ")", e);
-                    return new SyncLayerFeaturesResult(null, null, e);
+                    return new SyncLayerFeaturesResult(Collections.emptyMap(), e);
                 }
                 catch (StaticFeatureException e) {
                     Log.e(LOG_NAME, "failed to save static features for layer " + layer.getName() + " (" + layer.getRemoteId() + ")", e);
-                    return new SyncLayerFeaturesResult(null, null, e);
+                    return new SyncLayerFeaturesResult(Collections.emptyMap(), e);
                 }
             }
             catch (Exception e) {
                 Log.e(LOG_NAME, "unexpected error syncing features for layer " + layer.getRemoteId(), e);
-                return new SyncLayerFeaturesResult(null, null, e);
+                return new SyncLayerFeaturesResult(Collections.emptyMap(), e);
             }
         }
 
         @Override
         protected void onPostExecute(SyncLayerFeaturesResult result) {
+            if (result == null) {
+                result = new SyncLayerFeaturesResult(Collections.emptyMap(), null);
+            }
             this.result = result;
             onFeaturesSynced(this);
         }
@@ -495,12 +502,10 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
     }
 
     private static class SyncLayerFeaturesResult {
-        private final Layer syncedLayer;
         private final Map<String, Set<Long>> featuresForIconUrl;
         private final Exception failure;
 
-        private SyncLayerFeaturesResult(Layer syncedLayer, Map<String, Set<Long>> featuresForIconUrl, Exception failure) {
-            this.syncedLayer = syncedLayer;
+        private SyncLayerFeaturesResult(Map<String, Set<Long>> featuresForIconUrl, Exception failure) {
             this.featuresForIconUrl = featuresForIconUrl;
             this.failure = failure;
         }

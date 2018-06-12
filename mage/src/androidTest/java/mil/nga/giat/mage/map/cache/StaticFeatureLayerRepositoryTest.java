@@ -4,6 +4,7 @@ import android.arch.lifecycle.Lifecycle;
 import android.arch.lifecycle.LifecycleOwner;
 import android.arch.lifecycle.LifecycleRegistry;
 import android.arch.lifecycle.Observer;
+import android.os.AsyncTask;
 import android.support.annotation.NonNull;
 import android.support.test.filters.SmallTest;
 import android.support.test.runner.AndroidJUnit4;
@@ -14,9 +15,9 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 import org.junit.rules.TestName;
+import org.junit.rules.Timeout;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.ArgumentMatchers;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
@@ -72,7 +73,6 @@ import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.atMost;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -131,9 +131,11 @@ public class StaticFeatureLayerRepositoryTest {
     }
 
     private static long oneSecond() {
-        return 300000;
+        return 3000;
     }
 
+    @Rule
+    public Timeout maxTestTime = Timeout.seconds(600);
     @Rule
     public TestName testName = new TestName();
     @Rule
@@ -217,9 +219,7 @@ public class StaticFeatureLayerRepositoryTest {
 
     @Test
     public void initialDataIsNull() {
-        waitForMainThreadToRun(() -> {
-            assertThat(repo.getValue(), nullValue());
-        });
+        waitForMainThreadToRun(() -> assertThat(repo.getValue(), nullValue()));
     }
 
     @Test
@@ -292,7 +292,6 @@ public class StaticFeatureLayerRepositoryTest {
         Layer layer = new Layer("1", "test", "test1", currentEvent);
         Layer createdLayer = new TestLayer("1", "test", "test1", currentEvent).setId(1234L);
         TestStaticFeature feature = new TestStaticFeature("1.1", new Point(1, 2), layer);
-        StaticFeature createdFeature = new TestStaticFeature("1.1", new Point(1, 2), layer).setId(1L);
         String iconUrl = "http://test.mage/icons/test/point.png";
         StaticFeatureProperty iconProperty = new StaticFeatureProperty(StaticFeatureLayerRepository.PROP_ICON_URL, iconUrl);
         feature.getProperties().add(iconProperty);
@@ -1008,10 +1007,13 @@ public class StaticFeatureLayerRepositoryTest {
                 .addProperty(StaticFeatureLayerRepository.PROP_ICON_URL, "http://test.mage/icons/1.png"),
             new TestStaticFeature("event1.layer1.f2", new Point(2,2), currentLayers.get(0)));
         List<StaticFeature> features2 = Collections.singletonList(
-            new TestStaticFeature("event1.layer1.f1", new Point(1, 1), currentLayers.get(1)));
+            new TestStaticFeature("event1.layer2.f1", new Point(1, 1), currentLayers.get(1)));
         List<Layer> changedLayers = Collections.singletonList(
             new TestLayer("event2.layer1", "test", "Event 2 Layer 1", changedEvent));
 
+        when(layerHelper.readByEvent(currentEvent))
+            .thenReturn(emptySet())
+            .thenReturn(currentLayers);
         when(layerService.getLayers(currentEvent)).thenReturn(currentLayers);
         when(layerService.getFeatures(currentLayers.get(0)))
             .then(invoc -> {
@@ -1052,9 +1054,8 @@ public class StaticFeatureLayerRepositoryTest {
         fetchLock.unlock();
 
         when(eventHelper.getCurrentEvent()).thenReturn(changedEvent);
-        when(layerHelper.readByEvent(currentEvent)).thenReturn(currentLayers);
         when(layerService.getLayers(changedEvent)).thenReturn(changedLayers);
-        when(layerHelper.create(changedLayers.get(0))).then(invoc -> ((TestLayer)changedLayers.get(0)).setId(1212L));
+        when(layerHelper.create(changedLayers.get(0))).then(invoc -> ((TestLayer) changedLayers.get(0)).setId(1212L));
         when(layerHelper.readByEvent(changedEvent))
             .thenReturn(emptySet())
             .thenReturn(changedLayers);
@@ -1095,6 +1096,13 @@ public class StaticFeatureLayerRepositoryTest {
         MapDataResource resource = (MapDataResource) observed.getValue().toArray()[0];
         assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("event2.layer1"))));
         assertThat(repo.getValue(), sameInstance(observed.getValue()));
+
+        // TODO: this test was showing some strange behavior, failing only every once in a while with some Mockito verification errors,
+        // one being that the call to LayerHelper.create(currentLayer.get(1)) did not occur, and another very strange one that was
+        // org.mockito.exceptions.misusing.WrongTypeOfReturnValue, saying that LayerHelper.read(String) returned a EmptyList instead
+        // of a Layer.  I tried to track this down for a while but I can't make it fail enough to get a handle on it, but the second
+        // error makes me think it's a Mockito bug.
+//        fail("this one is failing sporadically");
     }
 
     @Test
@@ -1275,8 +1283,55 @@ public class StaticFeatureLayerRepositoryTest {
     }
 
     @Test
-    public void handlesPreemptedRefreshThatCancelsAsyncTasksBeforeTheyRunPassingNullToOnCancelled() {
-        fail("unimplemented");
+    public void handlesPreemptedRefreshThatCancelsAsyncTasksBeforeTheyRunPassingNullToOnCancelled() throws Exception {
+
+        Lock fetchLock = new ReentrantLock();
+        Condition fetchCondition = fetchLock.newCondition();
+        AtomicBoolean fetchBlocked = new AtomicBoolean(false);
+
+        TestLayer layer1 = new TestLayer("layer1", "test", "", currentEvent);
+        TestLayer layer2 = new TestLayer("layer2", "test", "", currentEvent);
+
+        when(layerService.getLayers(currentEvent)).thenReturn(Arrays.asList(layer1, layer2));
+        when(layerService.getFeatures(layer1)).then(invoc -> {
+            fetchLock.lock();
+            fetchBlocked.set(true);
+            fetchCondition.signal();
+            while (fetchBlocked.get()) {
+                if (!fetchCondition.await(oneSecond(), TimeUnit.MILLISECONDS)) {
+                    fail("timed out waiting to unblock");
+                }
+            }
+            fetchLock.unlock();
+            return emptySet();
+        });
+        when(layerService.getFeatures(layer2)).thenReturn(emptySet());
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), AsyncTask.SERIAL_EXECUTOR);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        fetchLock.lock();
+        while (!fetchBlocked.get()) {
+            fetchCondition.await(oneSecond(), TimeUnit.MILLISECONDS);
+        }
+        fetchLock.unlock();
+
+        Event changedEvent = new Event("another", "Another Event", "", "", "");
+        when(eventHelper.getCurrentEvent()).thenReturn(changedEvent);
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), AsyncTask.SERIAL_EXECUTOR);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        fetchLock.lock();
+        fetchBlocked.set(false);
+        fetchCondition.signal();
+        fetchLock.unlock();
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
     }
 
     @Test
