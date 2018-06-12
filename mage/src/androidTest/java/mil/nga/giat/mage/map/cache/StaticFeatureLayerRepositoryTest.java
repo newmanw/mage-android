@@ -73,6 +73,7 @@ import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -1283,7 +1284,7 @@ public class StaticFeatureLayerRepositoryTest {
     }
 
     @Test
-    public void handlesPreemptedRefreshThatCancelsAsyncTasksBeforeTheyRunPassingNullToOnCancelled() throws Exception {
+    public void handlesPreemptedRefreshThatCancelsFeatureFetchTasksBeforeTheyRunPassingNullToOnCancelled() throws Exception {
 
         Lock fetchLock = new ReentrantLock();
         Condition fetchCondition = fetchLock.newCondition();
@@ -1293,19 +1294,83 @@ public class StaticFeatureLayerRepositoryTest {
         TestLayer layer2 = new TestLayer("layer2", "test", "", currentEvent);
 
         when(layerService.getLayers(currentEvent)).thenReturn(Arrays.asList(layer1, layer2));
-        when(layerService.getFeatures(layer1)).then(invoc -> {
-            fetchLock.lock();
-            fetchBlocked.set(true);
-            fetchCondition.signal();
-            while (fetchBlocked.get()) {
-                if (!fetchCondition.await(oneSecond(), TimeUnit.MILLISECONDS)) {
-                    fail("timed out waiting to unblock");
+        when(layerService.getFeatures(any()))
+            .then(invoc -> {
+                fetchLock.lock();
+                fetchBlocked.set(true);
+                fetchCondition.signal();
+                while (fetchBlocked.get()) {
+                    if (!fetchCondition.await(oneSecond(), TimeUnit.MILLISECONDS)) {
+                        fail("timed out waiting to unblock");
+                    }
                 }
-            }
-            fetchLock.unlock();
-            return emptySet();
+                fetchLock.unlock();
+                return emptySet();
+            })
+            .thenReturn(emptySet());
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), AsyncTask.SERIAL_EXECUTOR);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
         });
-        when(layerService.getFeatures(layer2)).thenReturn(emptySet());
+
+        fetchLock.lock();
+        while (!fetchBlocked.get()) {
+            fetchCondition.await(oneSecond(), TimeUnit.MILLISECONDS);
+        }
+        fetchLock.unlock();
+
+        Event changedEvent = new Event("another", "Another Event", "", "", "");
+        when(eventHelper.getCurrentEvent()).thenReturn(changedEvent);
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), AsyncTask.SERIAL_EXECUTOR);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        fetchLock.lock();
+        fetchBlocked.set(false);
+        fetchCondition.signal();
+        fetchLock.unlock();
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+    }
+
+    @Test
+    public void handlesPreemptedRefreshThatCancelsIconFetchTasksBeforeTheyRunPassingNullToOnCancelled() throws Exception {
+
+        Lock fetchLock = new ReentrantLock();
+        Condition fetchCondition = fetchLock.newCondition();
+        AtomicBoolean fetchBlocked = new AtomicBoolean(false);
+
+        TestLayer layer1 = new TestLayer("layer1", "test", "", currentEvent);
+        TestStaticFeature feature1 = new TestStaticFeature("layer1.f1", new Point(1, 1), layer1)
+            .addProperty(StaticFeatureLayerRepository.PROP_ICON_URL, "http://test.mage/icons/1.png");
+        TestStaticFeature feature2 = new TestStaticFeature("layer1.f2", new Point(2, 2), layer1)
+            .addProperty(StaticFeatureLayerRepository.PROP_ICON_URL, "http://test.mage/icons/2.png");
+
+        when(layerService.getLayers(currentEvent)).thenReturn(Collections.singletonList(layer1));
+        when(layerService.getFeatures(layer1)).thenReturn(Arrays.asList(feature1, feature2));
+        when(layerHelper.create(layer1)).then(invoc -> layer1.setId(111L));
+        when(featureHelper.createAll(any(), same(layer1))).then(invoc -> {
+            feature1.setId(1111L);
+            feature2.setId(2222L);
+            return Arrays.asList(feature1, feature2);
+        });
+        when(layerService.getFeatureIcon(any()))
+            .then(invoc -> {
+                fetchLock.lock();
+                fetchBlocked.set(true);
+                fetchCondition.signal();
+                while (fetchBlocked.get()) {
+                    if (!fetchCondition.await(oneSecond(), TimeUnit.MILLISECONDS)) {
+                        fail("timed out waiting to unblock");
+                    }
+                }
+                fetchLock.unlock();
+                return new ByteArrayInputStream("icon1".getBytes());
+            })
+            .thenReturn(new ByteArrayInputStream("icon2".getBytes()));
 
         waitForMainThreadToRun(() -> {
             repo.refreshAvailableMapData(emptyMap(), AsyncTask.SERIAL_EXECUTOR);

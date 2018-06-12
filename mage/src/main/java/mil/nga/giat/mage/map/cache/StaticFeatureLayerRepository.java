@@ -558,6 +558,9 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
 
         @Override
         protected void onCancelled(SyncIconToFeaturesResult result) {
+            if (result == null) {
+                result = new SyncIconToFeaturesResult(null, Collections.emptyMap());
+            }
             onPostExecute(result);
         }
 
