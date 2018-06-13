@@ -988,11 +988,6 @@ public class StaticFeatureLayerRepositoryTest {
     }
 
     @Test
-    public void cancelsRefreshInProgresIfCurrentEventChangesBeforeFirstFeatureFetch() {
-        fail("unimplemented");
-    }
-
-    @Test
     public void finishesRefreshInProgressIfCurrentEventChangesDuringFeatureFetch() throws Exception {
 
         Lock fetchLock = new ReentrantLock();
