@@ -138,7 +138,7 @@ class MapDataManager(config: Config) : LifecycleOwner {
         }
         else {
             val result = change.get()
-            result.repository.onExternallyResloved(HashSet(result.resolved.values))
+            result.repository.onExternallyResolved(HashSet(result.resolved.values))
         }
     }
 

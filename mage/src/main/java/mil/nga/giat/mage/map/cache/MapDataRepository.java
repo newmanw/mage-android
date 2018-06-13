@@ -56,7 +56,7 @@ public abstract class MapDataRepository extends LiveData<Set<MapDataResource>> i
      * @param resources
      */
     @MainThread
-    public final void onExternallyResloved(Set<MapDataResource> resources) {
+    public final void onExternallyResolved(Set<MapDataResource> resources) {
         Set<MapDataResource> existing = getValue();
         if (existing == null) {
             existing = Collections.emptySet();
