@@ -136,7 +136,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
 
     @Override
     public void refreshAvailableMapData(Map<URI, MapDataResource> resolvedResources, Executor executor) {
-        // TODO: this db query should really be on background thread too
+        // TODO: this db query should really be on background thread too, but this should be fixed with Room/LiveData later
         Event currentEvent = eventHelper.getCurrentEvent();
         if (refreshInProgress != null && currentEvent.equals(refreshInProgress.event)) {
             return;
@@ -332,10 +332,6 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
                 syncIconToFeatures.cancel(false);
             }
             cancelled = true;
-        }
-
-        private boolean isStarted() {
-            return layerFetch.getStatus() != AsyncTask.Status.PENDING;
         }
 
         private boolean isFinishedSyncing() {
