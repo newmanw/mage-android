@@ -1400,6 +1400,59 @@ public class StaticFeatureLayerRepositoryTest {
     }
 
     @Test
+    public void handlesPreemptedRefreshThatCancelsWhileReadingTheFinalLayerList() throws Exception {
+
+        Lock refreshLock = new ReentrantLock();
+        Condition refreshCondition = refreshLock.newCondition();
+        AtomicBoolean refreshBlocked = new AtomicBoolean(false);
+
+        TestLayer layer1 = new TestLayer("layer1", "test", "", currentEvent);
+
+        when(layerService.getLayers(currentEvent)).thenReturn(Collections.singletonList(layer1));
+        when(layerHelper.create(layer1)).then(invoc -> layer1.setId(111L));
+        when(layerHelper.readByEvent(currentEvent))
+            .thenReturn(emptySet())
+            .then(invoc -> {
+                refreshLock.lock();
+                refreshBlocked.set(true);
+                refreshCondition.signal();
+                while (refreshBlocked.get()) {
+                    if (!refreshCondition.await(oneSecond(), TimeUnit.MILLISECONDS)) {
+                        fail("timed out waiting to unblock");
+                    }
+                }
+                refreshLock.unlock();
+                return Collections.singleton(layer1);
+            });
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), AsyncTask.SERIAL_EXECUTOR);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        refreshLock.lock();
+        while (!refreshBlocked.get()) {
+            refreshCondition.await(oneSecond(), TimeUnit.MILLISECONDS);
+        }
+        refreshLock.unlock();
+
+        Event changedEvent = new Event("another", "Another Event", "", "", "");
+        when(eventHelper.getCurrentEvent()).thenReturn(changedEvent);
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), AsyncTask.SERIAL_EXECUTOR);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        refreshLock.lock();
+        refreshBlocked.set(false);
+        refreshCondition.signal();
+        refreshLock.unlock();
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+    }
+
+    @Test
     public void handlesRejectedExecutionOnExecutor() {
         fail("unimplemented");
     }
