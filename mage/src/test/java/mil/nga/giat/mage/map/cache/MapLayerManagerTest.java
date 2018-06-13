@@ -206,8 +206,8 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
 
         overlayManager.onMapDataUpdated(update);
 
-        assertThat(overlayManager.getOverlaysInZOrder().size(), is(2));
-        assertThat(overlayManager.getOverlaysInZOrder(), hasItems(overlay1, overlay2));
+        assertThat(overlayManager.getLayersInZOrder().size(), is(2));
+        assertThat(overlayManager.getLayersInZOrder(), hasItems(overlay1, overlay2));
     }
 
     @Test
@@ -222,13 +222,13 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
 
         MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
 
-        assertThat(overlayManager.getOverlaysInZOrder().size(), is(2));
-        assertThat(overlayManager.getOverlaysInZOrder(), hasItems(overlay1, overlay2));
+        assertThat(overlayManager.getLayersInZOrder().size(), is(2));
+        assertThat(overlayManager.getLayersInZOrder(), hasItems(overlay1, overlay2));
 
         MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(this, Collections.emptyMap(), Collections.emptyMap(), mapOf(mapDataResource));
         overlayManager.onMapDataUpdated(update);
 
-        assertTrue(overlayManager.getOverlaysInZOrder().isEmpty());
+        assertTrue(overlayManager.getLayersInZOrder().isEmpty());
     }
 
     @Test
@@ -243,7 +243,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
 
         MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
 
-        List<MapLayerDescriptor> overlays = overlayManager.getOverlaysInZOrder();
+        List<MapLayerDescriptor> overlays = overlayManager.getLayersInZOrder();
         assertThat(overlays.size(), is(2));
         assertThat(overlays, hasItems(overlay1, overlay2));
 
@@ -258,7 +258,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
 
         overlayManager.onMapDataUpdated(update);
 
-        overlays = overlayManager.getOverlaysInZOrder();
+        overlays = overlayManager.getLayersInZOrder();
         assertThat(overlays.size(), is(1));
         assertThat(overlays, hasItem(overlay2));
     }
@@ -274,8 +274,8 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
 
         MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
 
-        assertThat(overlayManager.getOverlaysInZOrder().size(), is(1));
-        assertThat(overlayManager.getOverlaysInZOrder(), hasItem(overlay1));
+        assertThat(overlayManager.getLayersInZOrder().size(), is(1));
+        assertThat(overlayManager.getLayersInZOrder(), hasItem(overlay1));
 
 
         MapLayerDescriptor overlay2 = new MapLayerDescriptorTest.TestLayerDescriptor1("test overlay 2", overlay1.getResourceUri(), provider1.getClass());
@@ -285,8 +285,8 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
             this, Collections.emptyMap(), mapOf(cache), Collections.emptyMap());
         overlayManager.onMapDataUpdated(update);
 
-        assertThat(overlayManager.getOverlaysInZOrder().size(), is(2));
-        assertThat(overlayManager.getOverlaysInZOrder(), hasItems(overlay1, overlay2));
+        assertThat(overlayManager.getLayersInZOrder().size(), is(2));
+        assertThat(overlayManager.getLayersInZOrder(), hasItems(overlay1, overlay2));
     }
 
     @Test
@@ -300,8 +300,8 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
 
         MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
 
-        assertThat(overlayManager.getOverlaysInZOrder().size(), is(1));
-        assertThat(overlayManager.getOverlaysInZOrder(), hasItem(overlay1));
+        assertThat(overlayManager.getLayersInZOrder().size(), is(1));
+        assertThat(overlayManager.getLayersInZOrder(), hasItem(overlay1));
 
         MapLayerDescriptor overlay2 = new MapLayerDescriptorTest.TestLayerDescriptor1("overlay 2", overlay1.getResourceUri(), provider1.getClass());
         cache = new MapDataResource(makeUri(), repo1, 0,
@@ -310,8 +310,8 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
             this, Collections.emptyMap(), mapOf(cache), Collections.emptyMap());
         overlayManager.onMapDataUpdated(update);
 
-        assertThat(overlayManager.getOverlaysInZOrder().size(), is(1));
-        assertThat(overlayManager.getOverlaysInZOrder(), hasItems(overlay2));
+        assertThat(overlayManager.getLayersInZOrder().size(), is(1));
+        assertThat(overlayManager.getLayersInZOrder(), hasItems(overlay2));
     }
 
     @Test
@@ -325,8 +325,8 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
 
         MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
 
-        assertThat(overlayManager.getOverlaysInZOrder().size(), is(1));
-        assertThat(overlayManager.getOverlaysInZOrder(), hasItem(overlay1));
+        assertThat(overlayManager.getLayersInZOrder().size(), is(1));
+        assertThat(overlayManager.getLayersInZOrder(), hasItem(overlay1));
 
         MapLayerDescriptor overlay1Updated = new MapLayerDescriptorTest.TestLayerDescriptor1(overlay1.getLayerName(), overlay1.getResourceUri(), overlay1.getDataType());
         cache = new MapDataResource(cache.getUri(), repo1, 0,
@@ -335,10 +335,10 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
             this, Collections.emptyMap(), mapOf(cache), Collections.emptyMap());
         overlayManager.onMapDataUpdated(update);
 
-        assertThat(overlayManager.getOverlaysInZOrder().size(), is(1));
-        assertThat(overlayManager.getOverlaysInZOrder(), hasItem(overlay1));
-        assertThat(overlayManager.getOverlaysInZOrder(), not(hasItem(sameInstance(overlay1))));
-        assertThat(overlayManager.getOverlaysInZOrder(), hasItem(sameInstance(overlay1Updated)));
+        assertThat(overlayManager.getLayersInZOrder().size(), is(1));
+        assertThat(overlayManager.getLayersInZOrder(), hasItem(overlay1));
+        assertThat(overlayManager.getLayersInZOrder(), not(hasItem(sameInstance(overlay1))));
+        assertThat(overlayManager.getLayersInZOrder(), hasItem(sameInstance(overlay1Updated)));
     }
 
     @Test
@@ -353,16 +353,16 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
 
         overlayManager.onMapDataUpdated(update);
 
-        assertThat(overlayManager.getOverlaysInZOrder().size(), is(1));
-        assertThat(overlayManager.getOverlaysInZOrder(), hasItems(overlay1));
-        assertFalse(overlayManager.isOverlayVisible(overlay1));
+        assertThat(overlayManager.getLayersInZOrder().size(), is(1));
+        assertThat(overlayManager.getLayersInZOrder(), hasItems(overlay1));
+        assertFalse(overlayManager.isLayerVisible(overlay1));
         verify(provider1, never()).createMapLayerFromDescriptor(any(MapLayerDescriptor.class), Mockito.same(overlayManager));
 
         when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(new TestMapLayer(overlayManager));
 
-        overlayManager.showOverlay(overlay1);
+        overlayManager.showLayer(overlay1);
 
-        assertTrue(overlayManager.isOverlayVisible(overlay1));
+        assertTrue(overlayManager.isLayerVisible(overlay1));
         verify(provider1).createMapLayerFromDescriptor(overlay1, overlayManager);
     }
 
@@ -378,14 +378,14 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
 
         MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
 
-        assertThat(overlayManager.getOverlaysInZOrder().size(), is(1));
-        assertThat(overlayManager.getOverlaysInZOrder(), hasItem(overlay1));
-        assertFalse(overlayManager.isOverlayVisible(overlay1));
+        assertThat(overlayManager.getLayersInZOrder().size(), is(1));
+        assertThat(overlayManager.getLayersInZOrder(), hasItem(overlay1));
+        assertFalse(overlayManager.isLayerVisible(overlay1));
 
         MapLayerManager.MapLayer onMap =  mockOverlayOnMap(overlayManager);
         when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(onMap);
 
-        overlayManager.showOverlay(overlay1);
+        overlayManager.showLayer(overlay1);
 
         verify(provider1).createMapLayerFromDescriptor(overlay1, overlayManager);
         verify(onMap).addToMap();
@@ -418,14 +418,14 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
 
         MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
 
-        assertThat(overlayManager.getOverlaysInZOrder().size(), is(1));
-        assertThat(overlayManager.getOverlaysInZOrder(), hasItem(overlay1));
-        assertFalse(overlayManager.isOverlayVisible(overlay1));
+        assertThat(overlayManager.getLayersInZOrder().size(), is(1));
+        assertThat(overlayManager.getLayersInZOrder(), hasItem(overlay1));
+        assertFalse(overlayManager.isLayerVisible(overlay1));
 
         MapLayerManager.MapLayer onMap =  mockOverlayOnMap(overlayManager);
         when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(onMap);
 
-        overlayManager.showOverlay(overlay1);
+        overlayManager.showLayer(overlay1);
 
         verify(provider1).createMapLayerFromDescriptor(overlay1, overlayManager);
         verify(onMap).addToMap();
@@ -458,14 +458,14 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
 
         MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
 
-        assertThat(overlayManager.getOverlaysInZOrder().size(), is(1));
-        assertThat(overlayManager.getOverlaysInZOrder(), hasItem(overlay1));
-        assertFalse(overlayManager.isOverlayVisible(overlay1));
+        assertThat(overlayManager.getLayersInZOrder().size(), is(1));
+        assertThat(overlayManager.getLayersInZOrder(), hasItem(overlay1));
+        assertFalse(overlayManager.isLayerVisible(overlay1));
 
         MapLayerManager.MapLayer onMap =  mockOverlayOnMap(overlayManager);
         when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(onMap);
 
-        overlayManager.showOverlay(overlay1);
+        overlayManager.showLayer(overlay1);
 
         verify(provider1).createMapLayerFromDescriptor(overlay1, overlayManager);
         verify(onMap).addToMap();
@@ -495,13 +495,13 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
 
         MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
 
-        assertThat(overlayManager.getOverlaysInZOrder().size(), is(2));
-        assertThat(overlayManager.getOverlaysInZOrder(), hasItems(overlay1, overlay2));
+        assertThat(overlayManager.getLayersInZOrder().size(), is(2));
+        assertThat(overlayManager.getLayersInZOrder(), hasItems(overlay1, overlay2));
 
         MapLayerManager.MapLayer onMap =  mockOverlayOnMap(overlayManager);
         when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(onMap);
 
-        overlayManager.showOverlay(overlay1);
+        overlayManager.showLayer(overlay1);
 
         verify(provider1).createMapLayerFromDescriptor(overlay1, overlayManager);
         verify(onMap).addToMap();
@@ -526,13 +526,13 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
 
         MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
 
-        assertThat(overlayManager.getOverlaysInZOrder().size(), is(2));
-        assertThat(overlayManager.getOverlaysInZOrder(), hasItems(overlay1, overlay2));
+        assertThat(overlayManager.getLayersInZOrder().size(), is(2));
+        assertThat(overlayManager.getLayersInZOrder(), hasItems(overlay1, overlay2));
 
         MapLayerManager.MapLayer onMap =  mockOverlayOnMap(overlayManager);
         when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(onMap);
 
-        overlayManager.showOverlay(overlay1);
+        overlayManager.showLayer(overlay1);
 
         verify(provider1).createMapLayerFromDescriptor(overlay1, overlayManager);
         verify(onMap).addToMap();
@@ -555,14 +555,14 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
 
         MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
 
-        assertFalse(overlayManager.isOverlayVisible(overlay1));
+        assertFalse(overlayManager.isLayerVisible(overlay1));
 
         TestMapLayer onMap =  new TestMapLayer(overlayManager);
         when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(onMap);
 
-        overlayManager.showOverlay(overlay1);
+        overlayManager.showLayer(overlay1);
 
-        assertTrue(overlayManager.isOverlayVisible(overlay1));
+        assertTrue(overlayManager.isLayerVisible(overlay1));
         assertTrue(onMap.isOnMap());
         assertTrue(onMap.isVisible());
     }
@@ -582,21 +582,21 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
 
         MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
 
-        assertThat(overlayManager.getOverlaysInZOrder().size(), is(2));
-        assertThat(overlayManager.getOverlaysInZOrder(), hasItems(overlay1, overlay2));
+        assertThat(overlayManager.getLayersInZOrder().size(), is(2));
+        assertThat(overlayManager.getLayersInZOrder(), hasItems(overlay1, overlay2));
 
         MapLayerManager.MapLayer onMap1 = mockOverlayOnMap(overlayManager);
         MapLayerManager.MapLayer onMap2 = mockOverlayOnMap(overlayManager);
         when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(onMap1);
         when(provider1.createMapLayerFromDescriptor(overlay2, overlayManager)).thenReturn(onMap2);
 
-        overlayManager.showOverlay(overlay1);
+        overlayManager.showLayer(overlay1);
 
         verify(provider1).createMapLayerFromDescriptor(overlay1, overlayManager);
         verify(provider1, never()).createMapLayerFromDescriptor(overlay2, overlayManager);
         verify(onMap1).addToMap();
 
-        overlayManager.showOverlay(overlay2);
+        overlayManager.showLayer(overlay2);
 
         verify(provider1).createMapLayerFromDescriptor(overlay1, overlayManager);
         verify(provider1).createMapLayerFromDescriptor(overlay2, overlayManager);
@@ -605,7 +605,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
 
         when(onMap2.isVisible()).thenReturn(true);
 
-        overlayManager.hideOverlay(overlay2);
+        overlayManager.hideLayer(overlay2);
 
         verify(onMap2).hide();
         verify(onMap1, never()).hide();
@@ -673,9 +673,9 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
         when(provider1.createMapLayerFromDescriptor(overlay2, overlayManager)).thenReturn(onMap2);
         when(provider2.createMapLayerFromDescriptor(overlay3, overlayManager)).thenReturn(onMap3);
 
-        overlayManager.showOverlay(overlay1);
-        overlayManager.showOverlay(overlay2);
-        overlayManager.showOverlay(overlay3);
+        overlayManager.showLayer(overlay1);
+        overlayManager.showLayer(overlay2);
+        overlayManager.showLayer(overlay3);
 
         when(onMap1.isOnMap()).thenReturn(true);
         when(onMap2.isOnMap()).thenReturn(true);
@@ -727,9 +727,9 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
         public void returnsModifiableCopyOfOverlayZOrder() {
 
             MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
-            List<MapLayerDescriptor> orderModified = overlayManager.getOverlaysInZOrder();
+            List<MapLayerDescriptor> orderModified = overlayManager.getLayersInZOrder();
             Collections.reverse(orderModified);
-            List<MapLayerDescriptor> orderUnmodified = overlayManager.getOverlaysInZOrder();
+            List<MapLayerDescriptor> orderUnmodified = overlayManager.getLayersInZOrder();
 
             assertThat(orderUnmodified, not(sameInstance(orderModified)));
             assertThat(orderUnmodified, not(contains(orderModified.toArray())));
@@ -740,7 +740,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
         public void initializesOverlaysOnMapWithProperZOrder() {
 
             MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
-            List<MapLayerDescriptor> order = overlayManager.getOverlaysInZOrder();
+            List<MapLayerDescriptor> order = overlayManager.getLayersInZOrder();
             int c1o1z = order.indexOf(c1o1);
             int c2o1z = order.indexOf(c2o1);
 
@@ -749,8 +749,8 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
             when(provider1.createMapLayerFromDescriptor(c1o1, overlayManager)).thenReturn(c1o1OnMap);
             when(provider2.createMapLayerFromDescriptor(c2o1, overlayManager)).thenReturn(c2o1OnMap);
 
-            overlayManager.showOverlay(c1o1);
-            overlayManager.showOverlay(c2o1);
+            overlayManager.showLayer(c1o1);
+            overlayManager.showLayer(c2o1);
 
             assertThat(c1o1OnMap.getZIndex(), is(c1o1z));
             assertThat(c2o1OnMap.getZIndex(), is(c2o1z));
@@ -760,12 +760,12 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
         public void setsComprehensiveZOrderFromList() {
 
             MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
-            List<MapLayerDescriptor> order = overlayManager.getOverlaysInZOrder();
+            List<MapLayerDescriptor> order = overlayManager.getLayersInZOrder();
             Collections.reverse(order);
 
             assertTrue(overlayManager.setZOrder(order));
 
-            List<MapLayerDescriptor> orderMod = overlayManager.getOverlaysInZOrder();
+            List<MapLayerDescriptor> orderMod = overlayManager.getLayersInZOrder();
 
             assertThat(orderMod, equalTo(order));
         }
@@ -774,7 +774,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
         public void setsZOrderOfOverlaysOnMapFromComprehensiveUpdate() {
 
             MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
-            List<MapLayerDescriptor> order = overlayManager.getOverlaysInZOrder();
+            List<MapLayerDescriptor> order = overlayManager.getLayersInZOrder();
             int c1o1z = order.indexOf(c1o1);
             int c2o1z = order.indexOf(c2o1);
             int c2o2z = order.indexOf(c2o2);
@@ -786,9 +786,9 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
             when(provider2.createMapLayerFromDescriptor(c2o1, overlayManager)).thenReturn(c2o1OnMap);
             when(provider2.createMapLayerFromDescriptor(c2o2, overlayManager)).thenReturn(c2o2OnMap);
 
-            overlayManager.showOverlay(c1o1);
-            overlayManager.showOverlay(c2o1);
-            overlayManager.showOverlay(c2o2);
+            overlayManager.showLayer(c1o1);
+            overlayManager.showLayer(c2o1);
+            overlayManager.showLayer(c2o2);
 
             assertThat(c1o1OnMap.getZIndex(), is(c1o1z));
             assertThat(c2o1OnMap.getZIndex(), is(c2o1z));
@@ -803,7 +803,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
 
             assertTrue(overlayManager.setZOrder(order));
 
-            List<MapLayerDescriptor> orderMod = overlayManager.getOverlaysInZOrder();
+            List<MapLayerDescriptor> orderMod = overlayManager.getLayersInZOrder();
 
             assertThat(orderMod, equalTo(order));
             assertThat(orderMod.indexOf(c1o1), is(c1o1zMod));
@@ -818,7 +818,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
         public void setsZOrderOfHiddenOverlayOnMapFromComprehensiveUpdate() {
 
             MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
-            List<MapLayerDescriptor> order = overlayManager.getOverlaysInZOrder();
+            List<MapLayerDescriptor> order = overlayManager.getLayersInZOrder();
             int c1o1z = order.indexOf(c1o1);
             int c2o1z = order.indexOf(c2o1);
             TestMapLayer c1o1OnMap = new TestMapLayer(overlayManager);
@@ -827,18 +827,18 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
             when(provider1.createMapLayerFromDescriptor(c1o1, overlayManager)).thenReturn(c1o1OnMap);
             when(provider2.createMapLayerFromDescriptor(c2o1, overlayManager)).thenReturn(c2o1OnMap);
 
-            overlayManager.showOverlay(c1o1);
-            overlayManager.showOverlay(c2o1);
+            overlayManager.showLayer(c1o1);
+            overlayManager.showLayer(c2o1);
 
             assertThat(c1o1OnMap.getZIndex(), is(c1o1z));
             assertThat(c2o1OnMap.getZIndex(), is(c2o1z));
 
-            overlayManager.hideOverlay(c1o1);
+            overlayManager.hideLayer(c1o1);
             Collections.swap(order, c1o1z, c2o1z);
 
             assertTrue(overlayManager.setZOrder(order));
 
-            List<MapLayerDescriptor> orderMod = overlayManager.getOverlaysInZOrder();
+            List<MapLayerDescriptor> orderMod = overlayManager.getLayersInZOrder();
 
             assertThat(orderMod, equalTo(order));
             assertThat(orderMod.indexOf(c1o1), is(c2o1z));
@@ -853,14 +853,14 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
         public void doesNotSetZOrderIfNewOrderHasDifferingElements() {
 
             MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
-            List<MapLayerDescriptor> invalidOrder = overlayManager.getOverlaysInZOrder();
+            List<MapLayerDescriptor> invalidOrder = overlayManager.getLayersInZOrder();
             TestMapLayer firstOnMap = new TestMapLayer(overlayManager);
             MapLayerDescriptor first = invalidOrder.get(0);
 
             when(provider1.createMapLayerFromDescriptor(first, overlayManager)).thenReturn(firstOnMap);
             when(provider2.createMapLayerFromDescriptor(first, overlayManager)).thenReturn(firstOnMap);
 
-            overlayManager.showOverlay(first);
+            overlayManager.showLayer(first);
 
             assertThat(firstOnMap.getZIndex(), is(0));
 
@@ -868,7 +868,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
 
             assertFalse(overlayManager.setZOrder(invalidOrder));
 
-            List<MapLayerDescriptor> unchangedOrder = overlayManager.getOverlaysInZOrder();
+            List<MapLayerDescriptor> unchangedOrder = overlayManager.getLayersInZOrder();
 
             assertThat(unchangedOrder, not(equalTo(invalidOrder)));
             assertThat(unchangedOrder, not(hasItem(invalidOrder.get(1))));
@@ -879,7 +879,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
         public void doesNotSetZOrderIfNewOrderHasDifferentSize() {
 
             MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
-            List<MapLayerDescriptor> invalidOrder = overlayManager.getOverlaysInZOrder();
+            List<MapLayerDescriptor> invalidOrder = overlayManager.getLayersInZOrder();
             TestMapLayer lastOnMap = new TestMapLayer(overlayManager);
             int lastZIndex = invalidOrder.size() - 1;
             MapLayerDescriptor last = invalidOrder.get(lastZIndex);
@@ -887,7 +887,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
             when(provider1.createMapLayerFromDescriptor(last, overlayManager)).thenReturn(lastOnMap);
             when(provider2.createMapLayerFromDescriptor(last, overlayManager)).thenReturn(lastOnMap);
 
-            overlayManager.showOverlay(last);
+            overlayManager.showLayer(last);
 
             assertThat(lastOnMap.getZIndex(), is(lastZIndex));
 
@@ -895,7 +895,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
 
             assertFalse(overlayManager.setZOrder(invalidOrder));
 
-            List<MapLayerDescriptor> unchangedOrder = overlayManager.getOverlaysInZOrder();
+            List<MapLayerDescriptor> unchangedOrder = overlayManager.getLayersInZOrder();
 
             assertThat(unchangedOrder, not(equalTo(invalidOrder)));
             assertThat(unchangedOrder.size(), is(invalidOrder.size() + 1));
@@ -915,7 +915,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
             public void addAllOverlaysToMap() {
                 overlayManager = new MapLayerManager(mapDataManager, providers, null);
                 overlaysOnMap = new HashMap<>();
-                List<MapLayerDescriptor> orderByName = overlayManager.getOverlaysInZOrder();
+                List<MapLayerDescriptor> orderByName = overlayManager.getLayersInZOrder();
                 Collections.sort(orderByName, new Comparator<MapLayerDescriptor>() {
                     @Override
                     public int compare(MapLayerDescriptor o1, MapLayerDescriptor o2) {
@@ -934,19 +934,19 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
                     else if (overlay.getDataType() == provider2.getClass()) {
                         when(provider2.createMapLayerFromDescriptor(overlay, overlayManager)).thenReturn(onMap);
                     }
-                    overlayManager.showOverlay(overlay);
+                    overlayManager.showLayer(overlay);
                 }
             }
 
             private void assertZIndexMove(int from, int to) {
-                List<MapLayerDescriptor> order = overlayManager.getOverlaysInZOrder();
+                List<MapLayerDescriptor> order = overlayManager.getLayersInZOrder();
                 List<MapLayerDescriptor> expectedOrder = new ArrayList<>(order);
                 MapLayerDescriptor target = expectedOrder.remove(from);
                 expectedOrder.add(to, target);
 
                 assertTrue(overlayManager.moveZIndex(from, to));
 
-                order = overlayManager.getOverlaysInZOrder();
+                order = overlayManager.getLayersInZOrder();
                 assertThat(String.format("%d to %d", from, to), order, equalTo(expectedOrder));
                 for (int zIndex = 0; zIndex < expectedOrder.size(); zIndex++) {
                     MapLayerDescriptor overlay = expectedOrder.get(zIndex);

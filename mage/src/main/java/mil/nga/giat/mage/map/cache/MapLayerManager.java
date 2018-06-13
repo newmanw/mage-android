@@ -30,7 +30,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
     public interface MapLayerListener {
 
         /**
-         * Notify the listener that the {@link MapDataManager} has updated the {@link #getOverlaysInZOrder() cache list}.
+         * Notify the listener that the {@link MapDataManager} has updated the {@link #getLayersInZOrder() cache list}.
          * {@link MapLayerManager} will not invoke this method as result of its own on-map interactions,
          * such as adding, removing, showing, and hiding overlays.
          */
@@ -100,7 +100,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
      * objects can have fractional zoom levels (6 + 1 * 0.167), (6 + 2 * 0.167), etc.,
      * without intruding on the next integral zoom level, 7, which {@link MapLayerManager}
      * will assign to the next {@link MapLayerDescriptor}/{@link MapLayer} in the
-     * {@link #getOverlaysInZOrder() z-order}.
+     * {@link #getLayersInZOrder() z-order}.
      * @param count
      * @return
      */
@@ -156,11 +156,11 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
         }
     }
 
-    public void addOverlayOnMapListener(MapLayerListener x) {
+    public void addListener(MapLayerListener x) {
         listeners.add(x);
     }
 
-    public void removeOverlayOnMapListener(MapLayerListener x) {
+    public void removeListener(MapLayerListener x) {
         listeners.remove(x);
     }
 
@@ -172,15 +172,15 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
      * Return a modifiable copy of the overlay list in z-order.  The last element
      * (index {@code size() - 1}) in the list is the top-most element.
      */
-    public List<MapLayerDescriptor> getOverlaysInZOrder() {
+    public List<MapLayerDescriptor> getLayersInZOrder() {
         return new ArrayList<>(overlaysInZOrder);
     }
 
-    public void showOverlay(MapLayerDescriptor layerDesc) {
+    public void showLayer(MapLayerDescriptor layerDesc) {
         addOverlayToMap(layerDesc);
     }
 
-    public void hideOverlay(MapLayerDescriptor layerDesc) {
+    public void hideLayer(MapLayerDescriptor layerDesc) {
         MapLayer onMap = overlaysOnMap.get(layerDesc);
         if (onMap == null || !onMap.isVisible()) {
             return;
@@ -188,7 +188,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
         onMap.hide();
     }
 
-    public boolean isOverlayVisible(MapLayerDescriptor layerDesc) {
+    public boolean isLayerVisible(MapLayerDescriptor layerDesc) {
         MapLayer onMap = overlaysOnMap.get(layerDesc);
         return onMap != null && onMap.isVisible();
     }
@@ -234,7 +234,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
     }
 
     public boolean moveZIndex(int fromPosition, int toPosition) {
-        List<MapLayerDescriptor> order = getOverlaysInZOrder();
+        List<MapLayerDescriptor> order = getLayersInZOrder();
         MapLayerDescriptor target = order.remove(fromPosition);
         order.add(toPosition, target);
         return setZOrder(order);

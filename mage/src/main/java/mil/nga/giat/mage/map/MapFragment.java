@@ -1121,7 +1121,7 @@ public class MapFragment extends Fragment implements
 		}
 		MapDataResource explicitlyRequestedCache = update.getAdded().values().iterator().next();
 		for (MapLayerDescriptor layerDesc : explicitlyRequestedCache.getLayers().values()) {
-			mapOverlayManager.showOverlay(layerDesc);
+			mapOverlayManager.showLayer(layerDesc);
 		}
 		LatLngBounds cacheBounds = explicitlyRequestedCache.getBounds();
 		if (cacheBounds != null) {

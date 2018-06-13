@@ -296,7 +296,7 @@ public class MapDataFragment extends Fragment implements MapLayerManager.MapLaye
             }
             name.setText(x.getLayerName());
             detail.setText(x.getLayerTitle());
-            dataVisible.setChecked(overlayManager.isOverlayVisible(x));
+            dataVisible.setChecked(overlayManager.isLayerVisible(x));
         }
 
         @Override
@@ -306,10 +306,10 @@ public class MapDataFragment extends Fragment implements MapLayerManager.MapLaye
             }
             else if (mapData instanceof MapLayerDescriptor) {
                 if (isChecked){
-                    overlayManager.showOverlay((MapLayerDescriptor) mapData);
+                    overlayManager.showLayer((MapLayerDescriptor) mapData);
                 }
                 else {
-                    overlayManager.hideOverlay((MapLayerDescriptor) mapData);
+                    overlayManager.hideLayer((MapLayerDescriptor) mapData);
                 }
             }
         }
@@ -372,7 +372,7 @@ public class MapDataFragment extends Fragment implements MapLayerManager.MapLaye
         mapControlList.setDragListCallback(this);
         mapControlList.setSnapDragItemToTouch(false);
         // TODO: add loading status getter to MapLayerManager
-        overlayManager.addOverlayOnMapListener(this);
+        overlayManager.addListener(this);
         syncDataList();
         return root;
     }
@@ -380,7 +380,7 @@ public class MapDataFragment extends Fragment implements MapLayerManager.MapLaye
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        overlayManager.removeOverlayOnMapListener(this);
+        overlayManager.removeListener(this);
         mapControlList.setDragListListener(null);
         mapControlList = null;
     }
@@ -434,7 +434,7 @@ public class MapDataFragment extends Fragment implements MapLayerManager.MapLaye
 
     private void syncDataList() {
         MapDataItemAdapter adapter = (MapDataItemAdapter) mapControlList.getAdapter();
-        List<MapLayerDescriptor> overlays = overlayManager.getOverlaysInZOrder();
+        List<MapLayerDescriptor> overlays = overlayManager.getLayersInZOrder();
         Collections.reverse(overlays);
         List<Object> mapDataItems = new ArrayList<Object>(Arrays.asList(StaticControl.values()));
         mapDataItems.addAll(overlays);
