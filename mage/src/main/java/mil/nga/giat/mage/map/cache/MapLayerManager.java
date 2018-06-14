@@ -1,6 +1,5 @@
 package mil.nga.giat.mage.map.cache;
 
-import android.annotation.SuppressLint;
 import android.os.AsyncTask;
 import android.support.annotation.MainThread;
 import android.support.annotation.NonNull;
@@ -15,10 +14,10 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
-import java.util.concurrent.CompletableFuture;
+
+import mil.nga.giat.mage.map.MapDisplayObject;
 
 /**
  * A {@code MapLayerManager} binds {@link MapLayerDescriptor layer data} from various
@@ -26,6 +25,49 @@ import java.util.concurrent.CompletableFuture;
  */
 @MainThread
 public class MapLayerManager implements MapDataManager.MapDataListener {
+
+
+    /**
+     * Load the data for the given layer and create the objects to display the layer data on a map.
+     * Using {@link #publishProgress(Object[])}, subclasses can add {@link MapDisplayObject visual elements}
+     * to the map as they are created, which should provide some more immediate visual results for the user
+     * and prevent blocking the main thread when there are many objects to display after the layer construction
+     * is complete.
+     *
+     * @param <T> the type of layer descriptor the subclass uses
+     * @param <L> the type of layer the subclass produces
+     */
+    public static abstract class LoadLayerMapObjects<T extends MapLayerDescriptor, L extends MapLayer> extends AsyncTask<Void, MapDisplayObject, L> implements MapDisplayObject.MapOwner {
+
+        protected final T layerDescriptor;
+        protected final MapLayerManager mapLayerManager;
+
+        protected LoadLayerMapObjects(T layerDescriptor, MapLayerManager mapLayerManager) {
+            this.layerDescriptor = layerDescriptor;
+            this.mapLayerManager = mapLayerManager;
+        }
+
+        protected abstract MapLayer prepareLayer(L layer);
+
+        @NonNull
+        @Override
+        public final GoogleMap getMap() {
+            return mapLayerManager.getMap();
+        }
+
+        @Override
+        protected final void onProgressUpdate(MapDisplayObject... values) {
+            for (MapDisplayObject o : values) {
+                o.createFor(this);
+            }
+        }
+
+        @Override
+        protected final void onPostExecute(L layer) {
+            MapLayer prepared = prepareLayer(layer);
+            mapLayerManager.onLayerComplete(this, prepared);
+        }
+    }
 
     public interface MapLayerListener {
 
@@ -50,13 +92,6 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
     public abstract class MapLayer {
 
         /**
-         * Add this overlay's objects to the map, e.g. {@link com.google.android.gms.maps.model.TileOverlay}s,
-         * {@link com.google.android.gms.maps.model.Marker}s, {@link com.google.android.gms.maps.model.Polygon}s, etc.
-         *
-         */
-        abstract protected void addToMap();
-
-        /**
          * Remove this overlay's objects visible and hidden objects from the map.
          */
         abstract protected void removeFromMap();
@@ -69,13 +104,6 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
          */
         abstract protected void zoomMapToBoundingBox();
 
-        /**
-         * Return true if this overlay's {@link #addToMap() map objects} have been
-         * created and added to the map, regardless of visibility.
-         *
-         * @return
-         */
-        abstract protected boolean isOnMap();
         abstract protected boolean isVisible();
         // TODO: this is awkward passing the map view and returning a string; probably can do better
         abstract protected String onMapClick(LatLng latLng, MapView mapView);
@@ -85,6 +113,10 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
          * geometry collections and prepare for garbage collection.
          */
         abstract protected void dispose();
+
+        protected final GoogleMap getMap() {
+            return MapLayerManager.this.getMap();
+        }
     }
 
     /**
@@ -285,66 +317,35 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
     }
 
     private void addOverlayToMapAtPosition(int position) {
-        MapLayerDescriptor overlay = overlaysInZOrder.get(position);
-        MapLayer onMap = overlaysOnMap.remove(overlay);
-        if (onMap == null) {
+        MapLayerDescriptor layerDesc = overlaysInZOrder.get(position);
+        MapLayer layer = overlaysOnMap.get(layerDesc);
+        if (layer == null) {
             // TODO: create a PendingLayer MapLayer implementation with a reference to the CreateLayer task
-            MapDataResource resource = mapDataManager.getResources().get(overlay.getResourceUri());
+            MapDataResource resource = mapDataManager.getResources().get(layerDesc.getResourceUri());
             Class<? extends MapDataProvider> resourceType = resource.getResolved().getType();
             MapDataProvider provider = providers.get(resourceType);
-            new CreateLayerTask(overlay, provider, position).execute();
+            LoadLayerMapObjects addLayer = (LoadLayerMapObjects) provider.createMapLayerFromDescriptor(layerDesc, this).execute();
+            overlaysOnMap.put(layerDesc, new PendingLayer(addLayer));
         }
         else {
-            addAndShowLayer(overlay, onMap);
+            layer.show();
         }
     }
 
-    private void addAndShowLayer(MapLayerDescriptor desc, MapLayer layer) {
-        overlaysOnMap.put(desc, layer);
-        if (!layer.isOnMap()) {
-            layer.addToMap();
-        }
-        layer.show();
-    }
-
-    @SuppressLint("StaticFieldLeak")
-    private class CreateLayerTask extends AsyncTask<Void, Void, MapLayer> {
-
-        private final MapLayerDescriptor layerDesc;
-        private final MapDataProvider provider;
-        private final int zIndex;
-
-        private CreateLayerTask(MapLayerDescriptor layerDesc, MapDataProvider provider, int zIndex) {
-            this.layerDesc = layerDesc;
-            this.provider = provider;
-            this.zIndex = zIndex;
-        }
-
-        @Override
-        protected MapLayer doInBackground(Void... nothing) {
-            MapLayer layer = provider.createMapLayerFromDescriptor(layerDesc, MapLayerManager.this);
-            layer.setZIndex(zIndex);
-            return layer;
-        }
-
-        @Override
-        protected void onPostExecute(MapLayer mapLayer) {
-            addAndShowLayer(layerDesc, mapLayer);
+    private void onLayerComplete(LoadLayerMapObjects addLayer, MapLayer layer) {
+        PendingLayer pending = (PendingLayer) overlaysOnMap.put(addLayer.layerDescriptor, layer);
+        if (pending.addLayer != addLayer) {
+            throw new IllegalStateException("layer task for descriptor " + addLayer.layerDescriptor + " did not match expected pending layer task");
         }
     }
 
     // TODO: finish and use this
     private class PendingLayer extends MapLayer {
 
-        private final CreateLayerTask creating;
+        private final LoadLayerMapObjects addLayer;
 
-        private PendingLayer(MapLayerDescriptor desc, MapDataProvider provider, int zIndex) {
-            this.creating = new CreateLayerTask(desc, provider, zIndex);
-        }
-
-        @Override
-        protected void addToMap() {
-
+        private PendingLayer(LoadLayerMapObjects addLayer) {
+            this.addLayer = addLayer;
         }
 
         @Override
@@ -370,11 +371,6 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
         @Override
         protected void zoomMapToBoundingBox() {
 
-        }
-
-        @Override
-        protected boolean isOnMap() {
-            return false;
         }
 
         @Override

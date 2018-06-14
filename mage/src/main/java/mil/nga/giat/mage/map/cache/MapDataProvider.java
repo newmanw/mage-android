@@ -1,5 +1,7 @@
 package mil.nga.giat.mage.map.cache;
 
+import android.support.annotation.NonNull;
+import android.support.annotation.UiThread;
 import android.support.annotation.WorkerThread;
 
 /**
@@ -13,7 +15,6 @@ import android.support.annotation.WorkerThread;
  * be to use https://github.com/retrostreams/android-retrofuture, or maybe rxjava/rxandroid or
  * some such thing.
  */
-@WorkerThread
 public interface MapDataProvider {
 
     /**
@@ -24,6 +25,7 @@ public interface MapDataProvider {
      *
      * TODO: add extra known information about the uri content, e.g., from a HEAD request
      */
+    @WorkerThread
     boolean canHandleResource(MapDataResource resource);
 
     /**
@@ -36,7 +38,10 @@ public interface MapDataProvider {
      *
      * TODO: an argument for the owning repository may be necessary at some point
      */
+    @NonNull
+    @WorkerThread
     MapDataResource resolveResource(MapDataResource resource) throws MapDataResolveException;
 
-    MapLayerManager.MapLayer createMapLayerFromDescriptor(MapLayerDescriptor layerDescriptor, MapLayerManager map);
+    @UiThread
+    MapLayerManager.LoadLayerMapObjects createMapLayerFromDescriptor(MapLayerDescriptor layerDescriptor, MapLayerManager map);
 }
