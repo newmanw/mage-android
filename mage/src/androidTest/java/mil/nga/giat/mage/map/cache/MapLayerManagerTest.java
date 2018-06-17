@@ -588,7 +588,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
     }
 
     @Test
-    public void showsOverlayTheFirstTimeOverlayIsAdded() {
+    public void showsOverlayTheFirstTimeOverlayIsAdded() throws InterruptedException {
 
         MapLayerDescriptor overlay1 = new MapLayerDescriptorTest.TestLayerDescriptor1("overlay 1", makeUri(), provider1.getClass());
         MapDataResource mapData = new MapDataResource(overlay1.getResourceUri(), repo1, 0,
@@ -604,7 +604,9 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
         when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager))
             .thenReturn(new TestLoadLayer(overlay1, overlayManager).withResultLayer(layer));
 
-        overlayManager.showLayer(overlay1);
+        waitForMainThreadToRun(() -> overlayManager.showLayer(overlay1));
+
+        onMainThread.assertThatWithin(oneSecond(), layer::isOnMap, is(true));
 
         assertTrue(overlayManager.isLayerVisible(overlay1));
         assertTrue(layer.isOnMap());
@@ -612,7 +614,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
     }
 
     @Test
-    public void behavesWhenTwoCachesHaveOverlaysWithTheSameName() {
+    public void behavesWhenTwoCachesHaveOverlaysWithTheSameName() throws InterruptedException {
 
         MapLayerDescriptor overlay1 = new MapLayerDescriptorTest.TestLayerDescriptor1("overlay1", makeUri(), provider1.getClass());
         MapDataResource cache1 = new MapDataResource(overlay1.getResourceUri(), repo1, 0,
@@ -640,13 +642,15 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
             verify(provider1, never()).createMapLayerFromDescriptor(overlay2, overlayManager);
         });
 
-        assertTrue(onMap1.isOnMap());
+        onMainThread.assertThatWithin(oneSecond(), onMap1::isOnMap, is(true));
 
         waitForMainThreadToRun(() -> {
             overlayManager.showLayer(overlay2);
             verify(provider1).createMapLayerFromDescriptor(overlay1, overlayManager);
             verify(provider1).createMapLayerFromDescriptor(overlay2, overlayManager);
         });
+
+        onMainThread.assertThatWithin(oneSecond(), onMap2::isOnMap, is(true));
 
         assertTrue(onMap1.isOnMap());
         assertTrue(onMap2.isOnMap());
