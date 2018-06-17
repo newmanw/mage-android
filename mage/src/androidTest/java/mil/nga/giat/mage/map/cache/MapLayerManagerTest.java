@@ -49,8 +49,8 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
 
     static class TestMapLayer extends MapLayerManager.MapLayer {
 
+        boolean onMap = true;
         boolean visible;
-        boolean onMap;
         boolean disposed;
         int zIndex;
 
@@ -59,13 +59,8 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
         }
 
         @Override
-        protected void addToMap() {
-            onMap = true;
-        }
-
-        @Override
         protected void removeFromMap() {
-            onMap = false;
+            onMap = visible = false;
         }
 
         @Override
@@ -93,15 +88,9 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
         }
 
         @Override
-        protected boolean isOnMap() {
-            return onMap;
-        }
-
-        @Override
         protected boolean isVisible() {
             return visible;
         }
-
 
         @Override
         protected String onMapClick(LatLng latLng, MapView mapView) {
@@ -122,19 +111,42 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
             }
             return this;
         }
+    }
 
-        MapLayerManager.MapLayer onMap(boolean x) {
-            if (x) {
-                addToMap();
-            }
-            else {
-                removeFromMap();
-            }
+    private static class TestLoadLayer extends MapLayerManager.LoadLayerMapObjects {
+
+        private MapLayerManager.MapLayer layer;
+        private MapLayerManager.MapLayer preparedLayer;
+
+        protected TestLoadLayer(MapLayerDescriptor layerDescriptor, MapLayerManager mapLayerManager) {
+            super(layerDescriptor, mapLayerManager);
+        }
+
+        private TestLoadLayer withResultLayer(MapLayerManager.MapLayer layer) {
+            this.layer = layer;
             return this;
+        }
+
+        private TestLoadLayer withPreparedLayer(MapLayerManager.MapLayer layer) {
+            preparedLayer = layer;
+            return this;
+        }
+
+        @Override
+        protected MapLayerManager.MapLayer prepareLayer(MapLayerManager.MapLayer layer) {
+            if (preparedLayer == null) {
+                return layer;
+            }
+            return preparedLayer;
+        }
+
+        @Override
+        protected Object doInBackground(Object[] objects) {
+            return layer;
         }
     }
 
-    private static MapLayerManager.MapLayer mockOverlayOnMap(MapLayerManager overlayManager) {
+    private static MapLayerManager.MapLayer mockMapLayer(MapLayerManager overlayManager) {
         return mock(MapLayerManager.MapLayer.class, withSettings().useConstructor(overlayManager));
     }
 
@@ -193,7 +205,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
     @Test
     public void addsOverlaysFromAddedCaches() {
 
-        MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
+        MapLayerManager manager = new MapLayerManager(mapDataManager, providers, null);
         MapLayerDescriptor overlay1 = new MapLayerDescriptorTest.TestLayerDescriptor1("test overlay 1", makeUri(), provider1.getClass());
         MapLayerDescriptor overlay2 = new MapLayerDescriptorTest.TestLayerDescriptor1("test overlay 2", overlay1.getResourceUri(), provider1.getClass());
         MapDataResource mapDataResource = new MapDataResource(makeUri(), repo1, System.currentTimeMillis(),
@@ -201,13 +213,10 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
         Map<URI, MapDataResource> added = mapOf(mapDataResource);
         MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(this, added, Collections.emptyMap(), Collections.emptyMap());
 
-        when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(mockOverlayOnMap(overlayManager));
-        when(provider1.createMapLayerFromDescriptor(overlay2, overlayManager)).thenReturn(mockOverlayOnMap(overlayManager));
+        manager.onMapDataUpdated(update);
 
-        overlayManager.onMapDataUpdated(update);
-
-        assertThat(overlayManager.getLayersInZOrder().size(), is(2));
-        assertThat(overlayManager.getLayersInZOrder(), hasItems(overlay1, overlay2));
+        assertThat(manager.getLayersInZOrder().size(), is(2));
+        assertThat(manager.getLayersInZOrder(), hasItems(overlay1, overlay2));
     }
 
     @Test
@@ -253,8 +262,6 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
         Map<URI, MapDataResource> updated = mapOf(mapDataResource);
         MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(this,
             Collections.emptyMap(), updated, Collections.emptyMap());
-
-        when(provider1.createMapLayerFromDescriptor(overlay2, overlayManager)).thenReturn(mockOverlayOnMap(overlayManager));
 
         overlayManager.onMapDataUpdated(update);
 
@@ -342,7 +349,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
     }
 
     @Test
-    public void createsOverlaysOnMapLazily() {
+    public void createsMapLayersLazily() {
 
         MapLayerDescriptor overlay1 = new MapLayerDescriptorTest.TestLayerDescriptor1("overlay 1", makeUri(), provider1.getClass());
         MapDataResource mapDataResource = new MapDataResource(overlay1.getResourceUri(), repo1, 0,
@@ -358,9 +365,12 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
         assertFalse(overlayManager.isLayerVisible(overlay1));
         verify(provider1, never()).createMapLayerFromDescriptor(any(MapLayerDescriptor.class), Mockito.same(overlayManager));
 
-        when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(new TestMapLayer(overlayManager));
+        when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(
+            new TestLoadLayer(overlay1, overlayManager).withResultLayer(new TestMapLayer(overlayManager)));
 
         overlayManager.showLayer(overlay1);
+
+
 
         assertTrue(overlayManager.isLayerVisible(overlay1));
         verify(provider1).createMapLayerFromDescriptor(overlay1, overlayManager);
@@ -382,7 +392,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
         assertThat(overlayManager.getLayersInZOrder(), hasItem(overlay1));
         assertFalse(overlayManager.isLayerVisible(overlay1));
 
-        MapLayerManager.MapLayer onMap =  mockOverlayOnMap(overlayManager);
+        MapLayerManager.MapLayer onMap =  mockMapLayer(overlayManager);
         when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(onMap);
 
         overlayManager.showLayer(overlay1);
@@ -395,7 +405,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
             new MapDataResource.Resolved(cache.getResolved().getName(), cache.getResolved().getType(), setOf(overlay1)));
         MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(this, Collections.emptyMap(), mapOf(cache), Collections.emptyMap());
 
-        MapLayerManager.MapLayer onMapUpdated = mockOverlayOnMap(overlayManager);
+        MapLayerManager.MapLayer onMapUpdated = mockMapLayer(overlayManager);
         when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(onMapUpdated);
         when(onMap.isOnMap()).thenReturn(true);
         when(onMap.isVisible()).thenReturn(true);
@@ -422,7 +432,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
         assertThat(overlayManager.getLayersInZOrder(), hasItem(overlay1));
         assertFalse(overlayManager.isLayerVisible(overlay1));
 
-        MapLayerManager.MapLayer onMap =  mockOverlayOnMap(overlayManager);
+        MapLayerManager.MapLayer onMap =  mockMapLayer(overlayManager);
         when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(onMap);
 
         overlayManager.showLayer(overlay1);
@@ -435,7 +445,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
             new MapDataResource.Resolved(cache.getResolved().getName(), cache.getResolved().getType(), setOf(overlay1)));
         MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(this, Collections.emptyMap(), mapOf(cache), Collections.emptyMap());
 
-        MapLayerManager.MapLayer onMapUpdated = mockOverlayOnMap(overlayManager);
+        MapLayerManager.MapLayer onMapUpdated = mockMapLayer(overlayManager);
         when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(onMapUpdated);
         when(onMap.isOnMap()).thenReturn(true);
         when(onMap.isVisible()).thenReturn(false);
@@ -462,7 +472,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
         assertThat(overlayManager.getLayersInZOrder(), hasItem(overlay1));
         assertFalse(overlayManager.isLayerVisible(overlay1));
 
-        MapLayerManager.MapLayer onMap =  mockOverlayOnMap(overlayManager);
+        MapLayerManager.MapLayer onMap =  mockMapLayer(overlayManager);
         when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(onMap);
 
         overlayManager.showLayer(overlay1);
@@ -474,7 +484,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
         cache = cache.resolve(new MapDataResource.Resolved(cache.getResolved().getName(), cache.getResolved().getType(), setOf(overlay1, overlay2)));
         MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(this, Collections.emptyMap(), mapOf(cache), Collections.emptyMap());
 
-        MapLayerManager.MapLayer onMapUpdated = mockOverlayOnMap(overlayManager);
+        MapLayerManager.MapLayer onMapUpdated = mockMapLayer(overlayManager);
 
         overlayManager.onMapDataUpdated(update);
 
@@ -498,7 +508,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
         assertThat(overlayManager.getLayersInZOrder().size(), is(2));
         assertThat(overlayManager.getLayersInZOrder(), hasItems(overlay1, overlay2));
 
-        MapLayerManager.MapLayer onMap =  mockOverlayOnMap(overlayManager);
+        MapLayerManager.MapLayer onMap =  mockMapLayer(overlayManager);
         when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(onMap);
 
         overlayManager.showLayer(overlay1);
@@ -529,7 +539,7 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
         assertThat(overlayManager.getLayersInZOrder().size(), is(2));
         assertThat(overlayManager.getLayersInZOrder(), hasItems(overlay1, overlay2));
 
-        MapLayerManager.MapLayer onMap =  mockOverlayOnMap(overlayManager);
+        MapLayerManager.MapLayer onMap =  mockMapLayer(overlayManager);
         when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(onMap);
 
         overlayManager.showLayer(overlay1);
@@ -585,8 +595,8 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
         assertThat(overlayManager.getLayersInZOrder().size(), is(2));
         assertThat(overlayManager.getLayersInZOrder(), hasItems(overlay1, overlay2));
 
-        MapLayerManager.MapLayer onMap1 = mockOverlayOnMap(overlayManager);
-        MapLayerManager.MapLayer onMap2 = mockOverlayOnMap(overlayManager);
+        MapLayerManager.MapLayer onMap1 = mockMapLayer(overlayManager);
+        MapLayerManager.MapLayer onMap2 = mockMapLayer(overlayManager);
         when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(onMap1);
         when(provider1.createMapLayerFromDescriptor(overlay2, overlayManager)).thenReturn(onMap2);
 
@@ -665,9 +675,9 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
 
         MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
 
-        MapLayerManager.MapLayer onMap1 = mockOverlayOnMap(overlayManager);
-        MapLayerManager.MapLayer onMap2 = mockOverlayOnMap(overlayManager);
-        MapLayerManager.MapLayer onMap3 = mockOverlayOnMap(overlayManager);
+        MapLayerManager.MapLayer onMap1 = mockMapLayer(overlayManager);
+        MapLayerManager.MapLayer onMap2 = mockMapLayer(overlayManager);
+        MapLayerManager.MapLayer onMap3 = mockMapLayer(overlayManager);
 
         when(provider1.createMapLayerFromDescriptor(overlay1, overlayManager)).thenReturn(onMap1);
         when(provider1.createMapLayerFromDescriptor(overlay2, overlayManager)).thenReturn(onMap2);
@@ -900,6 +910,21 @@ public class MapLayerManagerTest implements MapDataManager.CreateUpdatePermissio
             assertThat(unchangedOrder, not(equalTo(invalidOrder)));
             assertThat(unchangedOrder.size(), is(invalidOrder.size() + 1));
             assertThat(lastOnMap.getZIndex(), is(lastZIndex));
+        }
+
+        @Test
+        public void setsProperZOrderIfZOrderChangesWhileLayerIsLoading() {
+            fail("unimplemented");
+        }
+
+        @Test
+        public void hidesLayerIfHiddenWhileLayerIsLoading() {
+            fail("unimplemented");
+        }
+
+        @Test
+        public void showsLayerIfShownWhileLayerIsLoading() {
+            fail("unimplemented");
         }
 
         public class MovingSingleOverlayZIndex {
