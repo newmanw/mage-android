@@ -143,7 +143,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
     private final MapDataManager mapDataManager;
     private final GoogleMap map;
     private final Map<Class<? extends MapDataProvider>, MapDataProvider> providers = new HashMap<>();
-    private final Map<MapLayerDescriptor, MapLayer> overlaysOnMap = new HashMap<>();
+    private final Map<MapLayerDescriptor, MapLayer> layersOnMap = new HashMap<>();
     private final List<MapLayerListener> listeners = new ArrayList<>();
     private List<MapLayerDescriptor> overlaysInZOrder = new ArrayList<>();
 
@@ -213,7 +213,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
     }
 
     public void hideLayer(MapLayerDescriptor layerDesc) {
-        MapLayer onMap = overlaysOnMap.get(layerDesc);
+        MapLayer onMap = layersOnMap.get(layerDesc);
         if (onMap == null || !onMap.isVisible()) {
             return;
         }
@@ -221,13 +221,13 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
     }
 
     public boolean isLayerVisible(MapLayerDescriptor layerDesc) {
-        MapLayer onMap = overlaysOnMap.get(layerDesc);
+        MapLayer onMap = layersOnMap.get(layerDesc);
         return onMap != null && onMap.isVisible();
     }
 
     public void onMapClick(LatLng latLng, MapView mapView) {
         for (MapLayerDescriptor overlay : overlaysInZOrder) {
-            MapLayer onMap = overlaysOnMap.get(overlay);
+            MapLayer onMap = layersOnMap.get(overlay);
             if (onMap != null) {
                 onMap.onMapClick(latLng, mapView);
             }
@@ -256,7 +256,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
         overlaysInZOrder = targetOrder;
         int zIndex = 0;
         for (MapLayerDescriptor overlay : overlaysInZOrder) {
-            MapLayer onMap = overlaysOnMap.get(overlay);
+            MapLayer onMap = layersOnMap.get(overlay);
             if (onMap != null) {
                 onMap.setZIndex(zIndex);
             }
@@ -275,7 +275,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
     public void dispose() {
         // TODO: remove and dispose all overlays/notify providers
         mapDataManager.removeUpdateListener(this);
-        Iterator<Map.Entry<MapLayerDescriptor, MapLayer>> entries = overlaysOnMap.entrySet().iterator();
+        Iterator<Map.Entry<MapLayerDescriptor, MapLayer>> entries = layersOnMap.entrySet().iterator();
         while (entries.hasNext()) {
             MapLayer onMap = entries.next().getValue();
             onMap.removeFromMap();
@@ -286,7 +286,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
 
     private boolean removeFromMapReturningVisibility(MapLayerDescriptor overlay) {
         boolean wasVisible = false;
-        MapLayer onMap = overlaysOnMap.remove(overlay);
+        MapLayer onMap = layersOnMap.remove(overlay);
         if (onMap != null) {
             wasVisible = onMap.isVisible();
             onMap.removeFromMap();
@@ -318,14 +318,14 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
 
     private void addOverlayToMapAtPosition(int position) {
         MapLayerDescriptor layerDesc = overlaysInZOrder.get(position);
-        MapLayer layer = overlaysOnMap.get(layerDesc);
+        MapLayer layer = layersOnMap.get(layerDesc);
         if (layer == null) {
             // TODO: create a PendingLayer MapLayer implementation with a reference to the CreateLayer task
             MapDataResource resource = mapDataManager.getResources().get(layerDesc.getResourceUri());
             Class<? extends MapDataProvider> resourceType = resource.getResolved().getType();
             MapDataProvider provider = providers.get(resourceType);
             LoadLayerMapObjects addLayer = (LoadLayerMapObjects) provider.createMapLayerFromDescriptor(layerDesc, this).execute();
-            overlaysOnMap.put(layerDesc, new PendingLayer(addLayer));
+            layersOnMap.put(layerDesc, new PendingLayer(addLayer));
         }
         else {
             layer.show();
@@ -333,7 +333,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
     }
 
     private void onLayerComplete(LoadLayerMapObjects addLayer, MapLayer layer) {
-        PendingLayer pending = (PendingLayer) overlaysOnMap.put(addLayer.layerDescriptor, layer);
+        PendingLayer pending = (PendingLayer) layersOnMap.put(addLayer.layerDescriptor, layer);
         if (pending.addLayer != addLayer) {
             throw new IllegalStateException("layer task for descriptor " + addLayer.layerDescriptor + " did not match expected pending layer task");
         }
