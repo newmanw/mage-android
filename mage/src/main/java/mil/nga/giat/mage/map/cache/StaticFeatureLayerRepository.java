@@ -48,7 +48,7 @@ import mil.nga.giat.mage.sdk.login.LoginTaskFactory;
 
 
 @MainThread
-public class StaticFeatureLayerRepository extends MapDataRepository implements MapDataProvider, IEventEventListener {
+public class StaticFeatureLayerRepository extends MapDataRepository implements IEventEventListener {
 
     public static final String PROP_ICON_URL = "styleiconstyleiconhref";
 
@@ -62,8 +62,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
         boolean isConnected();
     }
 
-    private static final String LOG_NAME = StaticFeatureLayerRepository.class.getName();
-    private static final URI RESOURCE_URI;
+    static final URI RESOURCE_URI;
     static {
         try {
             RESOURCE_URI = new URI("mage", null, "/current_event/layers", null, null);
@@ -72,6 +71,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
             throw new Error("unexpected error initializing resource uri", e);
         }
     }
+    private static final String LOG_NAME = StaticFeatureLayerRepository.class.getName();
     private static final String RESOURCE_NAME = "Event Layers";
 
     @SuppressLint("StaticFieldLeak")
@@ -148,21 +148,6 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
         else {
             beginPendingRefresh();
         }
-    }
-
-    @Override
-    public boolean canHandleResource(MapDataResource resource) {
-        return RESOURCE_URI.equals(resource.getUri());
-    }
-
-    @Override
-    public MapDataResource resolveResource(MapDataResource resource) throws MapDataResolveException {
-        return null;
-    }
-
-    @Override
-    public MapLayerManager.MapLayer createMapLayerFromDescriptor(MapLayerDescriptor layerDescriptor, MapLayerManager map) {
-        return null;
     }
 
     @Override
@@ -632,18 +617,18 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
         protected SyncMapDataFromDatabaseResult doInBackground(Void[] nothing) {
             try {
                 Collection<Layer> layers = layerHelper.readByEvent(event);
-                Set<LayerDescriptor> descriptors = new HashSet<>(layers.size());
+                Set<StaticFeatureLayerProvider.StaticFeatureLayerDescriptor> descriptors = new HashSet<>(layers.size());
                 for (Layer layer : layers) {
-                    descriptors.add(new LayerDescriptor(layer));
+                    descriptors.add(new StaticFeatureLayerProvider.StaticFeatureLayerDescriptor(layer));
                 }
-                MapDataResource.Resolved resolvedLayers = new MapDataResource.Resolved(RESOURCE_NAME, StaticFeatureLayerRepository.class, descriptors);
+                MapDataResource.Resolved resolvedLayers = new MapDataResource.Resolved(RESOURCE_NAME, StaticFeatureLayerProvider.class, descriptors);
                 MapDataResource mapData = new MapDataResource(
                     RESOURCE_URI, StaticFeatureLayerRepository.this, 0, resolvedLayers);
                 return new SyncMapDataFromDatabaseResult(mapData, null);
             }
             catch (LayerException e) {
                 MapDataResource mapData = new MapDataResource(RESOURCE_URI, StaticFeatureLayerRepository.this, 0,
-                    new MapDataResource.Resolved(RESOURCE_NAME, StaticFeatureLayerRepository.class));
+                    new MapDataResource.Resolved(RESOURCE_NAME, StaticFeatureLayerProvider.class));
                 return new SyncMapDataFromDatabaseResult(mapData, e);
             }
         }
@@ -663,22 +648,6 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements M
         private SyncMapDataFromDatabaseResult(MapDataResource mapData, Exception failure) {
             this.mapData = mapData;
             this.failure = failure;
-        }
-    }
-
-    private static class LayerDescriptor extends MapLayerDescriptor {
-
-        private final Layer subject;
-
-        private LayerDescriptor(Layer subject) {
-            super(subject.getRemoteId(), RESOURCE_URI, StaticFeatureLayerRepository.class);
-            this.subject = subject;
-        }
-
-        @NotNull
-        @Override
-        public String getLayerTitle() {
-            return subject.getName();
         }
     }
 }

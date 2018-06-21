@@ -1,14 +1,17 @@
 package mil.nga.giat.mage.map.cache;
 
 import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.support.annotation.UiThread;
 import android.support.annotation.WorkerThread;
+
+import com.google.android.gms.maps.GoogleMap;
 
 /**
  * A MapDataProvider represents a specific data format that can put overlays on a map.
  *
  * TODO: eventually this should change to async calls from the main thread to resolveResource() and
- * createMapLayerFromDescriptor() so a provider can use its own configured background
+ * createMapLayerAdapter() so a provider can use its own configured background
  * executor based on what kind of work it does to resolve resources and create map
  * objects, rather than whatever executor {@link MapDataManager} uses.
  * CompletableFuture would be nice but requires min SDK 24 or higher.  an option could
@@ -38,10 +41,11 @@ public interface MapDataProvider {
      *
      * TODO: an argument for the owning repository may be necessary at some point
      */
-    @NonNull
+    @Nullable
     @WorkerThread
     MapDataResource resolveResource(MapDataResource resource) throws MapDataResolveException;
 
+    @Nullable
     @UiThread
-    MapLayerManager.LoadLayerMapObjects createMapLayerFromDescriptor(MapLayerDescriptor layerDescriptor, MapLayerManager map);
+    MapLayerManager.MapLayerAdapter createMapLayerAdapter(MapLayerDescriptor layerDescriptor, GoogleMap map);
 }

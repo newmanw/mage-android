@@ -1456,4 +1456,6 @@ public class StaticFeatureLayerRepositoryTest {
     public void handlesDatabaseErrors() {
         fail("unimplemented");
     }
+
+
 }

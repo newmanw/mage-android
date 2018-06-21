@@ -3,10 +3,21 @@ package mil.nga.giat.mage.map.cache;
 import android.os.AsyncTask;
 import android.support.annotation.MainThread;
 import android.support.annotation.NonNull;
+import android.support.annotation.UiThread;
+import android.support.annotation.WorkerThread;
+import android.view.View;
 
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapView;
+import com.google.android.gms.maps.model.Circle;
+import com.google.android.gms.maps.model.GroundOverlay;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.LatLngBounds;
+import com.google.android.gms.maps.model.Marker;
+import com.google.android.gms.maps.model.Polygon;
+import com.google.android.gms.maps.model.Polyline;
+import com.google.android.gms.maps.model.TileOverlay;
+import com.google.android.gms.maps.model.TileProvider;
 
 import java.net.URI;
 import java.util.ArrayList;
@@ -14,59 +25,39 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.SortedSet;
 import java.util.TreeSet;
+import java.util.concurrent.Callable;
 
-import mil.nga.giat.mage.map.MapDisplayObject;
+import mil.nga.giat.mage.map.BasicMapElementContainer;
+import mil.nga.giat.mage.map.MapElements;
+import mil.nga.giat.mage.map.MapElementOperation;
+import mil.nga.giat.mage.map.MapElementSpec;
 
 /**
  * A {@code MapLayerManager} binds {@link MapLayerDescriptor layer data} from various
  * {@link MapDataRepository sources} to visual objects on a {@link GoogleMap}.
  */
 @MainThread
-public class MapLayerManager implements MapDataManager.MapDataListener {
+public class MapLayerManager implements MapDataManager.MapDataListener, GoogleMap.OnMarkerClickListener, GoogleMap.OnMapClickListener, GoogleMap.OnCircleClickListener, GoogleMap.OnPolylineClickListener, GoogleMap.OnPolygonClickListener, GoogleMap.OnGroundOverlayClickListener {
 
+    public interface MapLayerAdapter extends MapElementSpec.MapElementOwner {
 
-    /**
-     * Load the data for the given layer and create the objects to display the layer data on a map.
-     * Using {@link #publishProgress(Object[])}, subclasses can add {@link MapDisplayObject visual elements}
-     * to the map as they are created, which should provide some more immediate visual results for the user
-     * and prevent blocking the main thread when there are many objects to display after the layer construction
-     * is complete.
-     *
-     * @param <T> the type of layer descriptor the subclass uses
-     * @param <L> the type of layer the subclass produces
-     */
-    public static abstract class LoadLayerMapObjects<T extends MapLayerDescriptor, L extends MapLayer> extends AsyncTask<Void, MapDisplayObject, L> implements MapDisplayObject.MapOwner {
+        default Callable<String> onClick(Circle x, Object id) { return null; }
+        default Callable<String> onClick(GroundOverlay x, Object id) { return null; }
+        default Callable<String> onClick(Marker x, Object id) { return null; }
+        default Callable<String> onClick(Polygon x, Object id) { return null; }
+        default Callable<String> onClick(Polyline x, Object id) { return null; }
+        default Callable<String> onClick(LatLng pos, View mapView) { return null; }
 
-        protected final T layerDescriptor;
-        protected final MapLayerManager mapLayerManager;
+        /**
+         * Release resources and prepare for garbage collection.
+         */
+        void onLayerRemoved();
 
-        protected LoadLayerMapObjects(T layerDescriptor, MapLayerManager mapLayerManager) {
-            this.layerDescriptor = layerDescriptor;
-            this.mapLayerManager = mapLayerManager;
-        }
-
-        protected abstract MapLayer prepareLayer(L layer);
-
-        @NonNull
-        @Override
-        public final GoogleMap getMap() {
-            return mapLayerManager.getMap();
-        }
-
-        @Override
-        protected final void onProgressUpdate(MapDisplayObject... values) {
-            for (MapDisplayObject o : values) {
-                o.createFor(this);
-            }
-        }
-
-        @Override
-        protected final void onPostExecute(L layer) {
-            MapLayer prepared = prepareLayer(layer);
-            mapLayerManager.onLayerComplete(this, prepared);
-        }
+        @WorkerThread
+        Iterator<? extends MapElementSpec> elementsInBounds(LatLngBounds bounds);
     }
 
     public interface MapLayerListener {
@@ -80,42 +71,178 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
     }
 
     /**
+     * Load the data for the given layer and create the objects to display the layer data on a map.
+     * Using {@link #publishProgress(Object[])}, subclasses can add {@link MapElementSpec visual elements}
+     * to the map as they are created, which should provide some more immediate visual results for the user
+     * and prevent blocking the main thread when there are many objects to display after the layer construction
+     * is complete.
+     */
+    private static class UpdateLayerMapElements extends AsyncTask<Void, MapElementSpec, Void> implements MapElementSpec.MapElementOwner {
+
+        private final MapLayerDescriptor layerDescriptor;
+        private final MapLayerAdapter layerAdapter;
+        private final MapLayer layer;
+        private final LatLngBounds bounds;
+        private final MapLayerManager mapLayerManager;
+
+        private UpdateLayerMapElements(MapLayerDescriptor layerDescriptor, MapLayerAdapter layerAdapter, MapLayer layer, LatLngBounds bounds, MapLayerManager mapLayerManager) {
+            this.layerDescriptor = layerDescriptor;
+            this.layerAdapter = layerAdapter;
+            this.layer = layer;
+            this.bounds = bounds;
+            this.mapLayerManager = mapLayerManager;
+        }
+
+        @Override
+        protected void onPreExecute() {
+        }
+
+        @Override
+        protected Void doInBackground(Void... voids) {
+            Iterator<? extends MapElementSpec> specs = layerAdapter.elementsInBounds(bounds);
+            while (specs.hasNext() && !isCancelled()) {
+                MapElementSpec spec = specs.next();
+                publishProgress(spec);
+            }
+            return null;
+        }
+
+        @Override
+        protected final void onProgressUpdate(MapElementSpec... values) {
+            for (MapElementSpec o : values) {
+                o.createFor(this, mapLayerManager.getMap());
+            }
+        }
+
+        @Override
+        public void addedToMap(MapElementSpec.MapCircleSpec spec, Circle x) {
+            layer.mapElements.add(x, spec.id == null ? x.getId() : spec.id);
+        }
+
+        @Override
+        public void addedToMap(MapElementSpec.MapGroundOverlaySpec spec, GroundOverlay x) {
+            layer.mapElements.add(x, spec.id == null ? x.getId() : spec.id);
+        }
+
+        @Override
+        public void addedToMap(MapElementSpec.MapMarkerSpec spec, Marker x) {
+            layer.mapElements.add(x, spec.id == null ? x.getId() : spec.id);
+        }
+
+        @Override
+        public void addedToMap(MapElementSpec.MapPolygonSpec spec, Polygon x) {
+            layer.mapElements.add(x, spec.id == null ? x.getId() : spec.id);
+        }
+
+        @Override
+        public void addedToMap(MapElementSpec.MapPolylineSpec spec, Polyline x) {
+            layer.mapElements.add(x, spec.id == null ? x.getId() : spec.id);
+        }
+
+        @Override
+        public void addedToMap(MapElementSpec.MapTileOverlaySpec spec, TileOverlay x) {
+            layer.mapElements.add(x, spec.id == null ? x.getId() : spec.id);
+        }
+
+        @Override
+        protected final void onPostExecute(Void nothing) {
+            mapLayerManager.onLayerComplete(this);
+        }
+    }
+
+
+    /**
      * A {@code MapLayer} is the visual representation on a {@link GoogleMap} of the data
      * a {@link MapLayerDescriptor} describes.  A {@link MapDataProvider} creates instances
      * of this class from the data it provides to be added to a map.  Instances of this
      * class comprise visual objects from the Google Maps API, such as
-     * {@link com.google.android.gms.maps.model.TileProvider tiles},
-     * {@link com.google.android.gms.maps.model.Marker markers},
-     * {@link com.google.android.gms.maps.model.Polygon polygons},
+     * {@link TileProvider tiles},
+     * {@link Marker markers},
+     * {@link Polygon polygons},
      * etc.
      */
-    public abstract class MapLayer {
+    @UiThread
+    private class MapLayer {
+
+        protected MapElements mapElements;
+        protected MapLayerAdapter adapter;
+        private boolean visible = true;
+
+        private MapLayer(MapElements mapElements) {
+            this.mapElements = mapElements;
+        }
 
         /**
-         * Remove this overlay's objects visible and hidden objects from the map.
+         * Remove this layer's visible and hidden objects from the map.
+         * Clear whatever resources this layer might hold such as data source
+         * connections or large geometry collections and prepare for garbage collection.
          */
-        abstract protected void removeFromMap();
-        abstract protected void show();
-        abstract protected void hide();
-        abstract protected void setZIndex(int z);
+        protected void removeFromMap() {
+            mapElements.forEach(MapElementOperation.REMOVE);
+        }
 
-        /**
-         * TODO: change to MapLayerDescriptor.getBoundingBox() instead so MapLayerManager can do the zoom
-         */
-        abstract protected void zoomMapToBoundingBox();
+        protected void show() {
+            mapElements.forEach(MapElementOperation.SHOW);
+            visible = true;
+        }
 
-        abstract protected boolean isVisible();
-        // TODO: this is awkward passing the map view and returning a string; probably can do better
-        abstract protected String onMapClick(LatLng latLng, MapView mapView);
+        protected void hide() {
+            mapElements.forEach(MapElementOperation.HIDE);
+            visible = false;
+        }
 
-        /**
-         * Clear all the resources this overlay might hold such as data source connections or large
-         * geometry collections and prepare for garbage collection.
-         */
-        abstract protected void dispose();
+        protected void setZIndex(int z) {
+            mapElements.forEach(new MapElementOperation.SetZIndex(z));
+        }
+
+        protected boolean isVisible() {
+            return visible;
+        }
 
         protected final GoogleMap getMap() {
             return MapLayerManager.this.getMap();
+        }
+
+        private boolean ownsElement(Circle x) {
+            return mapElements.contains(x);
+        }
+
+        private boolean ownsElement(GroundOverlay x) {
+            return mapElements.contains(x);
+        }
+
+        private boolean ownsElement(Marker x) {
+            return mapElements.contains(x);
+        }
+
+        private boolean ownsElement(Polygon x) {
+            return mapElements.contains(x);
+        }
+
+        private boolean ownsElement(Polyline x) {
+            return mapElements.contains(x);
+        }
+
+        private void onMarkerClick(Marker x) {
+        }
+
+        private void onCircleClick(Circle x) {
+        }
+
+        private void onPolylineClick(Polyline x) {
+        }
+
+        private void onPolygonClick(Polygon x) {
+        }
+
+        private void onGroundOverlayClick(GroundOverlay x) {
+        }
+
+        protected void onMapClick(LatLng pos) {
+        }
+
+        // TODO: this is awkward passing the map view and returning a string; probably can do better
+        protected void onMapClick(LatLng latLng, MapView mapView) {
         }
     }
 
@@ -126,8 +253,8 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
      * {@link MapLayer#setZIndex(int) z-index}.  The implementation can use the
      * return value to increment the float z-index of {@code count} {@link GoogleMap} objects
      * logically contained in a single overlay.  For example, if an overlay contains 5 map
-     * objects, such as {@link com.google.android.gms.maps.model.TileOverlay tiles} and
-     * {@link com.google.android.gms.maps.model.Polygon polygons}, and the integer z-index
+     * objects, such as {@link TileOverlay tiles} and
+     * {@link Polygon polygons}, and the integer z-index
      * to set on the overlay is 6, this method will return 1 / (5 + 1), ~= 0.167, and map
      * objects can have fractional zoom levels (6 + 1 * 0.167), (6 + 2 * 0.167), etc.,
      * without intruding on the next integral zoom level, 7, which {@link MapLayerManager}
@@ -139,6 +266,8 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
     public static float zIndexStepForObjectCount(int count) {
         return 1.0f / (count + 1.0f);
     }
+
+    private static final LatLngBounds ANYWHERE = new LatLngBounds(new LatLng(-90f, -180f), new LatLng(90f, 180f));
 
     private final MapDataManager mapDataManager;
     private final GoogleMap map;
@@ -225,11 +354,63 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
         return onMap != null && onMap.isVisible();
     }
 
-    public void onMapClick(LatLng latLng, MapView mapView) {
-        for (MapLayerDescriptor overlay : overlaysInZOrder) {
-            MapLayer onMap = layersOnMap.get(overlay);
-            if (onMap != null) {
-                onMap.onMapClick(latLng, mapView);
+    @Override
+    public void onMapClick(LatLng latLng) {
+        for (MapLayerDescriptor layerDesc : getLayersInZOrder()) {
+            MapLayer layer = layersOnMap.get(layerDesc);
+            if (layer != null) {
+                layer.onMapClick(latLng);
+            }
+        }
+    }
+
+    @Override
+    public void onCircleClick(Circle x) {
+        for (MapLayer layer : layersOnMap.values()) {
+            if (layer.ownsElement(x)) {
+                layer.onCircleClick(x);
+                return;
+            }
+        }
+    }
+
+    @Override
+    public void onGroundOverlayClick(GroundOverlay x) {
+        for (MapLayer layer : layersOnMap.values()) {
+            if (layer.ownsElement(x)) {
+                layer.onGroundOverlayClick(x);
+                return;
+            }
+        }
+    }
+
+    @Override
+    public boolean onMarkerClick(Marker x) {
+        for (MapLayer layer : layersOnMap.values()) {
+            if (layer.ownsElement(x)) {
+                layer.onMarkerClick(x);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public void onPolygonClick(Polygon x) {
+        for (MapLayer layer : layersOnMap.values()) {
+            if (layer.ownsElement(x)) {
+                layer.onPolygonClick(x);
+                return;
+            }
+        }
+    }
+
+    @Override
+    public void onPolylineClick(Polyline x) {
+        for (MapLayer layer : layersOnMap.values()) {
+            if (layer.ownsElement(x)) {
+                layer.onPolylineClick(x);
+                return;
             }
         }
     }
@@ -279,7 +460,6 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
         while (entries.hasNext()) {
             MapLayer onMap = entries.next().getValue();
             onMap.removeFromMap();
-            onMap.dispose();
             entries.remove();
         }
     }
@@ -305,10 +485,6 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
         }
     }
 
-    private void disposeOverlay(MapLayerDescriptor overlay) {
-
-    }
-
     private void addOverlayToMap(MapLayerDescriptor overlay) {
         int position = overlaysInZOrder.indexOf(overlay);
         if (position > -1) {
@@ -320,20 +496,22 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
         MapLayerDescriptor layerDesc = overlaysInZOrder.get(position);
         MapLayer layer = layersOnMap.get(layerDesc);
         if (layer == null) {
-            // TODO: create a PendingLayer MapLayer implementation with a reference to the CreateLayer task
             MapDataResource resource = mapDataManager.getResources().get(layerDesc.getResourceUri());
-            Class<? extends MapDataProvider> resourceType = resource.getResolved().getType();
+            Class<? extends MapDataProvider> resourceType = Objects.requireNonNull(resource.getResolved()).getType();
             MapDataProvider provider = providers.get(resourceType);
-            LoadLayerMapObjects addLayer = (LoadLayerMapObjects) provider.createMapLayerFromDescriptor(layerDesc, this).execute();
-            layersOnMap.put(layerDesc, new PendingLayer(addLayer));
+            MapLayerAdapter layerAdapter = provider.createMapLayerAdapter(layerDesc, getMap());
+            layer = new MapLayer(new BasicMapElementContainer());
+            UpdateLayerMapElements loadLayerElements = (UpdateLayerMapElements) new UpdateLayerMapElements(
+                layerDesc, layerAdapter, layer, ANYWHERE, this).executeOnExecutor(AsyncTask.SERIAL_EXECUTOR);
+            layersOnMap.put(layerDesc, new PendingLayer(loadLayerElements));
         }
         else {
             layer.show();
         }
     }
 
-    private void onLayerComplete(LoadLayerMapObjects addLayer, MapLayer layer) {
-        PendingLayer pending = (PendingLayer) layersOnMap.put(addLayer.layerDescriptor, layer);
+    private void onLayerComplete(UpdateLayerMapElements addLayer) {
+        PendingLayer pending = (PendingLayer) layersOnMap.put(addLayer.layerDescriptor, addLayer.layer);
         if (pending.addLayer != addLayer) {
             throw new IllegalStateException("layer task for descriptor " + addLayer.layerDescriptor + " did not match expected pending layer task");
         }
@@ -342,50 +520,100 @@ public class MapLayerManager implements MapDataManager.MapDataListener {
     // TODO: finish and use this
     private class PendingLayer extends MapLayer {
 
-        private final LoadLayerMapObjects addLayer;
+        private final UpdateLayerMapElements addLayer;
 
-        private PendingLayer(LoadLayerMapObjects addLayer) {
+        private PendingLayer(UpdateLayerMapElements addLayer) {
+            super(NO_ELEMENTS);
             this.addLayer = addLayer;
         }
+    }
+
+    private static final MapElements NO_ELEMENTS = new MapElements() {
 
         @Override
-        protected void removeFromMap() {
-
+        public MapElements add(Circle x, Object id) {
+            return this;
         }
 
         @Override
-        protected void show() {
-
+        public MapElements add(GroundOverlay x, Object id) {
+            return this;
         }
 
         @Override
-        protected void hide() {
-
+        public MapElements add(Marker x, Object id) {
+            return this;
         }
 
         @Override
-        protected void setZIndex(int z) {
-
+        public MapElements add(Polygon x, Object id) {
+            return this;
         }
 
         @Override
-        protected void zoomMapToBoundingBox() {
-
+        public MapElements add(Polyline x, Object id) {
+            return this;
         }
 
         @Override
-        protected boolean isVisible() {
+        public MapElements add(TileOverlay x, Object id) {
+            return this;
+        }
+
+        @Override
+        public boolean contains(Circle x) {
             return false;
         }
 
         @Override
-        protected String onMapClick(LatLng latLng, MapView mapView) {
-            return null;
+        public boolean contains(GroundOverlay x) {
+            return false;
         }
 
         @Override
-        protected void dispose() {
-
+        public boolean contains(Marker x) {
+            return false;
         }
-    }
+
+        @Override
+        public boolean contains(Polygon x) {
+            return false;
+        }
+
+        @Override
+        public boolean contains(Polyline x) {
+            return false;
+        }
+
+        @Override
+        public boolean contains(TileOverlay x) {
+            return false;
+        }
+
+        @Override
+        public void remove(Circle x) {}
+
+        @Override
+        public void remove(GroundOverlay x) {}
+
+        @Override
+        public void remove(Marker x) {}
+
+        @Override
+        public void remove(Polygon x) {}
+
+        @Override
+        public void remove(Polyline x) {}
+
+        @Override
+        public void remove(TileOverlay x) {}
+
+        @Override
+        public void forEach(ComprehensiveMapElementVisitor... v) {}
+
+        @Override
+        public int count() {
+            return 0;
+        }
+    };
 }

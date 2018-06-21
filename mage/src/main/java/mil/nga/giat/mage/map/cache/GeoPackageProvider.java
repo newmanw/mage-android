@@ -2,12 +2,18 @@ package mil.nga.giat.mage.map.cache;
 
 import android.app.Application;
 import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.support.v4.util.LongSparseArray;
 import android.util.Log;
+import android.view.View;
 
+import com.google.android.gms.maps.CameraUpdate;
 import com.google.android.gms.maps.GoogleMap;
-import com.google.android.gms.maps.MapView;
+import com.google.android.gms.maps.model.CameraPosition;
+import com.google.android.gms.maps.model.Circle;
+import com.google.android.gms.maps.model.GroundOverlay;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.Polygon;
 import com.google.android.gms.maps.model.Polyline;
@@ -16,13 +22,14 @@ import com.google.android.gms.maps.model.TileOverlayOptions;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
+import java.util.concurrent.Callable;
 
 import mil.nga.geopackage.GeoPackage;
 import mil.nga.geopackage.GeoPackageCache;
@@ -51,7 +58,8 @@ import mil.nga.geopackage.tiles.features.custom.NumberFeaturesTile;
 import mil.nga.geopackage.tiles.user.TileDao;
 import mil.nga.geopackage.validate.GeoPackageValidate;
 import mil.nga.giat.mage.R;
-import mil.nga.giat.mage.map.MapDisplayObject;
+import mil.nga.giat.mage.map.MapElementSpec;
+import mil.nga.giat.mage.map.WKBGeometryTransforms;
 import mil.nga.giat.mage.sdk.utils.MediaUtility;
 import mil.nga.wkb.geom.Geometry;
 import mil.nga.wkb.geom.GeometryType;
@@ -64,10 +72,6 @@ public class GeoPackageProvider implements MapDataProvider {
 
     /**
      * Get a cache name for the cache file
-     *
-     * @param manager
-     * @param cacheFile
-     * @return cache name
      */
     private static String makeUniqueCacheName(GeoPackageManager manager, File cacheFile) {
         String cacheName = MediaUtility.getFileNameWithoutExtension(cacheFile);
@@ -79,48 +83,6 @@ public class GeoPackageProvider implements MapDataProvider {
         return cacheName;
     }
 
-    private static void setZIndexOfShape(GoogleMapShape shape, int zIndex) {
-        switch(shape.getShapeType()) {
-            case MARKER:
-                ((Marker)shape.getShape()).setZIndex(zIndex);
-                break;
-            case POLYGON:
-                ((Polygon)shape.getShape()).setZIndex(zIndex);
-                break;
-            case POLYLINE:
-                ((Polyline)shape.getShape()).setZIndex(zIndex);
-                break;
-            case MULTI_MARKER:
-                for (Marker x : ((MultiMarker)shape.getShape()).getMarkers()) {
-                    x.setZIndex(zIndex);
-                }
-                break;
-            case MULTI_POLYLINE:
-                for (Polyline x : ((MultiPolyline)shape.getShape()).getPolylines()) {
-                    x.setZIndex(zIndex);
-                }
-                break;
-            case MULTI_POLYGON:
-                for (Polygon x : ((MultiPolygon)shape.getShape()).getPolygons()) {
-                    x.setZIndex(zIndex);
-                }
-                break;
-            case POLYLINE_MARKERS:
-                ((PolylineMarkers) shape.getShape()).getPolyline().setZIndex(zIndex);
-                for (Marker x : ((PolylineMarkers) shape.getShape()).getMarkers()) {
-                    x.setZIndex(zIndex);
-                }
-                break;
-            case POLYGON_MARKERS:
-                break;
-            case MULTI_POLYLINE_MARKERS:
-                break;
-            case MULTI_POLYGON_MARKERS:
-                break;
-            case COLLECTION:
-                break;
-        }
-    }
 
     private final Application context;
     private final GeoPackageManager geoPackageManager;
@@ -134,10 +96,8 @@ public class GeoPackageProvider implements MapDataProvider {
 
     @Override
     public boolean canHandleResource(MapDataResource resource) {
-        if (!"file".equalsIgnoreCase(resource.getUri().getScheme())) {
-            return false;
-        }
-        return GeoPackageValidate.hasGeoPackageExtension(new File(resource.getUri()));
+        return "file".equalsIgnoreCase(resource.getUri().getScheme()) &&
+            GeoPackageValidate.hasGeoPackageExtension(new File(resource.getUri()));
     }
 
     @Override
@@ -145,6 +105,19 @@ public class GeoPackageProvider implements MapDataProvider {
         File cacheFile = new File(resource.getUri());
         String resourceName = getOrImportGeoPackageDatabase(cacheFile);
         return createCache(resource, resourceName);
+    }
+
+    @Nullable
+    @Override
+    public MapLayerManager.MapLayerAdapter createMapLayerAdapter(MapLayerDescriptor layerDescriptor, GoogleMap map) {
+        if (layerDescriptor instanceof GeoPackageTileTableDescriptor) {
+            return new TileTableLayer((GeoPackageTileTableDescriptor) layerDescriptor, map);
+        }
+        else if (layerDescriptor instanceof GeoPackageFeatureTableDescriptor) {
+            return new FeatureTableLayer((GeoPackageFeatureTableDescriptor) layerDescriptor, map);
+        }
+        throw new IllegalArgumentException(getClass().getSimpleName() +
+            " does not support " + layerDescriptor + " of type " + layerDescriptor.getDataType() );
     }
 
       // TODO: this is now in MapDataRepository - are we misisng anything moving it there?
@@ -188,12 +161,6 @@ public class GeoPackageProvider implements MapDataProvider {
 //        return overlays;
 //    }
 
-    /**
-     * Import the GeoPackage file as an external link if it does not exist
-     *
-     * @param cacheFile
-     * @return cache name when imported, null when not imported
-     */
     @NonNull
     private String getOrImportGeoPackageDatabase(File cacheFile) throws MapDataResolveException {
         String databaseName = geoPackageManager.getDatabaseAtExternalFile(cacheFile);
@@ -227,12 +194,6 @@ public class GeoPackageProvider implements MapDataProvider {
         throw fail;
     }
 
-    /**
-     * Get the GeoPackage database as a cache overlay
-     *
-     * @param database
-     * @return cache overlay
-     */
     private MapDataResource createCache(MapDataResource resource, String database) {
 
         GeoPackage geoPackage = null;
@@ -313,62 +274,19 @@ public class GeoPackageProvider implements MapDataProvider {
         return null;
     }
 
-    static class TileTableLayer extends MapLayerManager.MapLayer {
+    class TileTableLayer implements MapLayerManager.MapLayerAdapter {
 
+        private final GeoPackageTileTableDescriptor layerDescriptor;
         private final GoogleMap map;
-        /**
-         * Used to query the backing feature tables
-         */
-        private final List<FeatureOverlayQuery> featureOverlayQueries;
-        private TileOverlay tileOverlay;
+        private List<FeatureOverlayQuery> featureOverlayQueries;
 
-
-        private TileTableLayer(MapLayerManager manager, List<FeatureOverlayQuery> queries) {
-            manager.super();
-            this.map = manager.getMap();
-            this.featureOverlayQueries = queries;
+        private TileTableLayer(GeoPackageTileTableDescriptor layerDescriptor, GoogleMap map) {
+            this.layerDescriptor = layerDescriptor;
+            this.map = map;
         }
 
         @Override
-        public void removeFromMap() {
-            if (tileOverlay != null) {
-                tileOverlay.remove();
-                tileOverlay = null;
-            }
-        }
-
-        @Override
-        public void zoomMapToBoundingBox() {
-        }
-
-        @Override
-        public void show() {
-            if (tileOverlay != null) {
-                tileOverlay.setVisible(true);
-            }
-        }
-
-        @Override
-        public void hide() {
-            if (tileOverlay != null) {
-                tileOverlay.setVisible(false);
-            }
-        }
-
-        @Override
-        protected void setZIndex(int z) {
-            if (tileOverlay != null) {
-                tileOverlay.setZIndex(z);
-            }
-        }
-
-        @Override
-        public boolean isVisible() {
-            return tileOverlay != null && tileOverlay.isVisible();
-        }
-
-        @Override
-        public String onMapClick(LatLng latLng, MapView mapView) {
+        public Callable<String> onClick(LatLng latLng, View mapView) {
             StringBuilder message = new StringBuilder();
             for(FeatureOverlayQuery featureOverlayQuery : featureOverlayQueries) {
                 String overlayMessage = featureOverlayQuery.buildMapClickMessage(latLng, mapView, map);
@@ -379,7 +297,7 @@ public class GeoPackageProvider implements MapDataProvider {
                     message.append(overlayMessage);
                 }
             }
-            return message.length() > 0 ? message.toString() : null;
+            return message.length() > 0 ? message::toString : null;
         }
 
         void clearFeatureOverlayQueries(){
@@ -392,248 +310,131 @@ public class GeoPackageProvider implements MapDataProvider {
         }
 
         @Override
-        protected void dispose() {
-            removeFromMap();
+        public void addedToMap(MapElementSpec.MapTileOverlaySpec spec, TileOverlay x) {
+            @SuppressWarnings("unchecked")
+            List<FeatureOverlayQuery> queries = (List<FeatureOverlayQuery>) spec.data;
+            featureOverlayQueries = queries;
+        }
+
+        @Override
+        public void onLayerRemoved() {
             clearFeatureOverlayQueries();
+        }
+
+        @Override
+        public Iterator<? extends MapElementSpec> elementsInBounds(LatLngBounds bounds) {
+            GeoPackage geoPackage = geoPackageCache.getOrOpen(layerDescriptor.getGeoPackage());
+            TileDao tileDao = geoPackage.getTileDao(layerDescriptor.getTableName());
+            BoundedOverlay geoPackageTileProvider = GeoPackageOverlayFactory.getBoundedOverlay(tileDao);
+            TileOverlayOptions overlayOptions = new TileOverlayOptions()
+                .tileProvider(geoPackageTileProvider)
+                .zIndex(Z_INDEX_TILE_TABLE);
+            // Check for linked feature tables
+            FeatureTileTableLinker linker = new FeatureTileTableLinker(geoPackage);
+            List<FeatureOverlayQuery> queries = new ArrayList<>();
+            List<FeatureDao> featureDaos = linker.getFeatureDaosForTileTable(tileDao.getTableName());
+            for (FeatureDao featureDao : featureDaos) {
+                FeatureTiles featureTiles = new DefaultFeatureTiles(context, featureDao);
+                FeatureIndexManager indexer = new FeatureIndexManager(context, geoPackage, featureDao);
+                featureTiles.setIndexManager(indexer);
+                FeatureOverlayQuery featureOverlayQuery = new FeatureOverlayQuery(context, geoPackageTileProvider, featureTiles);
+                queries.add(featureOverlayQuery);
+            }
+            return Collections.singleton(new MapElementSpec.MapTileOverlaySpec(layerDescriptor, queries, overlayOptions)).iterator();
         }
     }
 
-    static class FeatureTableLayer extends MapLayerManager.MapLayer {
+    class FeatureTableLayer implements MapLayerManager.MapLayerAdapter {
 
+        private final GeoPackageFeatureTableDescriptor layerDescriptor;
         private final GoogleMap map;
-        private final Map<String, TileTableLayer> linkedTiles;
-        private final FeatureOverlayQuery query;
-        /**
-         * keys are feature IDs from GeoPackage table
-         */
-        private LongSparseArray<GoogleMapShape> shapesOnMap = new LongSparseArray<>(0);
-        private TileOverlay indexedFeaturesTileOverlay;
-        private boolean visible;
-        private int zIndex;
+        private final Map<GeoPackageTileTableDescriptor, TileTableLayer> linkedTiles = new HashMap<>();
+        private FeatureOverlayQuery query;
 
-        FeatureTableLayer(MapLayerManager manager, Map<String, TileTableLayer> linkedTiles, FeatureOverlayQuery query) {
-            manager.super();
-            this.map = manager.getMap();
-            this.linkedTiles = linkedTiles;
-            this.query = query;
-        }
-
-        FeatureTableLayer(MapLayerManager manager, Map<String, TileTableLayer> linkedTiles) {
-            manager.super();
-            this.map = manager.getMap();
-            this.linkedTiles = linkedTiles;
-            query = null;
-        }
-
-        @Override
-        protected void removeFromMap() {
-            removeShapes();
-            if (indexedFeaturesTileOverlay != null) {
-                indexedFeaturesTileOverlay.remove();
-                indexedFeaturesTileOverlay = null;
-            }
-            for (TileTableLayer linkedTileTable : linkedTiles.values()){
-                linkedTileTable.removeFromMap();
+        FeatureTableLayer(GeoPackageFeatureTableDescriptor layerDescriptor, GoogleMap map) {
+            this.layerDescriptor = layerDescriptor;
+            this.map = map;
+            for (GeoPackageTileTableDescriptor linkedTileTable : layerDescriptor.getLinkedTileTables()) {
+                TileTableLayer linkedTileLayer = new TileTableLayer(linkedTileTable, map);
+                linkedTiles.put(linkedTileTable, linkedTileLayer);
             }
         }
 
         @Override
-        protected void zoomMapToBoundingBox() {
-            // TODO
-        }
-
-        @Override
-        protected void show() {
-            if (visible) {
-                return;
-            }
-            for (TileTableLayer linkedTileTable : linkedTiles.values()) {
-                linkedTileTable.show();
-            }
-            if (indexedFeaturesTileOverlay != null) {
-                indexedFeaturesTileOverlay.setVisible(true);
+        public void addedToMap(MapElementSpec.MapTileOverlaySpec spec, TileOverlay x) {
+            if (spec.id == layerDescriptor) {
+                query = (FeatureOverlayQuery) spec.data;
             }
             else {
-                for (int i = 0; i < shapesOnMap.size(); i++) {
-                    GoogleMapShape shape = shapesOnMap.valueAt(i);
-                    shape.setVisible(true);
-                }
-            }
-            visible = true;
-        }
-
-        @Override
-        protected void hide() {
-            if (!visible) {
-                return;
-            }
-            for (TileTableLayer linkedTileTable : linkedTiles.values()) {
-                linkedTileTable.hide();
-            }
-            if (indexedFeaturesTileOverlay != null) {
-                indexedFeaturesTileOverlay.setVisible(false);
-            }
-            else {
-                for (int i = 0; i < shapesOnMap.size(); i++) {
-                    GoogleMapShape shape = shapesOnMap.valueAt(i);
-                    shape.setVisible(false);
-                }
-            }
-            visible = false;
-        }
-
-        @Override
-        protected void setZIndex(int z) {
-            zIndex = z;
-            for (TileTableLayer linkedTileTable : linkedTiles.values()) {
-                linkedTileTable.setZIndex(z);
-            }
-            if (indexedFeaturesTileOverlay != null) {
-                indexedFeaturesTileOverlay.setZIndex(z);
-            }
-            // TODO: GoogleMapShape needs z-index support
-            for (int i = 0; i < shapesOnMap.size(); i++) {
-                GoogleMapShape shape = shapesOnMap.valueAt(i);
-                setZIndexOfShape(shape, z);
+                GeoPackageTileTableDescriptor tileDesc = (GeoPackageTileTableDescriptor) spec.id;
+                TileTableLayer tileLayer = linkedTiles.get(tileDesc);
+                tileLayer.addedToMap(spec, x);
             }
         }
 
+        // TODO: implement click handlers
+
         @Override
-        protected String onMapClick(LatLng latLng, MapView mapView) {
+        public Callable<String> onClick(Circle x, Object id) {
+            return null;
+        }
+
+        @Override
+        public Callable<String> onClick(GroundOverlay x, Object id) {
+            return null;
+        }
+
+        @Override
+        public Callable<String> onClick(Marker x, Object id) {
+            return null;
+        }
+
+        @Override
+        public Callable<String> onClick(Polygon x, Object id) {
+            return null;
+        }
+
+        @Override
+        public Callable<String> onClick(Polyline x, Object id) {
+            return null;
+        }
+
+        @Override
+        public Callable<String> onClick(LatLng latLng, View mapView) {
             String message = null;
             if (query != null) {
                 message = query.buildMapClickMessage(latLng, mapView, map);
             }
-            return message;
+            return message == null ? null : message::toString;
         }
 
         @Override
-        protected boolean isVisible() {
-            return visible;
-        }
-
-        @Override
-        protected void dispose() {
-            removeFromMap();
+        public void onLayerRemoved() {
             for (TileTableLayer tilesOnMap : linkedTiles.values()) {
-                tilesOnMap.dispose();
+                tilesOnMap.onLayerRemoved();
             }
             if (query != null) {
                 query.close();
             }
         }
 
-        private void removeShapes() {
-            for (int i = 0; i < shapesOnMap.size(); i++) {
-                GoogleMapShape shape = shapesOnMap.valueAt(i);
-                shape.remove();
-            }
-            shapesOnMap.clear();
-        }
-    }
-
-    @Override
-    public MapLayerManager.LoadLayerMapObjects createMapLayerFromDescriptor(MapLayerDescriptor layerDescriptor, MapLayerManager mapManager) {
-        if (layerDescriptor instanceof GeoPackageTileTableDescriptor) {
-            return new CreateTileTableLayer((GeoPackageTileTableDescriptor) layerDescriptor, mapManager, geoPackageCache, context);
-        }
-        else if (layerDescriptor instanceof GeoPackageFeatureTableDescriptor) {
-            return new CreateFeatureTableLayer((GeoPackageFeatureTableDescriptor) layerDescriptor, mapManager, geoPackageCache, context);
-        }
-
-        throw new IllegalArgumentException(getClass().getSimpleName() + " does not support " + layerDescriptor + " of type " + layerDescriptor.getDataType() );
-    }
-
-    private static class CreateTileTableLayer extends MapLayerManager.LoadLayerMapObjects<GeoPackageTileTableDescriptor, TileTableLayer> {
-
-        private final Application context;
-        private final GeoPackageCache geoPackageCache;
-        private TileOverlay tileOverlay;
-
-        private CreateTileTableLayer(GeoPackageTileTableDescriptor descriptor, MapLayerManager mapLayerManager, GeoPackageCache geoPackageCache, Application context) {
-            super(descriptor, mapLayerManager);
-            this.geoPackageCache = geoPackageCache;
-            this.context = context;
-        }
-
         @Override
-        protected TileTableLayer doInBackground(Void... nothing) {
-            TileTableLayerComponents layerComponents = createTileTableLayerComponents(layerDescriptor, mapLayerManager, geoPackageCache, context);
-            publishProgress(new MapDisplayObject.MapTileOverlay(null, layerComponents.options));
-            return new TileTableLayer(mapLayerManager, layerComponents.queries);
-        }
-
-        @Override
-        public void addedToMap(MapDisplayObject object, TileOverlay overlay) {
-            tileOverlay = overlay;
-        }
-
-        @Override
-        protected MapLayerManager.MapLayer prepareLayer(TileTableLayer layer) {
-            layer.tileOverlay = tileOverlay;
-            return layer;
-        }
-    }
-
-    private static class TileTableLayerComponents {
-
-        private final TileOverlayOptions options;
-        private final List<FeatureOverlayQuery> queries;
-
-        private TileTableLayerComponents(TileOverlayOptions options, List<FeatureOverlayQuery> queries) {
-            this.options = options;
-            this.queries = queries;
-        }
-    }
-
-    private static TileTableLayerComponents createTileTableLayerComponents(GeoPackageTileTableDescriptor tableCache, MapLayerManager mapManager, GeoPackageCache geoPackageCache, Application context) {
-        GeoPackage geoPackage = geoPackageCache.getOrOpen(tableCache.getGeoPackage());
-        TileDao tileDao = geoPackage.getTileDao(tableCache.getTableName());
-        BoundedOverlay geoPackageTileProvider = GeoPackageOverlayFactory.getBoundedOverlay(tileDao);
-        TileOverlayOptions overlayOptions = new TileOverlayOptions()
-            .tileProvider(geoPackageTileProvider)
-            .zIndex(Z_INDEX_TILE_TABLE);
-        // Check for linked feature tables
-        FeatureTileTableLinker linker = new FeatureTileTableLinker(geoPackage);
-        List<FeatureOverlayQuery> queries = new ArrayList<>();
-        List<FeatureDao> featureDaos = linker.getFeatureDaosForTileTable(tileDao.getTableName());
-        for (FeatureDao featureDao : featureDaos) {
-            FeatureTiles featureTiles = new DefaultFeatureTiles(context, featureDao);
-            FeatureIndexManager indexer = new FeatureIndexManager(context, geoPackage, featureDao);
-            featureTiles.setIndexManager(indexer);
-            FeatureOverlayQuery featureOverlayQuery = new FeatureOverlayQuery(context, geoPackageTileProvider, featureTiles);
-            queries.add(featureOverlayQuery);
-        }
-        return new TileTableLayerComponents(overlayOptions, queries);
-    }
-
-    private static class CreateFeatureTableLayer extends MapLayerManager.LoadLayerMapObjects<GeoPackageFeatureTableDescriptor, FeatureTableLayer> implements GoogleMapShapeOwner {
-
-        private final GeoPackageCache geoPackageCache;
-        private final Application context;
-        private final Map<String, TileOverlay> linkedTileOverlays = new HashMap<>();
-        private final LongSparseArray<GoogleMapShape> shapes = new LongSparseArray<>();
-        private TileOverlay indexedFeaturesTileOverlay;
-
-        CreateFeatureTableLayer(GeoPackageFeatureTableDescriptor layerDescriptor, MapLayerManager mapLayerManager, GeoPackageCache geoPackageCache, Application context) {
-            super(layerDescriptor, mapLayerManager);
-            this.geoPackageCache = geoPackageCache;
-            this.context = context;
-        }
-
-        @Override
-        protected FeatureTableLayer doInBackground(Void... voids) {
-            Map<String, TileTableLayer> linkedTiles = new TreeMap<>();
+        public Iterator<? extends MapElementSpec> elementsInBounds(LatLngBounds bounds) {
+            List<MapElementSpec> elementSpecs = new ArrayList<>();
             for (GeoPackageTileTableDescriptor linkedTileTable : layerDescriptor.getLinkedTileTables()) {
-                TileTableLayerComponents tileComponents = createTileTableLayerComponents(linkedTileTable, mapLayerManager, geoPackageCache, context);
-                linkedTiles.put(linkedTileTable.getTableName(), new TileTableLayer(mapLayerManager, tileComponents.queries));
-                publishProgress(new MapDisplayObject.MapTileOverlay(linkedTileTable.getLayerName(), tileComponents.options));
+                Iterator<? extends MapElementSpec> tileElements = linkedTiles.get(linkedTileTable).elementsInBounds(bounds);
+                while (tileElements.hasNext()) {
+                    elementSpecs.add(tileElements.next());
+                }
             }
             GeoPackage geoPackage = geoPackageCache.getOrOpen(layerDescriptor.getGeoPackage());
             // Add the features to the map
             FeatureDao featureDao = geoPackage.getFeatureDao(layerDescriptor.getTableName());
             // If indexed, add as a tile overlay
             if (layerDescriptor.isIndexed()) {
+                if (query != null) {
+                    return null;
+                }
                 FeatureTiles featureTiles = new DefaultFeatureTiles(context, featureDao);
                 Integer maxFeaturesPerTile;
                 if (featureDao.getGeometryType() == GeometryType.POINT) {
@@ -659,8 +460,7 @@ public class GeoPackageProvider implements MapDataProvider {
                     .zIndex(Z_INDEX_FEATURE_TABLE)
                     .tileProvider(tileProvider);
                 FeatureOverlayQuery featureQuery = new FeatureOverlayQuery(context, tileProvider);
-                publishProgress(new MapDisplayObject.MapTileOverlay(null, overlayOptions));
-                return new FeatureTableLayer(mapLayerManager, linkedTiles, featureQuery);
+                elementSpecs.add(new MapElementSpec.MapTileOverlaySpec(layerDescriptor, featureQuery, overlayOptions));
             }
             // Not indexed, add the features to the map
             else {
@@ -672,7 +472,8 @@ public class GeoPackageProvider implements MapDataProvider {
                     maxFeaturesPerTable = context.getResources().getInteger(R.integer.geopackage_features_max_features_per_table);
                 }
                 Projection projection = featureDao.getProjection();
-                GoogleMapShapeConverter shapeConverter = new GoogleMapShapeConverter(projection);
+                GoogleMapShapeConverter converter = new GoogleMapShapeConverter(projection);
+                WKBGeometryTransforms geometryTransforms = new WKBGeometryTransforms(converter);
                 FeatureCursor featureCursor = featureDao.queryForAll();
                 int featuresAdded = 0;
                 final int numFeaturesInTable;
@@ -684,9 +485,8 @@ public class GeoPackageProvider implements MapDataProvider {
                         if (geometryData != null && !geometryData.isEmpty()) {
                             Geometry geometry = geometryData.getGeometry();
                             if (geometry != null) {
-                                GoogleMapShape shape = shapeConverter.toShape(geometry);
                                 // Set the Shape Marker, PolylineOptions, and PolygonOptions here if needed to change color and style
-                                publishProgress(new GoogleMapShapeDisplayObject(featureRow.getId(), shape));
+                                elementSpecs.addAll(geometryTransforms.transform(geometry, featureRow.getId(), null));
                             }
                         }
                     }
@@ -701,34 +501,8 @@ public class GeoPackageProvider implements MapDataProvider {
 //                    Toast.makeText(context, featureTableCache.getTableName()
 //                        + "- added " + shapes.size() + " of " + numFeaturesInTable, Toast.LENGTH_LONG).show();
 //                }
-
-                return new FeatureTableLayer(mapLayerManager, linkedTiles);
             }
-        }
-
-        @Override
-        public void addedToMap(MapDisplayObject object, TileOverlay overlay) {
-            if (object.id != null) {
-                linkedTileOverlays.put((String) object.id, overlay);
-            }
-            else {
-                indexedFeaturesTileOverlay = overlay;
-            }
-        }
-
-        @Override
-        public void addedToMap(MapDisplayObject object, GoogleMapShape shape) {
-            shapes.put((Long) object.id, shape);
-        }
-
-        @Override
-        protected MapLayerManager.MapLayer prepareLayer(FeatureTableLayer layer) {
-            layer.indexedFeaturesTileOverlay = indexedFeaturesTileOverlay;
-            layer.shapesOnMap = shapes;
-            for (Map.Entry<String, TileOverlay> linkedOverlay : linkedTileOverlays.entrySet()) {
-                layer.linkedTiles.get(linkedOverlay.getKey()).tileOverlay = linkedOverlay.getValue();
-            }
-            return layer;
+            return elementSpecs.iterator();
         }
     }
 
@@ -773,24 +547,5 @@ public class GeoPackageProvider implements MapDataProvider {
 //                }
 //            }
 //        }
-    }
-
-    private interface GoogleMapShapeOwner extends MapDisplayObject.MapOwner {
-        void addedToMap(MapDisplayObject object, GoogleMapShape shape);
-    }
-
-    private static class GoogleMapShapeDisplayObject extends MapDisplayObject {
-
-        private final GoogleMapShape shape;
-
-        private GoogleMapShapeDisplayObject(Object id, GoogleMapShape shape) {
-            super(id);
-            this.shape = shape;
-        }
-
-        @Override
-        public void createFor(MapOwner owner) {
-            ((GoogleMapShapeOwner) owner).addedToMap(this, GoogleMapShapeConverter.addShapeToMap(owner.getMap(), shape));
-        }
     }
 }
