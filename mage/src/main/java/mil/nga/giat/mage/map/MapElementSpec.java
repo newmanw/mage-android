@@ -16,24 +16,36 @@ import com.google.android.gms.maps.model.PolylineOptions;
 import com.google.android.gms.maps.model.TileOverlay;
 import com.google.android.gms.maps.model.TileOverlayOptions;
 
-import java.util.Collection;
-
 public abstract class MapElementSpec {
 
-    @UiThread
     public interface MapElementOwner {
+        @UiThread
         default void addedToMap(MapCircleSpec spec, Circle x) {}
+        @UiThread
         default void addedToMap(MapGroundOverlaySpec spec, GroundOverlay x) {}
+        @UiThread
         default void addedToMap(MapMarkerSpec spec, Marker x) {}
+        @UiThread
         default void addedToMap(MapPolygonSpec spec, Polygon x) {}
+        @UiThread
         default void addedToMap(MapPolylineSpec spec, Polyline x) {}
+        @UiThread
         default void addedToMap(MapTileOverlaySpec spec, TileOverlay x) {}
+    }
+
+    public interface MapElementSpecVisitor {
+        default void visit(MapCircleSpec x) {};
+        default void visit(MapGroundOverlaySpec x) {};
+        default void visit(MapMarkerSpec x) {};
+        default void visit(MapPolygonSpec x) {};
+        default void visit(MapPolylineSpec x) {};
+        default void visit(MapTileOverlaySpec x) {};
     }
 
     public final Object id;
     public final Object data;
 
-    protected MapElementSpec(Object id, Object data) {
+    private MapElementSpec(Object id, Object data) {
         this.id = id;
         this.data = data;
     }
@@ -41,9 +53,11 @@ public abstract class MapElementSpec {
     @UiThread
     public abstract void createFor(MapElementOwner owner, GoogleMap map);
 
+    public abstract void accept(MapElementSpecVisitor visitor);
+
     public static final class MapMarkerSpec extends MapElementSpec {
 
-        private final MarkerOptions options;
+        public final MarkerOptions options;
 
         public MapMarkerSpec(Object id, Object data, MarkerOptions options) {
             super(id, data);
@@ -53,11 +67,16 @@ public abstract class MapElementSpec {
         public void createFor(MapElementOwner owner, GoogleMap map) {
             owner.addedToMap(this, map.addMarker(options));
         }
+
+        @Override
+        public void accept(MapElementSpecVisitor visitor) {
+            visitor.visit(this);
+        }
     }
 
     public static final class MapCircleSpec extends MapElementSpec {
 
-        private final CircleOptions options;
+        public final CircleOptions options;
 
         public MapCircleSpec(Object id, Object data, CircleOptions options) {
             super(id, data);
@@ -67,11 +86,16 @@ public abstract class MapElementSpec {
         public void createFor(MapElementOwner owner, GoogleMap map) {
             owner.addedToMap(this, map.addCircle(options));
         }
+
+        @Override
+        public void accept(MapElementSpecVisitor visitor) {
+            visitor.visit(this);
+        }
     }
 
     public static final class MapPolylineSpec extends MapElementSpec {
 
-        private final PolylineOptions options;
+        public final PolylineOptions options;
 
         public MapPolylineSpec(Object id, Object data, PolylineOptions options) {
             super(id, data);
@@ -82,11 +106,16 @@ public abstract class MapElementSpec {
         public void createFor(MapElementOwner owner, GoogleMap map) {
             owner.addedToMap(this, map.addPolyline(options));
         }
+
+        @Override
+        public void accept(MapElementSpecVisitor visitor) {
+            visitor.visit(this);
+        }
     }
 
     public static final class MapPolygonSpec extends MapElementSpec {
 
-        private final PolygonOptions options;
+        public final PolygonOptions options;
 
         public MapPolygonSpec(Object id, Object data, PolygonOptions options) {
             super(id, data);
@@ -97,11 +126,16 @@ public abstract class MapElementSpec {
         public void createFor(MapElementOwner owner, GoogleMap map) {
             owner.addedToMap(this, map.addPolygon(options));
         }
+
+        @Override
+        public void accept(MapElementSpecVisitor visitor) {
+            visitor.visit(this);
+        }
     }
 
     public static final class MapTileOverlaySpec extends MapElementSpec {
 
-        private final TileOverlayOptions options;
+        public final TileOverlayOptions options;
 
         public MapTileOverlaySpec(Object id, Object data, TileOverlayOptions options) {
             super(id, data);
@@ -112,11 +146,16 @@ public abstract class MapElementSpec {
         public void createFor(MapElementOwner owner, GoogleMap map) {
             owner.addedToMap(this, map.addTileOverlay(options));
         }
+
+        @Override
+        public void accept(MapElementSpecVisitor visitor) {
+            visitor.visit(this);
+        }
     }
 
     public static final class MapGroundOverlaySpec extends MapElementSpec {
 
-        private final GroundOverlayOptions options;
+        public final GroundOverlayOptions options;
 
         public MapGroundOverlaySpec(Object id, Object data, GroundOverlayOptions options) {
             super(id, data);
@@ -127,22 +166,28 @@ public abstract class MapElementSpec {
         public void createFor(MapElementOwner owner, GoogleMap map) {
             owner.addedToMap(this, map.addGroundOverlay(options));
         }
-    }
-
-    public static final class MapMultiElementSpec extends MapElementSpec {
-
-        private final Collection<? extends MapElementSpec> subSpecs;
-
-        public MapMultiElementSpec(Object id, Object data, Collection<? extends MapElementSpec> subSpecs) {
-            super(id, data);
-            this.subSpecs = subSpecs;
-        }
 
         @Override
-        public void createFor(MapElementOwner owner, GoogleMap map) {
-            for (MapElementSpec subSpec : this.subSpecs) {
-                subSpec.createFor(owner, map);
-            }
+        public void accept(MapElementSpecVisitor visitor) {
+            visitor.visit(this);
         }
     }
+
+    // TODO: is this useful? it violates the intention of interacting only with GoogleMap shapes on a one-to-one mapping
+//    public static final class MapMultiElementSpec extends MapElementSpec {
+//
+//        public final Collection<? extends MapElementSpec> subSpecs;
+//
+//        public MapMultiElementSpec(Object id, Object data, Collection<? extends MapElementSpec> subSpecs) {
+//            super(id, data);
+//            this.subSpecs = subSpecs;
+//        }
+//
+//        @Override
+//        public void createFor(MapElementOwner owner, GoogleMap map) {
+//            for (MapElementSpec subSpec : this.subSpecs) {
+//                subSpec.createFor(owner, map);
+//            }
+//        }
+//    }
 }

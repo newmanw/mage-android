@@ -68,4 +68,8 @@ abstract class MapLayerDescriptor protected constructor(
     override fun hashCode(): Int {
         return layerName.hashCode()
     }
+
+    override fun toString(): String {
+        return "${javaClass.simpleName}($layerUri)";
+    }
 }

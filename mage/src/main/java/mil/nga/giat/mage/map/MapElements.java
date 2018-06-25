@@ -9,35 +9,44 @@ import com.google.android.gms.maps.model.Polygon;
 import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.TileOverlay;
 
+import mil.nga.giat.mage.R;
+
 @UiThread
 public interface MapElements {
 
-    interface MapElementVisitor<E> {
-        boolean visit(E element, Object id);
+    @FunctionalInterface
+    interface MapElementVisitor<E, R> {
+        R visit(E element, Object id);
     }
 
-    interface CircleVisitor extends MapElementVisitor<Circle> {
-        boolean visit(Circle x, Object id);
+    @FunctionalInterface
+    interface CircleVisitor<R> extends MapElementVisitor<Circle, R> {
+        R visit(Circle x, Object id);
     }
 
-    interface GroundOverlayVisitor extends MapElementVisitor<GroundOverlay> {
-        boolean visit(GroundOverlay x, Object id);
+    @FunctionalInterface
+    interface GroundOverlayVisitor<R> extends MapElementVisitor<GroundOverlay, R> {
+        R visit(GroundOverlay x, Object id);
     }
 
-    interface MarkerVisitor extends MapElementVisitor<Marker> {
-        boolean visit(Marker x, Object id);
+    @FunctionalInterface
+    interface MarkerVisitor<R> extends MapElementVisitor<Marker, R> {
+        R visit(Marker x, Object id);
     }
 
-    interface PolygonVisitor extends MapElementVisitor<Polygon> {
-        boolean visit(Polygon x, Object id);
+    @FunctionalInterface
+    interface PolygonVisitor<R> extends MapElementVisitor<Polygon, R> {
+        R visit(Polygon x, Object id);
     }
 
-    interface PolylineVisitor extends MapElementVisitor<Polyline> {
-        boolean visit(Polyline x, Object id);
+    @FunctionalInterface
+    interface PolylineVisitor<R> extends MapElementVisitor<Polyline, R> {
+        R visit(Polyline x, Object id);
     }
 
-    interface TileOverlayVisitor extends MapElementVisitor<TileOverlay> {
-        boolean visit(TileOverlay x, Object id);
+    @FunctionalInterface
+    interface TileOverlayVisitor<R> extends MapElementVisitor<TileOverlay, R> {
+        R visit(TileOverlay x, Object id);
     }
 
     interface ComprehensiveMapElementVisitor {
@@ -62,6 +71,20 @@ public interface MapElements {
     boolean contains(Polygon x);
     boolean contains(Polyline x);
     boolean contains(TileOverlay x);
+
+    <R> R withElement(Circle x, CircleVisitor<R> action);
+    <R> R withElement(GroundOverlay x, GroundOverlayVisitor<R> action);
+    <R> R withElement(Marker x, MarkerVisitor<R> action);
+    <R> R withElement(Polygon x, PolygonVisitor<R> action);
+    <R> R withElement(Polyline x, PolylineVisitor<R> action);
+    <R> R withElement(TileOverlay x, TileOverlayVisitor<R> action);
+
+    <R> R withElementForId(Object id, CircleVisitor<R> action);
+    <R> R withElementForId(Object id, GroundOverlayVisitor<R> action);
+    <R> R withElementForId(Object id, MarkerVisitor<R> action);
+    <R> R withElementForId(Object id, PolygonVisitor<R> action);
+    <R> R withElementForId(Object id, PolylineVisitor<R> action);
+    <R> R withElementForId(Object id, TileOverlayVisitor<R> action);
 
     void remove(Circle x);
     void remove(GroundOverlay x);

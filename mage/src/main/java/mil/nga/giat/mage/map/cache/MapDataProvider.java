@@ -7,6 +7,8 @@ import android.support.annotation.WorkerThread;
 
 import com.google.android.gms.maps.GoogleMap;
 
+import java.util.concurrent.Callable;
+
 /**
  * A MapDataProvider represents a specific data format that can put overlays on a map.
  *
@@ -45,7 +47,14 @@ public interface MapDataProvider {
     @WorkerThread
     MapDataResource resolveResource(MapDataResource resource) throws MapDataResolveException;
 
+    /**
+     * Create a {@link mil.nga.giat.mage.map.cache.MapLayerManager.MapLayerAdapter} to add elements and interactions
+     * to the given map for the given layer descriptor.  This method will run on the main/UI thread so the provider
+     * can obtain any data necessary from the map, then return a {@link Callable} that will run on a background
+     * thread to initialize the adapter and avoid blocking the UI thread with any I/O or expensive computations
+     * the adapter might need.
+     */
     @Nullable
     @UiThread
-    MapLayerManager.MapLayerAdapter createMapLayerAdapter(MapLayerDescriptor layerDescriptor, GoogleMap map);
+    Callable<? extends MapLayerManager.MapLayerAdapter> createMapLayerAdapter(MapLayerDescriptor layerDescriptor, GoogleMap map);
 }

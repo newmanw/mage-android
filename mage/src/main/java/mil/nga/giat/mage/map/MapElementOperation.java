@@ -12,6 +12,12 @@ public class MapElementOperation {
     public static final Remove REMOVE = new Remove();
     public static final SetVisibility SHOW = new SetVisibility(true);
     public static final SetVisibility HIDE = new SetVisibility(false);
+    public static final MapElements.CircleVisitor<Circle> GET_CIRCLE = (x, id) -> x;
+    public static final MapElements.GroundOverlayVisitor GET_GROUND_OVERLAY = (x, id) -> x;
+    public static final MapElements.MarkerVisitor<Marker> GET_MARKER = (x, id) -> x;
+    public static final MapElements.PolygonVisitor<Polygon> GET_POLYGON = (x, id) -> x;
+    public static final MapElements.PolylineVisitor<Polyline> GET_POLYLINE = (x, id) -> x;
+    public static final MapElements.TileOverlayVisitor<TileOverlay> GET_TILE_OVERLAY = (x, id) -> x;
 
     public static class Remove implements MapElements.ComprehensiveMapElementVisitor {
 
