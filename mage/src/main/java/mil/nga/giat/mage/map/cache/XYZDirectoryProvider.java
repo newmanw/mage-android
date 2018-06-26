@@ -3,96 +3,41 @@ package mil.nga.giat.mage.map.cache;
 import android.support.annotation.Nullable;
 
 import com.google.android.gms.maps.GoogleMap;
-import com.google.android.gms.maps.MapView;
-import com.google.android.gms.maps.model.LatLng;
-import com.google.android.gms.maps.model.TileOverlay;
+import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.android.gms.maps.model.TileOverlayOptions;
 
 import java.io.File;
 import java.util.Collections;
+import java.util.Iterator;
+import java.util.concurrent.Callable;
 
 import mil.nga.giat.mage.map.FileSystemTileProvider;
+import mil.nga.giat.mage.map.MapElementSpec;
 
 public class XYZDirectoryProvider implements MapDataProvider {
 
-    static class MapLayer extends MapLayerManager.MapLayer {
+    static class LayerAdapter implements MapLayerManager.MapLayerAdapter {
 
-        private final GoogleMap map;
-        private final XYZDirectoryLayerDescriptor cache;
-        private final TileOverlayOptions overlayOptions;
-        private TileOverlay overlay;
+        private final MapElementSpec.MapTileOverlaySpec tilesSpec;
 
-        MapLayer(MapLayerManager manager, XYZDirectoryLayerDescriptor cache) {
-            manager.super();
-            this.map = manager.getMap();
-            this.cache = cache;
-            overlayOptions = new TileOverlayOptions();
+        LayerAdapter(XYZDirectoryLayerDescriptor cache) {
+            TileOverlayOptions overlayOptions = new TileOverlayOptions();
             overlayOptions.tileProvider(new FileSystemTileProvider(256, 256, cache.getDirectory().getAbsolutePath()));
+            tilesSpec = new MapElementSpec.MapTileOverlaySpec(null, null, overlayOptions);
         }
 
         @Override
-        public void addToMap() {
-            overlay = map.addTileOverlay(overlayOptions);
-        }
+        public void onLayerRemoved() {}
 
         @Override
-        public void removeFromMap() {
-            overlay.remove();
-            overlay = null;
-        }
-
-        @Override
-        public void zoomMapToBoundingBox() {
-            // TODO
-        }
-
-        @Override
-        public void show() {
-            overlayOptions.visible(true);
-            if (overlay != null) {
-                overlay.setVisible(true);
-            }
-        }
-
-        @Override
-        public void hide() {
-            overlayOptions.visible(false);
-            if (overlay != null) {
-                overlay.setVisible(false);
-            }
-        }
-
-        @Override
-        protected void setZIndex(int z) {
-            overlayOptions.zIndex(z);
-            if (overlay != null) {
-                overlay.setZIndex(z);
-            }
-        }
-
-        @Nullable
-        @Override
-        public String onMapClick(LatLng latLng, MapView mapView) {
-            return null;
-        }
-
-        @Override
-        public boolean isOnMap() {
-            return overlay != null;
-        }
-
-        @Override
-        public boolean isVisible() {
-            return overlay == null ? overlayOptions.isVisible() : overlay.isVisible();
-        }
-
-        @Override
-        protected void dispose() {
+        public Iterator<? extends MapElementSpec> elementsInBounds(LatLngBounds bounds) {
+            return Collections.singleton(tilesSpec).iterator();
         }
     }
 
     @Override
     public boolean canHandleResource(MapDataResource resource) {
+        // TODO: bit more intelligent inspection of the directory contents
         if ("file".equalsIgnoreCase(resource.getUri().getScheme())) {
             return false;
         }
@@ -110,18 +55,17 @@ public class XYZDirectoryProvider implements MapDataProvider {
         return resource.resolve(new MapDataResource.Resolved(xyzDir.getName(), getClass(), Collections.singleton(desc)), xyzDir.lastModified());
     }
 
+    @Nullable
     @Override
-    public MapLayerManager.MapLayer createMapLayerFromDescriptor(MapLayerDescriptor layerDescriptor, MapLayerManager mapManager) {
-        return new MapLayer(mapManager, (XYZDirectoryLayerDescriptor) layerDescriptor);
+    public Callable<? extends MapLayerManager.MapLayerAdapter> createMapLayerAdapter(MapLayerDescriptor layerDescriptor, GoogleMap map) {
+        return () -> new LayerAdapter((XYZDirectoryLayerDescriptor) layerDescriptor);
     }
 
     /**
      * TODO: this was originally in TileOverlayPreferenceActivity - delete should be function of the provider
      */
     private void deleteXYZCacheOverlay(XYZDirectoryLayerDescriptor xyzCacheOverlay){
-
         File directory = xyzCacheOverlay.getDirectory();
-
         if (directory.canWrite()) {
             deleteFile(directory);
         }

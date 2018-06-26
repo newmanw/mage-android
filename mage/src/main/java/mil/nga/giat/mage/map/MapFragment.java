@@ -954,7 +954,7 @@ public class MapFragment extends Fragment implements
 		staticGeometryCollection.onMapClick(map, latLng, getActivity());
 
 		// TODO: handle overlay clicks
-		mapOverlayManager.onMapClick(latLng, mapView);
+		mapOverlayManager.onMapClick(latLng);
 //		if(!overlays.isEmpty()) {
 //			StringBuilder clickMessage = new StringBuilder();
 //			for (MapLayerDescriptor cacheOverlay : overlays.values()) {

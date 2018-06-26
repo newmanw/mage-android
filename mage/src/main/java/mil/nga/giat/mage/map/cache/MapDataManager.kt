@@ -192,6 +192,7 @@ class MapDataManager(config: Config) : LifecycleOwner {
      * Implement this interface and [register][.addUpdateListener]
      * an instance to receive [notifications][.onMapDataUpdated] when the set of resources changes.
      */
+    @FunctionalInterface
     interface MapDataListener {
         fun onMapDataUpdated(update: MapDataUpdate)
     }
@@ -299,7 +300,10 @@ class MapDataManager(config: Config) : LifecycleOwner {
             }
             for (provider in providers) {
                 if (provider.canHandleResource(resource)) {
-                    return provider.resolveResource(resource)
+                    val resolvedResource = provider.resolveResource(resource)
+                    if (resolvedResource != null) {
+                        return resolvedResource
+                    }
                 }
             }
             throw MapDataResolveException(uri, "no cache provider could handle resource $resource")

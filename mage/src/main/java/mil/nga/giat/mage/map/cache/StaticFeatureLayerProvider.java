@@ -62,8 +62,8 @@ public class StaticFeatureLayerProvider implements MapDataProvider {
     }
 
     @Override
-    public MapLayerManager.MapLayerAdapter createMapLayerAdapter(MapLayerDescriptor layerDescriptor, GoogleMap map) {
-        return new StaticFeatureMapLayer((StaticFeatureLayerDescriptor) layerDescriptor, featureHelper);
+    public Callable<? extends MapLayerManager.MapLayerAdapter> createMapLayerAdapter(MapLayerDescriptor layerDescriptor, GoogleMap map) {
+        return () -> new StaticFeatureMapLayer((StaticFeatureLayerDescriptor) layerDescriptor, featureHelper);
     }
 
     static class StaticFeatureLayerDescriptor extends MapLayerDescriptor {
