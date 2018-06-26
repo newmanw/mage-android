@@ -58,6 +58,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements I
      * for testing {@link StaticFeatureLayerRepository}.  Hopefully something better and global to the rest
      * of the app that allows injection comes along eventually.
      */
+    @FunctionalInterface
     public interface NetworkCondition {
         boolean isConnected();
     }

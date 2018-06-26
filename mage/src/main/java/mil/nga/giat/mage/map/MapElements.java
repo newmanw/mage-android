@@ -9,43 +9,36 @@ import com.google.android.gms.maps.model.Polygon;
 import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.TileOverlay;
 
-import mil.nga.giat.mage.R;
-
 @UiThread
 public interface MapElements {
 
     @FunctionalInterface
-    interface MapElementVisitor<E, R> {
-        R visit(E element, Object id);
-    }
-
-    @FunctionalInterface
-    interface CircleVisitor<R> extends MapElementVisitor<Circle, R> {
+    interface CircleVisitor<R> {
         R visit(Circle x, Object id);
     }
 
     @FunctionalInterface
-    interface GroundOverlayVisitor<R> extends MapElementVisitor<GroundOverlay, R> {
+    interface GroundOverlayVisitor<R> {
         R visit(GroundOverlay x, Object id);
     }
 
     @FunctionalInterface
-    interface MarkerVisitor<R> extends MapElementVisitor<Marker, R> {
+    interface MarkerVisitor<R> {
         R visit(Marker x, Object id);
     }
 
     @FunctionalInterface
-    interface PolygonVisitor<R> extends MapElementVisitor<Polygon, R> {
+    interface PolygonVisitor<R> {
         R visit(Polygon x, Object id);
     }
 
     @FunctionalInterface
-    interface PolylineVisitor<R> extends MapElementVisitor<Polyline, R> {
+    interface PolylineVisitor<R> {
         R visit(Polyline x, Object id);
     }
 
     @FunctionalInterface
-    interface TileOverlayVisitor<R> extends MapElementVisitor<TileOverlay, R> {
+    interface TileOverlayVisitor<R> {
         R visit(TileOverlay x, Object id);
     }
 
@@ -72,19 +65,19 @@ public interface MapElements {
     boolean contains(Polyline x);
     boolean contains(TileOverlay x);
 
-    <R> R withElement(Circle x, CircleVisitor<R> action);
-    <R> R withElement(GroundOverlay x, GroundOverlayVisitor<R> action);
-    <R> R withElement(Marker x, MarkerVisitor<R> action);
-    <R> R withElement(Polygon x, PolygonVisitor<R> action);
-    <R> R withElement(Polyline x, PolylineVisitor<R> action);
-    <R> R withElement(TileOverlay x, TileOverlayVisitor<R> action);
+    <T> T withElement(Circle x, CircleVisitor<T> action);
+    <T> T withElement(GroundOverlay x, GroundOverlayVisitor<T> action);
+    <T> T withElement(Marker x, MarkerVisitor<T> action);
+    <T> T withElement(Polygon x, PolygonVisitor<T> action);
+    <T> T withElement(Polyline x, PolylineVisitor<T> action);
+    <T> T withElement(TileOverlay x, TileOverlayVisitor<T> action);
 
-    <R> R withElementForId(Object id, CircleVisitor<R> action);
-    <R> R withElementForId(Object id, GroundOverlayVisitor<R> action);
-    <R> R withElementForId(Object id, MarkerVisitor<R> action);
-    <R> R withElementForId(Object id, PolygonVisitor<R> action);
-    <R> R withElementForId(Object id, PolylineVisitor<R> action);
-    <R> R withElementForId(Object id, TileOverlayVisitor<R> action);
+    <T> T withElementForId(Object id, CircleVisitor<T> action);
+    <T> T withElementForId(Object id, GroundOverlayVisitor<T> action);
+    <T> T withElementForId(Object id, MarkerVisitor<T> action);
+    <T> T withElementForId(Object id, PolygonVisitor<T> action);
+    <T> T withElementForId(Object id, PolylineVisitor<T> action);
+    <T> T withElementForId(Object id, TileOverlayVisitor<T> action);
 
     void remove(Circle x);
     void remove(GroundOverlay x);
