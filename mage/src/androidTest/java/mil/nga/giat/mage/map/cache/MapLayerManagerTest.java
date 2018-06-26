@@ -20,7 +20,6 @@ import org.junit.Test;
 import org.junit.rules.TestName;
 import org.junit.runner.RunWith;
 import org.junit.runners.Suite;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.mockito.verification.VerificationMode;
 
@@ -29,13 +28,11 @@ import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -45,11 +42,12 @@ import mil.nga.giat.mage.map.BasicMapElementContainer;
 import mil.nga.giat.mage.map.MapElementSpec;
 import mil.nga.giat.mage.map.MapElements;
 import mil.nga.giat.mage.test.AsyncTesting;
+import mil.nga.giat.mage.test.TargetSuppliesPropertyValueMatcher;
 
 import static java.util.Objects.requireNonNull;
-import static mil.nga.giat.mage.map.MapElementOperation.GET_MARKER;
 import static mil.nga.giat.mage.test.AsyncTesting.waitForMainThreadToRun;
 import static org.hamcrest.CoreMatchers.equalTo;
+import static org.hamcrest.CoreMatchers.everyItem;
 import static org.hamcrest.CoreMatchers.not;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasItem;
@@ -220,10 +218,6 @@ public class MapLayerManagerTest {
     }
 
     static Set<MapLayerDescriptor> setOf(MapLayerDescriptor... things) {
-        return Collections.unmodifiableSet(new HashSet<>(Arrays.asList(things)));
-    }
-
-    static Set<MapDataResource> setOf(MapDataResource... things) {
         return Collections.unmodifiableSet(new HashSet<>(Arrays.asList(things)));
     }
 
@@ -782,6 +776,16 @@ public class MapLayerManagerTest {
         }
 
         @Test
+        public void hidesAllElementsOfALayer() {
+            fail("unimplemented");
+        }
+
+        @Test
+        public void showsAllElementsOfALayer() {
+            fail("unimplemented");
+        }
+
+        @Test
         public void hidesLayerIfHiddenWhileLayerIsLoading() {
             fail("unimplemented");
         }
@@ -893,6 +897,7 @@ public class MapLayerManagerTest {
         }
 
         @Test
+        @SuppressWarnings("UnnecessaryLocalVariable")
         public void setsZOrderOfOverlaysOnMapFromComprehensiveUpdate() throws InterruptedException {
 
             MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, map);
@@ -928,34 +933,28 @@ public class MapLayerManagerTest {
                 assertThat(orderMod.indexOf(c1o1), is(c1o1zMod));
                 assertThat(orderMod.indexOf(c2o1), is(c2o1zMod));
                 assertThat(orderMod.indexOf(c2o2), is(c2o2zMod));
-                assertThat(c1o1OnMap.getZIndex(), is(c1o1zMod));
-                assertThat(c2o1OnMap.getZIndex(), is(c2o1zMod));
-                assertThat(c2o2OnMap.getZIndex(), is(c2o2zMod));
+                assertThat(c1o1OnMap.elements.withElementForId("c1o1.1", (Marker x, Object id) -> x.getZIndex()), is(c1o1zMod));
+                assertThat(c2o1OnMap.elements.withElementForId("c2o1.1", (Marker x, Object id) -> x.getZIndex()), is(c2o1zMod));
+                assertThat(c2o1OnMap.elements.withElementForId("c2o1.2", (Marker x, Object id) -> x.getZIndex()), is(c2o2zMod));
             });
         }
 
         @Test
         public void setsZOrderOfHiddenOverlayOnMapFromComprehensiveUpdate() throws InterruptedException {
 
-            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
+            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, map);
             List<MapLayerDescriptor> order = overlayManager.getLayersInZOrder();
             int c1o1z = order.indexOf(c1o1);
             int c2o1z = order.indexOf(c2o1);
-            TestLayerAdapter c1o1OnMap = new TestLayerAdapter(overlayManager);
-            TestLayerAdapter c2o1OnMap = new TestLayerAdapter(overlayManager);
-
-            when(provider1.createMapLayerAdapter(c1o1, overlayManager))
-                .thenReturn(new TestUpdateLayer(c1o1, overlayManager).withResultLayer(c1o1OnMap));
-            when(provider2.createMapLayerAdapter(c2o1, overlayManager))
-                .thenReturn(new TestUpdateLayer(c2o1, overlayManager).withResultLayer(c2o1OnMap));
+            TestLayerAdapter c1o1OnMap = prepareLayerAdapterStubs(overlayManager, c1o1, markerSpec("c1o1.1"));
+            TestLayerAdapter c2o1OnMap = prepareLayerAdapterStubs(overlayManager, c2o1, markerSpec("c2o1.1"));
 
             waitForMainThreadToRun(() -> {
                 overlayManager.showLayer(c1o1);
                 overlayManager.showLayer(c2o1);
             });
 
-            onMainThread.assertThatWithin(oneSecond(), c1o1OnMap::getZIndex, is(c1o1z));
-            onMainThread.assertThatWithin(oneSecond(), c2o1OnMap::getZIndex, is(c2o1z));
+            onMainThread.assertThatWithin(oneSecond(), () -> c1o1OnMap.isOnMap() && c2o1OnMap.isOnMap(), is(true));
 
             waitForMainThreadToRun(() -> overlayManager.hideLayer(c1o1));
 
@@ -969,29 +968,19 @@ public class MapLayerManagerTest {
                 assertThat(orderMod, equalTo(order));
                 assertThat(orderMod.indexOf(c1o1), is(c2o1z));
                 assertThat(orderMod.indexOf(c2o1), is(c1o1z));
-                assertTrue(c1o1OnMap.isOnMap());
-                assertFalse(c1o1OnMap.isVisible());
-                assertTrue(c2o1OnMap.isOnMap());
-                assertTrue(c2o1OnMap.isVisible());
+                c1o1OnMap.mockedElements.verify(Marker.class, "c1o1.1").setZIndex(c2o1z);
+                c2o1OnMap.mockedElements.verify(Marker.class, "c2o1.1").setZIndex(c1o1z);
             });
         }
 
         @Test
         public void doesNotSetZOrderIfNewOrderHasDifferingElements() throws InterruptedException {
 
-            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
+            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, map);
             List<MapLayerDescriptor> invalidOrder = overlayManager.getLayersInZOrder();
-            TestLayerAdapter firstOnMap = new TestLayerAdapter(overlayManager);
             MapLayerDescriptor first = invalidOrder.get(0);
 
-            when(provider1.createMapLayerAdapter(first, overlayManager))
-                .thenReturn(new TestUpdateLayer(first, overlayManager).withResultLayer(firstOnMap));
-            when(provider2.createMapLayerAdapter(first, overlayManager))
-                .thenReturn(new TestUpdateLayer(first, overlayManager).withResultLayer(firstOnMap));
-
-            waitForMainThreadToRun(() -> overlayManager.showLayer(first));
-
-            onMainThread.assertThatWithin(oneSecond(), firstOnMap::getZIndex, is(0));
+            TestLayerAdapter firstOnMap = showAndWaitForLayerOnMap(overlayManager, first, markerSpec("m1"));
 
             invalidOrder.set(1, new MapLayerDescriptorTest.TestLayerDescriptor1("c1.1.tainted", c1Uri, provider1.getClass()));
 
@@ -1002,27 +991,19 @@ public class MapLayerManagerTest {
 
                 assertThat(unchangedOrder, not(equalTo(invalidOrder)));
                 assertThat(unchangedOrder, not(hasItem(invalidOrder.get(1))));
-                assertThat(firstOnMap.getZIndex(), is(0));
+                firstOnMap.mockedElements.verify(Marker.class, "m1", never()).setZIndex(any());
             });
         }
 
         @Test
         public void doesNotSetZOrderIfNewOrderHasDifferentSize() throws InterruptedException {
 
-            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
+            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, map);
             List<MapLayerDescriptor> invalidOrder = overlayManager.getLayersInZOrder();
-            TestLayerAdapter lastOnMap = new TestLayerAdapter(overlayManager);
             int lastZIndex = invalidOrder.size() - 1;
             MapLayerDescriptor last = invalidOrder.get(lastZIndex);
 
-            when(provider1.createMapLayerAdapter(last, overlayManager))
-                .thenReturn(new TestUpdateLayer(last, overlayManager).withResultLayer(lastOnMap));
-            when(provider2.createMapLayerAdapter(last, overlayManager))
-                .thenReturn(new TestUpdateLayer(last, overlayManager).withResultLayer(lastOnMap));
-
-            waitForMainThreadToRun(() -> overlayManager.showLayer(last));
-
-            onMainThread.assertThatWithin(oneSecond(), lastOnMap::getZIndex, is(lastZIndex));
+            TestLayerAdapter lastOnMap = showAndWaitForLayerOnMap(overlayManager, last, markerSpec("m1"));
 
             invalidOrder.remove(0);
 
@@ -1033,7 +1014,7 @@ public class MapLayerManagerTest {
 
                 assertThat(unchangedOrder, not(equalTo(invalidOrder)));
                 assertThat(unchangedOrder.size(), is(invalidOrder.size() + 1));
-                assertThat(lastOnMap.getZIndex(), is(lastZIndex));
+                lastOnMap.mockedElements.verify(Marker.class, "m1", never()).setZIndex(any());
             });
         }
 
@@ -1055,32 +1036,25 @@ public class MapLayerManagerTest {
         Map<MapLayerDescriptor, TestLayerAdapter> overlaysOnMap;
 
         @Before
-        public void addAllOverlaysToMap() {
+        public void addAllOverlaysToMap() throws InterruptedException {
             overlayManager = new MapLayerManager(mapDataManager, providers, null);
             overlaysOnMap = new HashMap<>();
             List<MapLayerDescriptor> orderByName = overlayManager.getLayersInZOrder();
-            Collections.sort(orderByName, new Comparator<MapLayerDescriptor>() {
-                @Override
-                public int compare(MapLayerDescriptor o1, MapLayerDescriptor o2) {
-                    return qnameOf(o1).compareTo(qnameOf(o2));
-                }
-            });
+            Collections.sort(orderByName, (o1, o2) -> qnameOf(o1).compareTo(qnameOf(o2)));
 
             assertTrue(overlayManager.setZOrder(orderByName));
 
             for (MapLayerDescriptor overlay : orderByName) {
-                TestLayerAdapter onMap = new TestLayerAdapter(overlayManager);
+                TestLayerAdapter onMap = prepareLayerAdapterStubs(overlayManager, overlay, markerSpec(overlay.getLayerName() + ".m1"));
                 overlaysOnMap.put(overlay, onMap);
-                if (overlay.getDataType() == provider1.getClass()) {
-                    when(provider1.createMapLayerAdapter(overlay, overlayManager))
-                        .thenReturn(new TestUpdateLayer(overlay, overlayManager).withResultLayer(onMap));
-                }
-                else if (overlay.getDataType() == provider2.getClass()) {
-                    when(provider2.createMapLayerAdapter(overlay, overlayManager))
-                        .thenReturn(new TestUpdateLayer(overlay, overlayManager).withResultLayer(onMap));
-                }
-                waitForMainThreadToRun(() -> overlayManager.showLayer(overlay));
             }
+            waitForMainThreadToRun(() -> {
+                for (MapLayerDescriptor layerDesc : overlaysOnMap.keySet()) {
+                    overlayManager.showLayer(layerDesc);
+                }
+            });
+            onMainThread.assertThatWithin(oneSecond(), overlaysOnMap::values,
+                everyItem(TargetSuppliesPropertyValueMatcher.withValueSuppliedBy(TestLayerAdapter::isOnMap, is(true))));
         }
 
         private void assertZIndexMove(int from, int to) {
@@ -1089,14 +1063,14 @@ public class MapLayerManagerTest {
             MapLayerDescriptor target = expectedOrder.remove(from);
             expectedOrder.add(to, target);
 
-            assertTrue(overlayManager.moveZIndex(from, to));
+            waitForMainThreadToRun(() -> assertTrue(overlayManager.moveZIndex(from, to)));
 
             order = overlayManager.getLayersInZOrder();
             assertThat(String.format("%d to %d", from, to), order, equalTo(expectedOrder));
             for (int zIndex = 0; zIndex < expectedOrder.size(); zIndex++) {
                 MapLayerDescriptor overlay = expectedOrder.get(zIndex);
                 TestLayerAdapter onMap = overlaysOnMap.get(overlay);
-                assertThat(qnameOf(overlay) + " on map", onMap.getZIndex(), is(zIndex));
+                onMap.mockedElements.verify(Marker.class, overlay.getLayerName() + ".m1").setZIndex(zIndex);
             }
         }
 

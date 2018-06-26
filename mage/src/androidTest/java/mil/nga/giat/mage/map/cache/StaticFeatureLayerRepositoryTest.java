@@ -61,7 +61,7 @@ import mil.nga.wkb.geom.Point;
 import static java.util.Collections.emptyMap;
 import static java.util.Collections.emptySet;
 import static mil.nga.giat.mage.test.AsyncTesting.waitForMainThreadToRun;
-import static mil.nga.giat.mage.test.TargetSuppliesPropertyValueMatcher.withValueSuppiedBy;
+import static mil.nga.giat.mage.test.TargetSuppliesPropertyValueMatcher.withValueSuppliedBy;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.hasValue;
 import static org.hamcrest.Matchers.is;
@@ -593,8 +593,8 @@ public class StaticFeatureLayerRepositoryTest {
         MapDataResource resource = resources.get(0);
 
         assertThat(resource.getLayers().values(), hasSize(2));
-        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("layer1"))));
-        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("layer2"))));
+        assertThat(resource.getLayers(), hasValue(withValueSuppliedBy(MapLayerDescriptor::getLayerName, is("layer1"))));
+        assertThat(resource.getLayers(), hasValue(withValueSuppliedBy(MapLayerDescriptor::getLayerName, is("layer2"))));
     }
 
 
@@ -620,8 +620,8 @@ public class StaticFeatureLayerRepositoryTest {
         assertThat(resources, hasSize(1));
         MapDataResource resource = resources.get(0);
         assertThat(resource.getLayers().values(), hasSize(2));
-        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("layer1"))));
-        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("layer2"))));
+        assertThat(resource.getLayers(), hasValue(withValueSuppliedBy(MapLayerDescriptor::getLayerName, is("layer1"))));
+        assertThat(resource.getLayers(), hasValue(withValueSuppliedBy(MapLayerDescriptor::getLayerName, is("layer2"))));
     }
 
     @Test
@@ -654,8 +654,8 @@ public class StaticFeatureLayerRepositoryTest {
         assertThat(resources, hasSize(1));
         MapDataResource resource = resources.get(0);
         assertThat(resource.getLayers().values(), hasSize(2));
-        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("layer1"))));
-        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("layer2"))));
+        assertThat(resource.getLayers(), hasValue(withValueSuppliedBy(MapLayerDescriptor::getLayerName, is("layer1"))));
+        assertThat(resource.getLayers(), hasValue(withValueSuppliedBy(MapLayerDescriptor::getLayerName, is("layer2"))));
     }
 
     @Test
@@ -679,7 +679,7 @@ public class StaticFeatureLayerRepositoryTest {
         assertThat(observed.getValue(), sameInstance(resources));
         MapDataResource resource = (MapDataResource) resources.toArray()[0];
         assertThat(resource.getLayers().values(), hasSize(1));
-        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("layer1"))));
+        assertThat(resource.getLayers(), hasValue(withValueSuppliedBy(MapLayerDescriptor::getLayerName, is("layer1"))));
 
         when(network.isConnected()).thenReturn(true);
         when(layerService.getLayers(currentEvent)).thenThrow(new IOException("deliberate fail"));
@@ -697,7 +697,7 @@ public class StaticFeatureLayerRepositoryTest {
         assertThat(resources, hasSize(1));
         resource = (MapDataResource) resources.toArray()[0];
         assertThat(resource.getLayers().values(), hasSize(1));
-        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("layer1"))));
+        assertThat(resource.getLayers(), hasValue(withValueSuppliedBy(MapLayerDescriptor::getLayerName, is("layer1"))));
         verify(layerHelper, never()).deleteByEvent(any());
         verify(layerHelper, never()).delete(any());
         verify(layerHelper, never()).deleteAll();
@@ -727,7 +727,7 @@ public class StaticFeatureLayerRepositoryTest {
         assertThat(resources, hasSize(1));
         MapDataResource resource = (MapDataResource) resources.toArray()[0];
         assertThat(resource.getLayers().values(), hasSize(1));
-        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("layer1"))));
+        assertThat(resource.getLayers(), hasValue(withValueSuppliedBy(MapLayerDescriptor::getLayerName, is("layer1"))));
 
         when(network.isConnected()).thenReturn(true);
         when(eventHelper.getCurrentEvent()).thenReturn(changedEvent);
@@ -747,7 +747,7 @@ public class StaticFeatureLayerRepositoryTest {
         assertThat(resources, hasSize(1));
         resource = (MapDataResource) resources.toArray()[0];
         assertThat(resource.getLayers().values(), hasSize(1));
-        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("alt_event_layer"))));
+        assertThat(resource.getLayers(), hasValue(withValueSuppliedBy(MapLayerDescriptor::getLayerName, is("alt_event_layer"))));
         verify(layerHelper, never()).deleteByEvent(any());
         verify(layerHelper, never()).delete(any());
         verify(layerHelper, never()).deleteAll();
@@ -815,7 +815,7 @@ public class StaticFeatureLayerRepositoryTest {
         assertThat(repo.getValue(), notNullValue());
         MapDataResource resource = (MapDataResource) repo.getValue().toArray()[0];
         assertThat(resource.getLayers().values(), hasSize(1));
-        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("layer1"))));
+        assertThat(resource.getLayers(), hasValue(withValueSuppliedBy(MapLayerDescriptor::getLayerName, is("layer1"))));
     }
 
     @Test
@@ -862,7 +862,7 @@ public class StaticFeatureLayerRepositoryTest {
         assertThat(repo.getValue(), notNullValue());
         MapDataResource resource = (MapDataResource) repo.getValue().toArray()[0];
         assertThat(resource.getLayers().values(), hasSize(1));
-        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("layer1"))));
+        assertThat(resource.getLayers(), hasValue(withValueSuppliedBy(MapLayerDescriptor::getLayerName, is("layer1"))));
     }
 
     @Test
@@ -984,7 +984,7 @@ public class StaticFeatureLayerRepositoryTest {
         verify(observer, times(1)).onChanged(observed.capture());
         assertThat(observed.getValue(), hasSize(1));
         MapDataResource resource = (MapDataResource) observed.getValue().toArray()[0];
-        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("event2.layer1"))));
+        assertThat(resource.getLayers(), hasValue(withValueSuppliedBy(MapLayerDescriptor::getLayerName, is("event2.layer1"))));
     }
 
     @Test
@@ -1090,7 +1090,7 @@ public class StaticFeatureLayerRepositoryTest {
 
         assertThat(observed.getValue(), hasSize(1));
         MapDataResource resource = (MapDataResource) observed.getValue().toArray()[0];
-        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("event2.layer1"))));
+        assertThat(resource.getLayers(), hasValue(withValueSuppliedBy(MapLayerDescriptor::getLayerName, is("event2.layer1"))));
         assertThat(repo.getValue(), sameInstance(observed.getValue()));
 
         // TODO: this test was showing some strange behavior, failing only every once in a while with some Mockito verification errors,
@@ -1201,7 +1201,7 @@ public class StaticFeatureLayerRepositoryTest {
 
         assertThat(observed.getValue(), hasSize(1));
         MapDataResource resource = (MapDataResource) observed.getValue().toArray()[0];
-        assertThat(resource.getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("event2.layer1"))));
+        assertThat(resource.getLayers(), hasValue(withValueSuppliedBy(MapLayerDescriptor::getLayerName, is("event2.layer1"))));
         assertThat(repo.getValue(), sameInstance(observed.getValue()));
     }
 
@@ -1275,7 +1275,7 @@ public class StaticFeatureLayerRepositoryTest {
         verify(observer, times(1)).onChanged(observed.capture());
         Set<MapDataResource> mapData = observed.getValue();
         assertThat(repo.getValue(), sameInstance(mapData));
-        assertThat(mapData.toArray(new MapDataResource[1])[0].getLayers(), hasValue(withValueSuppiedBy(MapLayerDescriptor::getLayerName, is("event2Layer"))));
+        assertThat(mapData.toArray(new MapDataResource[1])[0].getLayers(), hasValue(withValueSuppliedBy(MapLayerDescriptor::getLayerName, is("event2Layer"))));
     }
 
     @Test
