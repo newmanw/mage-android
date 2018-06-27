@@ -23,6 +23,12 @@ class MapDataResource private constructor (val uri: URI, val repositoryId: Strin
      */
     constructor(source: MapDataResource, resolved: Resolved) : this(source.uri, source.repositoryId, source.contentTimestamp, resolved)
 
+    init {
+        if (!validateUri(uri)) {
+            throw IllegalArgumentException("uri must be non-opaque, absolute, and have a path: $uri")
+        }
+    }
+
     data class Resolved(val name: String, val type: Class<out MapDataProvider>) {
         constructor(name: String, type: Class<out MapDataProvider>, layerDescriptors: Set<MapLayerDescriptor>)
                 : this(name, type) {
@@ -82,5 +88,13 @@ class MapDataResource private constructor (val uri: URI, val repositoryId: Strin
             return "${resolved.name}: ${resolved.type}"
         }
         return uri.toString()
+    }
+
+    companion object {
+
+        @JvmStatic
+        fun validateUri(x: URI): Boolean {
+            return x.isAbsolute && !x.isOpaque
+        }
     }
 }

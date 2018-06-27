@@ -9,8 +9,11 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.UUID;
 
+import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class MapLayerDescriptorTest {
 
@@ -37,7 +40,7 @@ public class MapLayerDescriptorTest {
 
     private URI makeUri() {
         try {
-            return new URI(MapLayerDescriptorTest.class.getSimpleName(), testName.getMethodName(), UUID.randomUUID().toString(), null);
+            return new URI(MapLayerDescriptorTest.class.getSimpleName(), testName.getMethodName(), "/" + UUID.randomUUID().toString(), null);
         }
         catch (URISyntaxException e) {
             throw new Error(e);
@@ -91,5 +94,21 @@ public class MapLayerDescriptorTest {
         assertFalse(overlay1.equals(overlay2));
         assertFalse(overlay1.equals(overlay3));
         assertFalse(overlay1.equals(overlay4));
+    }
+
+    @Test
+    public void createsHierarchicalLayerUriWhenResourceUriPathHasTrailingSlash() throws URISyntaxException {
+        URI resourceUri = new URI("mage", "test", "/trailing/slash/", null);
+        TestLayerDescriptor1 desc = new TestLayerDescriptor1("testLayer", resourceUri, TestMapDataProvider1.class);
+
+        assertThat(desc.getLayerUri(), is(new URI("mage", "test", "/trailing/slash/testLayer", null)));
+    }
+
+    @Test
+    public void createsHierarchicalLayerUriWhenResourceUriPathHasNoTrailingSlash() throws URISyntaxException {
+        URI resourceUri = new URI("mage", "test", "/no/trailing/slash", null);
+        TestLayerDescriptor1 desc = new TestLayerDescriptor1("testLayer", resourceUri, TestMapDataProvider1.class);
+
+        assertThat(desc.getLayerUri(), is(new URI("mage", "test", "/no/trailing/slash/testLayer", null)));
     }
 }

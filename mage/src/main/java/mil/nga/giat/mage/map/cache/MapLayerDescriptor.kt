@@ -28,28 +28,33 @@ abstract class MapLayerDescriptor protected constructor(
          */
         val dataType: Class<out MapDataProvider>) {
 
-    val layerUri: URI = resourceUri.resolve(URI(null, null, layerName, null))
+    val layerUri: URI = when {
+        resourceUri.rawPath.endsWith("/") ->
+            resourceUri.resolve(URI(null, null, layerName, null))
+        else ->
+            resourceUri.resolve(URI(null, null, resourceUri.rawPath + "/" + layerName, null))
+    }
 
     /**
      * Return an optional human-readable alternative to the [layerName].
      * The default value is the [layerName].
      */
     open var layerTitle: String = layerName
-        protected set
+    protected set
 
-    /**
-     * Return the icon image resource ID for this layer.
-     * @return a [Android resource][android.content.res.Resources] ID or null
-     */
-    open val iconImageResourceId: Int?
-        get() = null
+            /**
+             * Return the icon image resource ID for this layer.
+             * @return a [Android resource][android.content.res.Resources] ID or null
+             */
+            open val iconImageResourceId: Int?
+    get() = null
 
     /**
      * Return detailed information about this layer to display
      * @return an info string or null
      */
     open val info: String?
-        get() = null
+    get() = null
 
     /**
      * Two `MapLayerDescriptor` instances are equal if they have the
