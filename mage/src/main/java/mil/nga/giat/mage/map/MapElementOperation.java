@@ -12,12 +12,12 @@ public class MapElementOperation {
     public static final Remove REMOVE = new Remove();
     public static final SetVisibility SHOW = new SetVisibility(true);
     public static final SetVisibility HIDE = new SetVisibility(false);
-    public static final MapElements.CircleVisitor GET_CIRCLE = (Circle x, Object id) -> x;
-    public static final MapElements.GroundOverlayVisitor GET_GROUND_OVERLAY = (GroundOverlay x, Object id) -> x;
-    public static final MapElements.MarkerVisitor GET_MARKER = (Marker x, Object id) -> x;
-    public static final MapElements.PolygonVisitor GET_POLYGON = (Polygon x, Object id) -> x;
-    public static final MapElements.PolylineVisitor GET_POLYLINE = (Polyline x, Object id) -> x;
-    public static final MapElements.TileOverlayVisitor GET_TILE_OVERLAY = (TileOverlay x, Object id) -> x;
+    public static final MapElements.CircleVisitor<Circle> GET_CIRCLE = (Circle x, Object id) -> x;
+    public static final MapElements.GroundOverlayVisitor<GroundOverlay> GET_GROUND_OVERLAY = (GroundOverlay x, Object id) -> x;
+    public static final MapElements.MarkerVisitor<Marker> GET_MARKER = (Marker x, Object id) -> x;
+    public static final MapElements.PolygonVisitor<Polygon> GET_POLYGON = (Polygon x, Object id) -> x;
+    public static final MapElements.PolylineVisitor<Polyline> GET_POLYLINE = (Polyline x, Object id) -> x;
+    public static final MapElements.TileOverlayVisitor<TileOverlay> GET_TILE_OVERLAY = (TileOverlay x, Object id) -> x;
 
     public static class Remove implements MapElements.ComprehensiveMapElementVisitor {
 
