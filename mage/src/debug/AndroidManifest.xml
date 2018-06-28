@@ -1,0 +1,10 @@
+<manifest
+    xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application android:theme="@style/AppTheme">
+
+        <activity android:name="mil.nga.giat.mage.test.TestMapActivity"/>
+
+    </application>
+
+</manifest>

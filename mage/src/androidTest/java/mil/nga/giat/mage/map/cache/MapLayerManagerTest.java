@@ -1,6 +1,7 @@
 package mil.nga.giat.mage.map.cache;
 
-import android.support.test.filters.SmallTest;
+import android.support.test.filters.MediumTest;
+import android.support.test.rule.ActivityTestRule;
 import android.support.test.runner.AndroidJUnit4;
 
 import com.google.android.gms.maps.GoogleMap;
@@ -21,7 +22,6 @@ import org.junit.rules.TestName;
 import org.junit.runner.RunWith;
 import org.junit.runners.Suite;
 import org.mockito.Mockito;
-import org.mockito.verification.VerificationMode;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -43,12 +43,17 @@ import mil.nga.giat.mage.map.MapElementSpec;
 import mil.nga.giat.mage.map.MapElements;
 import mil.nga.giat.mage.test.AsyncTesting;
 import mil.nga.giat.mage.test.TargetSuppliesPropertyValueMatcher;
+import mil.nga.giat.mage.test.TestMapActivity;
 
+import static java.util.Collections.emptyMap;
 import static java.util.Objects.requireNonNull;
+import static mil.nga.giat.mage.map.MapElementOperation.GET_MARKER;
 import static mil.nga.giat.mage.test.AsyncTesting.waitForMainThreadToRun;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.everyItem;
 import static org.hamcrest.CoreMatchers.not;
+import static org.hamcrest.CoreMatchers.notNullValue;
+import static org.hamcrest.Matchers.closeTo;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
@@ -67,70 +72,15 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.withSettings;
 
+/**
+ * TODO: Use UIAutomator to verify markers are or are not on map. https://developer.android.com/training/testing/ui-testing/uiautomator-testing
+ * One can set MarkerOptions.title() and use UIAutomator to search for that title in the description to obtain the interactive View element.
+ * Be aware that Google Maps API adds a period after the title in the searchable description desc.  One can also optionally set MarkerOptions.snippet()
+ * which Google Maps API will append with a space after the title and period, as well as punctuating the snippet value with a period.
+ */
 @RunWith(Suite.class)
 @Suite.SuiteClasses({MapLayerManagerTest.MainInteractions.class, MapLayerManagerTest.ZOrder.class, MapLayerManagerTest.MovingSingleOverlayZIndex.class})
 public class MapLayerManagerTest {
-
-
-    static class MockMapElements implements MapElementSpec.MapElementSpecVisitor {
-
-        final GoogleMap mockMap;
-        final Map<Object, Object> mockElements = new HashMap<>();
-
-        MockMapElements(GoogleMap mockMap) {
-            this.mockMap = mockMap;
-        }
-
-        @Override
-        public void visit(MapElementSpec.MapCircleSpec x) {
-            Circle y = mock(Circle.class);
-            mockElements.put(x.id, y);
-            when(mockMap.addCircle(x.options)).thenReturn(y);
-        }
-
-        @Override
-        public void visit(MapElementSpec.MapGroundOverlaySpec x) {
-            GroundOverlay y = mock(GroundOverlay.class);
-            mockElements.put(x.id, y);
-            when(mockMap.addGroundOverlay(x.options)).thenReturn(y);
-        }
-
-        @Override
-        public void visit(MapElementSpec.MapMarkerSpec x) {
-            Marker y = mock(Marker.class);
-            mockElements.put(x.id, y);
-            when(mockMap.addMarker(x.options)).thenReturn(y);
-        }
-
-        @Override
-        public void visit(MapElementSpec.MapPolygonSpec x) {
-            Polygon y = mock(Polygon.class);
-            mockElements.put(x.id, y);
-            when(mockMap.addPolygon(x.options)).thenReturn(y);
-        }
-
-        @Override
-        public void visit(MapElementSpec.MapPolylineSpec x) {
-            Polyline y = mock(Polyline.class);
-            mockElements.put(x.id, y);
-            when(mockMap.addPolyline(x.options)).thenReturn(y);
-        }
-
-        @Override
-        public void visit(MapElementSpec.MapTileOverlaySpec x) {
-            TileOverlay y = mock(TileOverlay.class);
-            mockElements.put(x.id, y);
-            when(mockMap.addTileOverlay(x.options)).thenReturn(y);
-        }
-
-        <T> T verify(Class<T> type, Object id) {
-            return type.cast(Mockito.verify(mockElements.get(id)));
-        }
-
-        <T> T verify(Class<T> type, Object id, VerificationMode mode) {
-            return type.cast(Mockito.verify(mockElements.get(id), mode));
-        }
-    }
 
     static class TestLayerAdapter implements MapLayerManager.MapLayerAdapter {
 
@@ -138,22 +88,19 @@ public class MapLayerManagerTest {
         final MapDataProvider provider;
         final Map<Object, MapElementSpec> elementSpecs = new HashMap<>();
         final MapElements elements = new BasicMapElementContainer();
-        final MockMapElements mockedElements;
         AtomicBoolean elementsQueried = new AtomicBoolean(false);
         AtomicBoolean removed = new AtomicBoolean(false);
 
-        TestLayerAdapter(MapLayerDescriptor layerDesc, MapDataProvider provider, GoogleMap map, List<? extends MapElementSpec> elementSpecs) {
+        TestLayerAdapter(MapLayerDescriptor layerDesc, MapDataProvider provider, List<? extends MapElementSpec> elementSpecs) {
             this.layerDesc = layerDesc;
             this.provider = provider;
-            mockedElements = new MockMapElements(map);
-            for (MapElementSpec e : elementSpecs) {
-                this.elementSpecs.put(e.id, e);
-                e.accept(mockedElements);
+            for (MapElementSpec spec : elementSpecs) {
+                this.elementSpecs.put(spec.id, spec);
             }
         }
 
-        TestLayerAdapter(MapLayerDescriptor layerDesc, MapDataProvider provider, GoogleMap map, MapElementSpec... elementSpecs) {
-            this(layerDesc, provider, map, Arrays.asList(elementSpecs));
+        TestLayerAdapter(MapLayerDescriptor layerDesc, MapDataProvider provider, MapElementSpec... elementSpecs) {
+            this(layerDesc, provider, Arrays.asList(elementSpecs));
         }
 
         @Override
@@ -229,8 +176,16 @@ public class MapLayerManagerTest {
         return map;
     }
 
-    static long oneSecond() {
-        return 1000L;
+    static Map<URI, MapLayerDescriptor> layerMapOf(MapDataResource... resources) {
+        Map<URI, MapLayerDescriptor> layers = new HashMap<>();
+        for (MapDataResource res : resources) {
+            layers.putAll(res.getLayers());
+        }
+        return layers;
+    }
+
+    static long timeout() {
+        return 5000L;
     }
 
     static class BaseConfig implements MapDataManager.CreateUpdatePermission {
@@ -243,10 +198,13 @@ public class MapLayerManagerTest {
         GoogleMap map;
 
         @Rule
-        TestName testName = new TestName();
+        public final TestName testName = new TestName();
 
         @Rule
-        AsyncTesting.MainLooperAssertion onMainThread = new AsyncTesting.MainLooperAssertion();
+        public final AsyncTesting.MainLooperAssertion onMainThread = new AsyncTesting.MainLooperAssertion();
+
+        @Rule
+        public final ActivityTestRule<TestMapActivity> activityRule = new ActivityTestRule<>(TestMapActivity.class);
 
         URI makeUri() {
             try {
@@ -258,13 +216,15 @@ public class MapLayerManagerTest {
         }
 
         @Before
-        public void setup() {
+        public void setup() throws InterruptedException {
             repo1 = mock(MapDataRepository.class);
+            when(repo1.getId()).thenReturn(getClass().getSimpleName());
             provider1 = mock(MapLayerDescriptorTest.TestMapDataProvider1.class);
             provider2 = mock(MapLayerDescriptorTest.TestMapDataProvider2.class);
             mapDataManager = mock(MapDataManager.class, withSettings().useConstructor(new MapDataManager.Config().updatePermission(this)));
             providers = Arrays.asList(provider1, provider2);
-            map = mock(GoogleMap.class);
+            onMainThread.assertThatWithin(timeout(), () -> activityRule.getActivity().getMap(), notNullValue());
+            map = activityRule.getActivity().getMap();
         }
 
         MapDataProvider providerForLayerDesc(MapLayerDescriptor desc) {
@@ -278,12 +238,8 @@ public class MapLayerManagerTest {
         }
 
         TestLayerAdapter prepareLayerAdapterStubs(MapLayerManager manager, MapLayerDescriptor layerDesc, MapElementSpec... layerElements) {
-            MockMapElements mockMapElements = new MockMapElements(manager.getMap());
-            for (MapElementSpec s : layerElements) {
-                s.accept(mockMapElements);
-            }
             MapDataProvider provider = providerForLayerDesc(layerDesc);
-            TestLayerAdapter adapter = new TestLayerAdapter(layerDesc, provider, manager.getMap(), layerElements);
+            TestLayerAdapter adapter = new TestLayerAdapter(layerDesc, provider, layerElements);
             Callable<TestLayerAdapter> createAdapter = () -> adapter;
             when(provider.createMapLayerAdapter(same(layerDesc), same(manager.getMap()))).then(invoc -> createAdapter);
             return adapter;
@@ -293,35 +249,37 @@ public class MapLayerManagerTest {
             TestLayerAdapter adapter = prepareLayerAdapterStubs(manager, layerDesc, layerElements);
             waitForMainThreadToRun(() -> {
                 manager.showLayer(layerDesc);
-                Mockito.verify(adapter.provider).createMapLayerAdapter(same(layerDesc), same(manager.getMap()));
+                verify(adapter.provider).createMapLayerAdapter(same(layerDesc), same(manager.getMap()));
             });
-            onMainThread.assertThatWithin(oneSecond(), adapter::isOnMap, is(true));
+            onMainThread.assertThatWithin(timeout(), adapter::isOnMap, is(true));
             return adapter;
         }
     }
 
     @RunWith(AndroidJUnit4.class)
-    @SmallTest
-    static class MainInteractions extends BaseConfig {
+    @MediumTest
+    public static class MainInteractions extends BaseConfig {
 
         @Test
         public void listensToCacheManagerUpdates() {
 
-            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
+            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, map);
 
-            Mockito.verify(mapDataManager).addUpdateListener(overlayManager);
+            verify(mapDataManager).addUpdateListener(overlayManager);
         }
 
         @Test
         public void addsOverlaysFromAddedCaches() {
 
-            MapLayerManager manager = new MapLayerManager(mapDataManager, providers, null);
+            MapLayerManager manager = new MapLayerManager(mapDataManager, providers, map);
             MapLayerDescriptor overlay1 = new MapLayerDescriptorTest.TestLayerDescriptor1("test overlay 1", makeUri(), provider1.getClass());
             MapLayerDescriptor overlay2 = new MapLayerDescriptorTest.TestLayerDescriptor1("test overlay 2", overlay1.getResourceUri(), provider1.getClass());
             MapDataResource mapDataResource = new MapDataResource(makeUri(), repo1, System.currentTimeMillis(),
                 new MapDataResource.Resolved("test cache", provider1.getClass(), setOf(overlay1, overlay2)));
             Map<URI, MapDataResource> added = mapOf(mapDataResource);
-            MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(this, added, Collections.emptyMap(), Collections.emptyMap());
+            MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(this, added, emptyMap(), emptyMap());
+
+            when(mapDataManager.getLayers()).thenReturn(layerMapOf(mapDataResource));
 
             manager.onMapDataUpdated(update);
 
@@ -337,14 +295,17 @@ public class MapLayerManagerTest {
             MapDataResource mapDataResource = new MapDataResource(overlay1.getResourceUri(), repo1, System.currentTimeMillis(),
                 new MapDataResource.Resolved("test cache", provider1.getClass(), setOf(overlay1, overlay2)));
 
-            when(mapDataManager.getResources()).thenReturn(mapOf(mapDataResource));
+            when(mapDataManager.getLayers()).thenReturn(mapDataResource.getLayers());
 
-            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
+            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, map);
 
             assertThat(overlayManager.getLayersInZOrder().size(), is(2));
             assertThat(overlayManager.getLayersInZOrder(), hasItems(overlay1, overlay2));
 
-            MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(this, Collections.emptyMap(), Collections.emptyMap(), mapOf(mapDataResource));
+            MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(this, emptyMap(), emptyMap(), mapOf(mapDataResource));
+
+            when(mapDataManager.getLayers()).thenReturn(emptyMap());
+
             overlayManager.onMapDataUpdated(update);
 
             assertTrue(overlayManager.getLayersInZOrder().isEmpty());
@@ -358,9 +319,9 @@ public class MapLayerManagerTest {
             MapDataResource mapDataResource = new MapDataResource(makeUri(), repo1, 0,
                 new MapDataResource.Resolved("test cache", provider1.getClass(), setOf(overlay1, overlay2)));
 
-            when(mapDataManager.getResources()).thenReturn(mapOf(mapDataResource));
+            when(mapDataManager.getLayers()).thenReturn(mapDataResource.getLayers());
 
-            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
+            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, map);
 
             List<MapLayerDescriptor> overlays = overlayManager.getLayersInZOrder();
             assertThat(overlays.size(), is(2));
@@ -371,7 +332,9 @@ public class MapLayerManagerTest {
                 new MapDataResource.Resolved(requireNonNull(mapDataResource.getResolved()).getName(), mapDataResource.getResolved().getType(), setOf(overlay2)));
             Map<URI, MapDataResource> updated = mapOf(mapDataResource);
             MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(this,
-                Collections.emptyMap(), updated, Collections.emptyMap());
+                emptyMap(), updated, emptyMap());
+
+            when(mapDataManager.getLayers()).thenReturn(mapDataResource.getLayers());
 
             overlayManager.onMapDataUpdated(update);
 
@@ -387,9 +350,9 @@ public class MapLayerManagerTest {
             MapDataResource cache = new MapDataResource(overlay1.getResourceUri(), repo1, 0,
                 new MapDataResource.Resolved("test cache", provider1.getClass(), setOf(overlay1)));
 
-            when(mapDataManager.getResources()).thenReturn(mapOf(cache));
+            when(mapDataManager.getLayers()).thenReturn(cache.getLayers());
 
-            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
+            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, map);
 
             assertThat(overlayManager.getLayersInZOrder().size(), is(1));
             assertThat(overlayManager.getLayersInZOrder(), hasItem(overlay1));
@@ -398,7 +361,10 @@ public class MapLayerManagerTest {
             cache = new MapDataResource(makeUri(), repo1, 0,
                 new MapDataResource.Resolved(requireNonNull(cache.getResolved()).getName(), cache.getResolved().getType(), setOf(overlay1, overlay2)));
             MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(
-                this, Collections.emptyMap(), mapOf(cache), Collections.emptyMap());
+                this, emptyMap(), mapOf(cache), emptyMap());
+
+            when(mapDataManager.getLayers()).thenReturn(cache.getLayers());
+
             overlayManager.onMapDataUpdated(update);
 
             assertThat(overlayManager.getLayersInZOrder().size(), is(2));
@@ -412,9 +378,9 @@ public class MapLayerManagerTest {
             MapDataResource cache = new MapDataResource(overlay1.getResourceUri(), repo1, 0,
                 new MapDataResource.Resolved("test cache", provider1.getClass(), setOf(overlay1)));
 
-            when(mapDataManager.getResources()).thenReturn(mapOf(cache));
+            when(mapDataManager.getLayers()).thenReturn(cache.getLayers());
 
-            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
+            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, map);
 
             assertThat(overlayManager.getLayersInZOrder().size(), is(1));
             assertThat(overlayManager.getLayersInZOrder(), hasItem(overlay1));
@@ -423,7 +389,10 @@ public class MapLayerManagerTest {
             cache = new MapDataResource(makeUri(), repo1, 0,
                 new MapDataResource.Resolved(requireNonNull(cache.getResolved()).getName(), cache.getResolved().getType(), setOf(overlay2)));
             MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(
-                this, Collections.emptyMap(), mapOf(cache), Collections.emptyMap());
+                this, emptyMap(), mapOf(cache), emptyMap());
+
+            when(mapDataManager.getLayers()).thenReturn(cache.getLayers());
+
             overlayManager.onMapDataUpdated(update);
 
             assertThat(overlayManager.getLayersInZOrder().size(), is(1));
@@ -437,9 +406,9 @@ public class MapLayerManagerTest {
             MapDataResource cache = new MapDataResource(overlay1.getResourceUri(), repo1, 0,
                 new MapDataResource.Resolved("test cache", provider1.getClass(), setOf(overlay1)));
 
-            when(mapDataManager.getResources()).thenReturn(mapOf(cache));
+            when(mapDataManager.getLayers()).thenReturn(cache.getLayers());
 
-            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
+            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, map);
 
             assertThat(overlayManager.getLayersInZOrder().size(), is(1));
             assertThat(overlayManager.getLayersInZOrder(), hasItem(overlay1));
@@ -448,7 +417,10 @@ public class MapLayerManagerTest {
             cache = new MapDataResource(cache.getUri(), repo1, 0,
                 new MapDataResource.Resolved(requireNonNull(cache.getResolved()).getName(), cache.getResolved().getType(), setOf(overlay1Updated)));
             MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(
-                this, Collections.emptyMap(), mapOf(cache), Collections.emptyMap());
+                this, emptyMap(), mapOf(cache), emptyMap());
+
+            when(mapDataManager.getLayers()).thenReturn(cache.getLayers());
+
             overlayManager.onMapDataUpdated(update);
 
             assertThat(overlayManager.getLayersInZOrder().size(), is(1));
@@ -463,21 +435,21 @@ public class MapLayerManagerTest {
             MapLayerDescriptor overlay1 = new MapLayerDescriptorTest.TestLayerDescriptor1("overlay 1", makeUri(), provider1.getClass());
             MapDataResource mapDataResource = new MapDataResource(overlay1.getResourceUri(), repo1, 0,
                 new MapDataResource.Resolved("test cache", provider1.getClass(), setOf(overlay1)));
-            Map<URI, MapDataResource> added = mapOf(mapDataResource);
-            MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(this, added, Collections.emptyMap(), Collections.emptyMap());
-            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, map);
 
-            waitForMainThreadToRun(() -> overlayManager.onMapDataUpdated(update));
+            when(mapDataManager.getLayers()).thenReturn(mapDataResource.getLayers());
+
+            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, map);
 
             assertThat(overlayManager.getLayersInZOrder().size(), is(1));
             assertThat(overlayManager.getLayersInZOrder(), hasItems(overlay1));
             assertFalse(overlayManager.isLayerVisible(overlay1));
-            Mockito.verify(provider1, never()).createMapLayerAdapter(any(), any());
+            verify(provider1, never()).createMapLayerAdapter(any(), any());
 
             TestLayerAdapter layer1 = showAndWaitForLayerOnMap(overlayManager, overlay1, markerSpec("m1"));
 
             assertTrue(overlayManager.isLayerVisible(overlay1));
-            Mockito.verify(map).addMarker(layer1.elementSpecForId("m1", MapElementSpec.MapMarkerSpec.class).options);
+            assertThat(layer1.elements.withElementForId("m1", GET_MARKER), notNullValue());
+            // TODO: uiautomator verify markers
         }
 
         @Test
@@ -487,9 +459,9 @@ public class MapLayerManagerTest {
             MapDataResource mapData = new MapDataResource(layerDesc1.getResourceUri(), repo1, 0,
                 new MapDataResource.Resolved("test cache", provider1.getClass(), setOf(layerDesc1)));
 
-            when(mapDataManager.getResources()).thenReturn(mapOf(mapData));
+            when(mapDataManager.getLayers()).thenReturn(mapData.getLayers());
 
-            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
+            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, map);
 
             assertThat(overlayManager.getLayersInZOrder().size(), is(1));
             assertThat(overlayManager.getLayersInZOrder(), hasItem(layerDesc1));
@@ -500,21 +472,22 @@ public class MapLayerManagerTest {
             MapLayerDescriptor layerDesc2 = new MapLayerDescriptorTest.TestLayerDescriptor1(layerDesc1.getLayerName(), layerDesc1.getResourceUri(), layerDesc1.getDataType());
             mapData = new MapDataResource(layerDesc2.getResourceUri(), repo1, 0,
                 new MapDataResource.Resolved(requireNonNull(mapData.getResolved()).getName(), mapData.getResolved().getType(), setOf(layerDesc2)));
-            MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(this, Collections.emptyMap(), mapOf(mapData), Collections.emptyMap());
+            MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(this, emptyMap(), mapOf(mapData), emptyMap());
             TestLayerAdapter layer2 = prepareLayerAdapterStubs(overlayManager, layerDesc2, markerSpec("m2"));
+
+            when(mapDataManager.getLayers()).thenReturn(mapData.getLayers());
 
             waitForMainThreadToRun(() -> {
                 overlayManager.onMapDataUpdated(update);
-                Mockito.verify(provider1).createMapLayerAdapter(same(layerDesc2), same(map));
+                verify(provider1).createMapLayerAdapter(same(layerDesc2), same(map));
             });
 
-            onMainThread.assertThatWithin(oneSecond(), layer2::isOnMap, is(true));
+            onMainThread.assertThatWithin(timeout(), layer2::isOnMap, is(true));
 
             assertTrue(overlayManager.isLayerVisible(layerDesc2));
             assertTrue(layer1.isRemoved());
             assertTrue(layer2.isOnMap());
-            layer1.mockedElements.verify(Marker.class, "m1").remove();
-            Mockito.verify(map).addMarker(layer2.elementSpecForId("m2", MapElementSpec.MapMarkerSpec.class).options);
+            // TODO: uiautomator verify markers
         }
 
         @Test
@@ -524,9 +497,9 @@ public class MapLayerManagerTest {
             MapDataResource mapData = new MapDataResource(layerDesc1.getResourceUri(), repo1, 0,
                 new MapDataResource.Resolved("test cache", provider1.getClass(), setOf(layerDesc1)));
 
-            when(mapDataManager.getResources()).thenReturn(mapOf(mapData));
+            when(mapDataManager.getLayers()).thenReturn(mapData.getLayers());
 
-            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
+            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, map);
 
             assertThat(overlayManager.getLayersInZOrder().size(), is(1));
             assertThat(overlayManager.getLayersInZOrder(), hasItem(layerDesc1));
@@ -537,19 +510,19 @@ public class MapLayerManagerTest {
             MapLayerDescriptor layerDesc2 = new MapLayerDescriptorTest.TestLayerDescriptor1(layerDesc1.getLayerName(), layerDesc1.getResourceUri(), layerDesc1.getDataType());
             mapData = new MapDataResource(layerDesc2.getResourceUri(), repo1, 0,
                 new MapDataResource.Resolved(requireNonNull(mapData.getResolved()).getName(), mapData.getResolved().getType(), setOf(layerDesc2)));
-            MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(this, Collections.emptyMap(), mapOf(mapData), Collections.emptyMap());
+            MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(this, emptyMap(), mapOf(mapData), emptyMap());
 
             TestLayerAdapter layerUpdated = prepareLayerAdapterStubs(overlayManager, layerDesc2, markerSpec("m2"));
 
+            when(mapDataManager.getLayers()).thenReturn(mapData.getLayers());
+
             waitForMainThreadToRun(() -> {
                 overlayManager.onMapDataUpdated(update);
-                Mockito.verify(provider1, never()).createMapLayerAdapter(same(layerDesc2), same(map));
-                layer1.mockedElements.verify(Marker.class, "m1").remove();
-                layer1.mockedElements.verify(Marker.class, "m2").remove();
+                verify(provider1, never()).createMapLayerAdapter(same(layerDesc2), same(map));
+                assertTrue(layer1.isRemoved());
+                assertFalse(layerUpdated.isOnMap());
+                // TODO: uiautomator verify markers
             });
-
-            assertTrue(layer1.isRemoved());
-            assertFalse(layerUpdated.isOnMap());
         }
 
         @Test
@@ -559,9 +532,9 @@ public class MapLayerManagerTest {
             MapDataResource mapData = new MapDataResource(layerDesc1.getResourceUri(), repo1, 0,
                 new MapDataResource.Resolved("test cache", provider1.getClass(), setOf(layerDesc1)));
 
-            when(mapDataManager.getResources()).thenReturn(mapOf(mapData));
+            when(mapDataManager.getLayers()).thenReturn(mapData.getLayers());
 
-            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
+            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, map);
 
             assertThat(overlayManager.getLayersInZOrder().size(), is(1));
             assertThat(overlayManager.getLayersInZOrder(), hasItem(layerDesc1));
@@ -572,17 +545,22 @@ public class MapLayerManagerTest {
             MapLayerDescriptor layerDesc2 = new MapLayerDescriptorTest.TestLayerDescriptor1(
                 "overlay 2", mapData.getUri(), requireNonNull(mapData.getResolved()).getType());
             mapData = mapData.resolve(new MapDataResource.Resolved(mapData.getResolved().getName(), mapData.getResolved().getType(), setOf(layerDesc1, layerDesc2)));
-            MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(this, Collections.emptyMap(), mapOf(mapData), Collections.emptyMap());
+            MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(this, emptyMap(), mapOf(mapData), emptyMap());
 
             prepareLayerAdapterStubs(overlayManager, layerDesc2, markerSpec("m2"));
 
-            waitForMainThreadToRun(() -> overlayManager.onMapDataUpdated(update));
+            when(mapDataManager.getLayers()).thenReturn(mapData.getLayers());
 
-            assertTrue(layer1.isOnMap());
-            assertTrue(overlayManager.isLayerVisible(layerDesc1));
-            verify(provider1, times(1)).createMapLayerAdapter(same(layerDesc1), same(map));
-            layer1.mockedElements.verify(Marker.class, "m1", never()).remove();
-            verify(provider1, never()).createMapLayerAdapter(same(layerDesc2), any());
+            waitForMainThreadToRun(() -> {
+                overlayManager.onMapDataUpdated(update);
+                assertTrue(layer1.isOnMap());
+                assertTrue(overlayManager.isLayerVisible(layerDesc1));
+                verify(provider1, times(1)).createMapLayerAdapter(same(layerDesc1), same(map));
+                verify(provider1, never()).createMapLayerAdapter(same(layerDesc2), any());
+                // TODO: uiautomator verify markers
+    //            layer1.mockedElements.verify(Marker.class, "m1", never()).remove();
+            });
+
         }
 
         @Test
@@ -593,9 +571,9 @@ public class MapLayerManagerTest {
             MapDataResource mapData = new MapDataResource(overlay1.getResourceUri(), repo1, 0,
                 new MapDataResource.Resolved("test cache", provider1.getClass(), setOf(overlay1, overlay2)));
 
-            when(mapDataManager.getResources()).thenReturn(mapOf(mapData));
+            when(mapDataManager.getLayers()).thenReturn(mapData.getLayers());
 
-            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
+            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, map);
 
             assertThat(overlayManager.getLayersInZOrder().size(), is(2));
             assertThat(overlayManager.getLayersInZOrder(), hasItems(overlay1, overlay2));
@@ -603,17 +581,19 @@ public class MapLayerManagerTest {
             TestLayerAdapter layer1 =  showAndWaitForLayerOnMap(overlayManager, overlay1, markerSpec("m1"), markerSpec("m2"));
 
             mapData = mapData.resolve(new MapDataResource.Resolved(requireNonNull(mapData.getResolved()).getName(), mapData.getResolved().getType(), setOf(overlay2)));
-            MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(this, Collections.emptyMap(), mapOf(mapData), Collections.emptyMap());
+            MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(this, emptyMap(), mapOf(mapData), emptyMap());
+
+            when(mapDataManager.getLayers()).thenReturn(mapData.getLayers());
 
             waitForMainThreadToRun(() -> {
                 overlayManager.onMapDataUpdated(update);
                 assertThat(overlayManager.getLayersInZOrder(), not(hasItem(overlay1)));
                 assertFalse(layer1.isOnMap());
                 assertTrue(layer1.isRemoved());
-                layer1.mockedElements.verify(Marker.class, "m1").remove();
-                layer1.mockedElements.verify(Marker.class, "m2").remove();
+                // TODO: uiautomator verify markers
+//                layer1.mockedElements.verify(Marker.class, "m1").remove();
+//                layer1.mockedElements.verify(Marker.class, "m2").remove();
             });
-
         }
 
         @Test
@@ -624,9 +604,9 @@ public class MapLayerManagerTest {
             MapDataResource cache = new MapDataResource(overlay1.getResourceUri(), repo1, 0,
                 new MapDataResource.Resolved("test cache", provider1.getClass(), setOf(overlay1, overlay2)));
 
-            when(mapDataManager.getResources()).thenReturn(mapOf(cache));
+            when(mapDataManager.getLayers()).thenReturn(cache.getLayers());
 
-            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
+            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, map);
 
             assertThat(overlayManager.getLayersInZOrder().size(), is(2));
             assertThat(overlayManager.getLayersInZOrder(), hasItems(overlay1, overlay2));
@@ -634,15 +614,18 @@ public class MapLayerManagerTest {
             TestLayerAdapter layer1 = showAndWaitForLayerOnMap(overlayManager, overlay1, markerSpec("m1"));
             TestLayerAdapter layer2 = showAndWaitForLayerOnMap(overlayManager, overlay2, markerSpec("m2"));
 
-            MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(this, Collections.emptyMap(), Collections.emptyMap(), mapOf(cache));
+            MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(this, emptyMap(), emptyMap(), mapOf(cache));
+
+            when(mapDataManager.getLayers()).thenReturn(emptyMap());
 
             waitForMainThreadToRun(() -> {
                 overlayManager.onMapDataUpdated(update);
                 assertTrue(layer1.isRemoved());
                 assertTrue(layer2.isRemoved());
                 assertTrue(overlayManager.getLayersInZOrder().isEmpty());
-                layer1.mockedElements.verify(Marker.class, "m1").remove();
-                layer2.mockedElements.verify(Marker.class, "m2").remove();
+                // TODO: uiautomator verify markers
+//                layer1.mockedElements.verify(Marker.class, "m1").remove();
+//                layer2.mockedElements.verify(Marker.class, "m2").remove();
             });
         }
 
@@ -657,9 +640,9 @@ public class MapLayerManagerTest {
             MapDataResource cache2 = new MapDataResource(overlay2.getResourceUri(), repo1, 0,
                 new MapDataResource.Resolved("cache2", provider1.getClass(), setOf(overlay2)));
 
-            when(mapDataManager.getResources()).thenReturn(mapOf(cache1, cache2));
+            when(mapDataManager.getLayers()).thenReturn(layerMapOf(cache1, cache2));
 
-            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
+            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, map);
 
             assertThat(overlayManager.getLayersInZOrder().size(), is(2));
             assertThat(overlayManager.getLayersInZOrder(), hasItems(overlay1, overlay2));
@@ -673,7 +656,7 @@ public class MapLayerManagerTest {
                 verify(provider1, never()).createMapLayerAdapter(same(overlay2), any());
             });
 
-            onMainThread.assertThatWithin(oneSecond(), onMap1::isOnMap, is(true));
+            onMainThread.assertThatWithin(timeout(), onMap1::isOnMap, is(true));
 
             waitForMainThreadToRun(() -> {
                 overlayManager.showLayer(overlay2);
@@ -681,7 +664,7 @@ public class MapLayerManagerTest {
                 verify(provider1).createMapLayerAdapter(same(overlay2), same(overlayManager.getMap()));
             });
 
-            onMainThread.assertThatWithin(oneSecond(), onMap2::isOnMap, is(true));
+            onMainThread.assertThatWithin(timeout(), onMap2::isOnMap, is(true));
 
             assertTrue(onMap1.isOnMap());
             assertTrue(onMap2.isOnMap());
@@ -690,8 +673,9 @@ public class MapLayerManagerTest {
                 overlayManager.hideLayer(overlay2);
                 assertTrue(overlayManager.isLayerVisible(overlay1));
                 assertFalse(overlayManager.isLayerVisible(overlay2));
-                onMap1.mockedElements.verify(Marker.class, "m1", never()).setVisible(false);
-                onMap2.mockedElements.verify(Marker.class, "m2").setVisible(true);
+                // TODO: uiautomator verify markers
+//                onMap1.mockedElements.verify(Marker.class, "m1", never()).setVisible(false);
+//                onMap2.mockedElements.verify(Marker.class, "m2").setVisible(true);
             });
         }
 
@@ -728,7 +712,7 @@ public class MapLayerManagerTest {
         @Test
         public void disposeStopsListeningToCacheManager() {
 
-            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
+            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, map);
             overlayManager.dispose();
 
             Mockito.verify(mapDataManager).removeUpdateListener(overlayManager);
@@ -745,9 +729,9 @@ public class MapLayerManagerTest {
             MapDataResource cache2 = new MapDataResource(overlay3.getResourceUri(), repo1, 0,
                 new MapDataResource.Resolved("cache1", provider2.getClass(), setOf(overlay3)));
 
-            when(mapDataManager.getResources()).thenReturn(mapOf(cache1, cache2));
+            when(mapDataManager.getLayers()).thenReturn(layerMapOf(cache1, cache2));
 
-            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, null);
+            MapLayerManager overlayManager = new MapLayerManager(mapDataManager, providers, map);
 
             TestLayerAdapter layer1 = prepareLayerAdapterStubs(overlayManager, overlay1, markerSpec("1.1"), markerSpec("1.2"));
             TestLayerAdapter layer2 = prepareLayerAdapterStubs(overlayManager, overlay2, markerSpec("2.1"));
@@ -759,7 +743,7 @@ public class MapLayerManagerTest {
                 overlayManager.showLayer(overlay3);
             });
 
-            onMainThread.assertThatWithin(oneSecond(), () -> layer1.isOnMap() && layer2.isOnMap() && layer3.isOnMap(), is(true));
+            onMainThread.assertThatWithin(timeout(), () -> layer1.isOnMap() && layer2.isOnMap() && layer3.isOnMap(), is(true));
 
             waitForMainThreadToRun(() -> {
                 overlayManager.dispose();
@@ -767,11 +751,12 @@ public class MapLayerManagerTest {
                 assertTrue(layer1.isRemoved());
                 assertTrue(layer2.isRemoved());
                 assertTrue(layer3.isRemoved());
-                layer1.mockedElements.verify(Marker.class, "1.1").remove();
-                layer1.mockedElements.verify(Marker.class, "1.2").remove();
-                layer2.mockedElements.verify(Marker.class, "2.1").remove();
-                layer3.mockedElements.verify(Marker.class, "3.1").remove();
-                layer3.mockedElements.verify(Marker.class, "3.2").remove();
+                // TODO: uiautomator verify markers
+//                layer1.mockedElements.verify(Marker.class, "1.1").remove();
+//                layer1.mockedElements.verify(Marker.class, "1.2").remove();
+//                layer2.mockedElements.verify(Marker.class, "2.1").remove();
+//                layer3.mockedElements.verify(Marker.class, "3.1").remove();
+//                layer3.mockedElements.verify(Marker.class, "3.2").remove();
             });
         }
 
@@ -826,13 +811,13 @@ public class MapLayerManagerTest {
             cache2 = new MapDataResource(makeUri(), repo1, 0,
                 new MapDataResource.Resolved("c2", provider2.getClass(), MapLayerManagerTest.setOf(c2o2, c2o1)));
 
-            when(mapDataManager.getResources()).thenReturn(MapLayerManagerTest.mapOf(cache1, cache2));
+            when(mapDataManager.getLayers()).thenReturn(layerMapOf(cache1, cache2));
         }
     }
 
 
     @RunWith(AndroidJUnit4.class)
-    @SmallTest
+    @MediumTest
     public static class ZOrder extends BaseZOrderConfig {
 
         @Test
@@ -875,10 +860,11 @@ public class MapLayerManagerTest {
                 overlayManager.showLayer(c2o1);
             });
 
-            onMainThread.assertThatWithin(oneSecond(), () -> c1o2OnMap.isOnMap() && c2o1OnMap.isOnMap(), is(true));
+            onMainThread.assertThatWithin(timeout(), () -> c1o2OnMap.isOnMap() && c2o1OnMap.isOnMap(), is(true));
 
-            verify(map).addMarker(same(c1o2OnMap.elementSpecForId("c1o2.1", MapElementSpec.MapMarkerSpec.class).options));
-            verify(map).addMarker(same(c2o1OnMap.elementSpecForId("c2o1.1", MapElementSpec.MapMarkerSpec.class).options));
+            // TODO: uiautomator verify markers
+//            verify(map).addMarker(same(c1o2OnMap.elementSpecForId("c1o2.1", MapElementSpec.MapMarkerSpec.class).options));
+//            verify(map).addMarker(same(c2o1OnMap.elementSpecForId("c2o1.1", MapElementSpec.MapMarkerSpec.class).options));
         }
 
         @Test
@@ -915,7 +901,7 @@ public class MapLayerManagerTest {
                 overlayManager.showLayer(c2o2);
             });
 
-            onMainThread.assertThatWithin(oneSecond(), () -> c1o1OnMap.isOnMap() && c2o1OnMap.isOnMap() && c2o2OnMap.isOnMap(), is(true));
+            onMainThread.assertThatWithin(timeout(), () -> c1o1OnMap.isOnMap() && c2o1OnMap.isOnMap() && c2o2OnMap.isOnMap(), is(true));
 
             int c1o1zMod = c2o1z;
             int c2o1zMod = c2o2z;
@@ -954,7 +940,7 @@ public class MapLayerManagerTest {
                 overlayManager.showLayer(c2o1);
             });
 
-            onMainThread.assertThatWithin(oneSecond(), () -> c1o1OnMap.isOnMap() && c2o1OnMap.isOnMap(), is(true));
+            onMainThread.assertThatWithin(timeout(), () -> c1o1OnMap.isOnMap() && c2o1OnMap.isOnMap(), is(true));
 
             waitForMainThreadToRun(() -> overlayManager.hideLayer(c1o1));
 
@@ -968,8 +954,8 @@ public class MapLayerManagerTest {
                 assertThat(orderMod, equalTo(order));
                 assertThat(orderMod.indexOf(c1o1), is(c2o1z));
                 assertThat(orderMod.indexOf(c2o1), is(c1o1z));
-                c1o1OnMap.mockedElements.verify(Marker.class, "c1o1.1").setZIndex(c2o1z);
-                c2o1OnMap.mockedElements.verify(Marker.class, "c2o1.1").setZIndex(c1o1z);
+                assertThat((double) c1o1OnMap.elements.withElementForId("c1o1.1", GET_MARKER).getZIndex(), closeTo(c2o1z, 1.0e-10));
+                assertThat((double) c2o1OnMap.elements.withElementForId("c2o1.1", GET_MARKER).getZIndex(), closeTo(c1o1z, 1.0e-10));
             });
         }
 
@@ -985,13 +971,15 @@ public class MapLayerManagerTest {
             invalidOrder.set(1, new MapLayerDescriptorTest.TestLayerDescriptor1("c1.1.tainted", c1Uri, provider1.getClass()));
 
             waitForMainThreadToRun(() -> {
+                float originalZIndex = firstOnMap.elements.withElementForId("m1", GET_MARKER).getZIndex();
+
                 assertFalse(overlayManager.setZOrder(invalidOrder));
 
                 List<MapLayerDescriptor> unchangedOrder = overlayManager.getLayersInZOrder();
 
                 assertThat(unchangedOrder, not(equalTo(invalidOrder)));
                 assertThat(unchangedOrder, not(hasItem(invalidOrder.get(1))));
-                firstOnMap.mockedElements.verify(Marker.class, "m1", never()).setZIndex(any());
+                assertThat((double) firstOnMap.elements.withElementForId("m1", GET_MARKER).getZIndex(), is(originalZIndex));
             });
         }
 
@@ -1008,13 +996,15 @@ public class MapLayerManagerTest {
             invalidOrder.remove(0);
 
             waitForMainThreadToRun(() -> {
+                float originalZIndex = lastOnMap.elements.withElementForId("m1", GET_MARKER).getZIndex();
+
                 assertFalse(overlayManager.setZOrder(invalidOrder));
 
                 List<MapLayerDescriptor> unchangedOrder = overlayManager.getLayersInZOrder();
 
                 assertThat(unchangedOrder, not(equalTo(invalidOrder)));
                 assertThat(unchangedOrder.size(), is(invalidOrder.size() + 1));
-                lastOnMap.mockedElements.verify(Marker.class, "m1", never()).setZIndex(any());
+                assertThat((double) lastOnMap.elements.withElementForId("m1", GET_MARKER).getZIndex(), is(originalZIndex));
             });
         }
 
@@ -1025,7 +1015,7 @@ public class MapLayerManagerTest {
     }
 
     @RunWith(AndroidJUnit4.class)
-    @SmallTest
+    @MediumTest
     public static class MovingSingleOverlayZIndex extends BaseZOrderConfig {
 
         private String qnameOf(MapLayerDescriptor overlay) {
@@ -1037,7 +1027,7 @@ public class MapLayerManagerTest {
 
         @Before
         public void addAllOverlaysToMap() throws InterruptedException {
-            overlayManager = new MapLayerManager(mapDataManager, providers, null);
+            overlayManager = new MapLayerManager(mapDataManager, providers, map);
             overlaysOnMap = new HashMap<>();
             List<MapLayerDescriptor> orderByName = overlayManager.getLayersInZOrder();
             Collections.sort(orderByName, (o1, o2) -> qnameOf(o1).compareTo(qnameOf(o2)));
@@ -1053,25 +1043,27 @@ public class MapLayerManagerTest {
                     overlayManager.showLayer(layerDesc);
                 }
             });
-            onMainThread.assertThatWithin(oneSecond(), overlaysOnMap::values,
+            onMainThread.assertThatWithin(timeout(), overlaysOnMap::values,
                 everyItem(TargetSuppliesPropertyValueMatcher.withValueSuppliedBy(TestLayerAdapter::isOnMap, is(true))));
         }
 
         private void assertZIndexMove(int from, int to) {
-            List<MapLayerDescriptor> order = overlayManager.getLayersInZOrder();
-            List<MapLayerDescriptor> expectedOrder = new ArrayList<>(order);
-            MapLayerDescriptor target = expectedOrder.remove(from);
-            expectedOrder.add(to, target);
 
-            waitForMainThreadToRun(() -> assertTrue(overlayManager.moveZIndex(from, to)));
+            waitForMainThreadToRun(() -> {
+                List<MapLayerDescriptor> order = overlayManager.getLayersInZOrder();
+                List<MapLayerDescriptor> expectedOrder = new ArrayList<>(order);
+                MapLayerDescriptor target = expectedOrder.remove(from);
+                expectedOrder.add(to, target);
+                assertTrue(String.format("move z-index %d to %d failed", from, to), overlayManager.moveZIndex(from, to));
+                order = overlayManager.getLayersInZOrder();
+                assertThat(String.format("%d to %d", from, to), order, equalTo(expectedOrder));
+                for (int zIndex = 0; zIndex < expectedOrder.size(); zIndex++) {
+                    MapLayerDescriptor overlay = expectedOrder.get(zIndex);
+                    TestLayerAdapter onMap = overlaysOnMap.get(overlay);
+                    assertThat((double) onMap.elements.withElementForId(overlay.getLayerName() + ".m1", GET_MARKER).getZIndex(), is(zIndex));
+                }
+            });
 
-            order = overlayManager.getLayersInZOrder();
-            assertThat(String.format("%d to %d", from, to), order, equalTo(expectedOrder));
-            for (int zIndex = 0; zIndex < expectedOrder.size(); zIndex++) {
-                MapLayerDescriptor overlay = expectedOrder.get(zIndex);
-                TestLayerAdapter onMap = overlaysOnMap.get(overlay);
-                onMap.mockedElements.verify(Marker.class, overlay.getLayerName() + ".m1").setZIndex(zIndex);
-            }
         }
 
         @Test

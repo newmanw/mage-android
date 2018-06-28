@@ -1,7 +1,6 @@
 package mil.nga.giat.mage.map.cache;
 
 import android.os.AsyncTask;
-import android.support.annotation.MainThread;
 import android.support.annotation.NonNull;
 import android.support.annotation.UiThread;
 import android.support.annotation.WorkerThread;
@@ -23,6 +22,7 @@ import com.google.android.gms.maps.model.TileProvider;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -312,6 +312,15 @@ public class MapLayerManager implements MapDataManager.MapDataListener, GoogleMa
     private final Map<MapLayerDescriptor, MapLayer> layersOnMap = new HashMap<>();
     private final List<MapLayerListener> listeners = new ArrayList<>();
     private List<MapLayerDescriptor> overlaysInZOrder = new ArrayList<>();
+    private final Comparator<MapLayerDescriptor> DEFAULT_LAYER_ORDER = (a, b) -> {
+        if (a.equals(b)) {
+            return 0;
+        }
+        if (a.getResourceUri().equals(b.getResourceUri())) {
+            return a.getLayerTitle().compareTo(b.getLayerTitle());
+        }
+        return a.getResourceUri().compareTo(b.getResourceUri());
+    };
 
     public MapLayerManager(MapDataManager mapDataManager, List<MapDataProvider> providers, GoogleMap map) {
         this.mapDataManager = mapDataManager;
@@ -319,9 +328,8 @@ public class MapLayerManager implements MapDataManager.MapDataListener, GoogleMa
         for (MapDataProvider provider : providers) {
             this.providers.put(provider.getClass(), provider);
         }
-        for (MapDataResource cache : mapDataManager.getResources().values()) {
-            overlaysInZOrder.addAll(cache.getLayers().values());
-        }
+        overlaysInZOrder.addAll(mapDataManager.getLayers().values());
+        Collections.sort(overlaysInZOrder, DEFAULT_LAYER_ORDER);
         mapDataManager.addUpdateListener(this);
     }
 
@@ -332,7 +340,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener, GoogleMa
         Map<URI, MapLayerDescriptor> allLayers = update.getSource().getLayers();
         while (orderIterator.hasNext()) {
             MapLayerDescriptor existingLayer = orderIterator.next();
-            MapLayerDescriptor updatedLayer = allLayers.get(existingLayer.getLayerUri());
+            MapLayerDescriptor updatedLayer = allLayers.remove(existingLayer.getLayerUri());
             if (updatedLayer == null) {
                 removeFromMapReturningVisibility(existingLayer);
                 orderIterator.remove();
@@ -343,11 +351,8 @@ public class MapLayerManager implements MapDataManager.MapDataListener, GoogleMa
             }
             position++;
         }
-        SortedSet<MapLayerDescriptor> addedLayersSorted = new TreeSet<>(
-            (MapLayerDescriptor a, MapLayerDescriptor b) -> a.getLayerTitle().compareTo(b.getLayerTitle()));
-        for (MapDataResource resource : update.getAdded().values()) {
-            addedLayersSorted.addAll(resource.getLayers().values());
-        }
+        SortedSet<MapLayerDescriptor> addedLayersSorted = new TreeSet<>(DEFAULT_LAYER_ORDER);
+        addedLayersSorted.addAll(allLayers.values());
         overlaysInZOrder.addAll(addedLayersSorted);
         for (MapLayerListener listener : listeners) {
             listener.layersChanged();
