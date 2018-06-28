@@ -32,7 +32,11 @@ class MapDataManager(config: Config) : LifecycleOwner {
     private val changeInProgressForRepository = HashMap<String, ResolveRepositoryChangeTask>()
 
     val resources: Map<URI, MapDataResource> = mutableResources
-    val layers: Map<URI, MapLayerDescriptor> get() = mutableResources.values.flatMap({ it.layers.values }).associateBy({ it.layerUri })
+    /**
+     * Return a mutable map of all layers from every [resource][resources], keyed by [layer URI][MapLayerDescriptor.layerUri].
+     * Changes to the returned mutable map have no effect on this [MapDataManager]'s layers and resources.
+     */
+    val layers: MutableMap<URI, MapLayerDescriptor> get() = mutableResources.values.flatMap({ it.layers.values }).associateBy({ it.layerUri }).toMutableMap()
 
     init {
         updatePermission = config.updatePermission!!
