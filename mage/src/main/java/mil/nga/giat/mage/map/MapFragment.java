@@ -3,7 +3,6 @@ package mil.nga.giat.mage.map;
 import android.Manifest;
 import android.app.Activity;
 import android.app.Dialog;
-import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -64,7 +63,6 @@ import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.TileOverlay;
 import com.google.android.gms.maps.model.TileOverlayOptions;
-import com.google.common.collect.Sets;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
@@ -73,15 +71,10 @@ import org.apache.commons.lang3.StringUtils;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Date;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 
 import mil.nga.giat.mage.MAGE;
 import mil.nga.giat.mage.R;
@@ -90,8 +83,8 @@ import mil.nga.giat.mage.filter.Filter;
 import mil.nga.giat.mage.filter.FilterActivity;
 import mil.nga.giat.mage.map.cache.MapDataManager;
 import mil.nga.giat.mage.map.cache.MapDataManager.MapDataListener;
-import mil.nga.giat.mage.map.cache.MapLayerDescriptor;
 import mil.nga.giat.mage.map.cache.MapDataResource;
+import mil.nga.giat.mage.map.cache.MapLayerDescriptor;
 import mil.nga.giat.mage.map.cache.MapLayerManager;
 import mil.nga.giat.mage.map.marker.LocationMarkerCollection;
 import mil.nga.giat.mage.map.marker.MyHistoricalLocationMarkerCollection;
@@ -104,8 +97,6 @@ import mil.nga.giat.mage.observation.ObservationLocation;
 import mil.nga.giat.mage.observation.ObservationViewActivity;
 import mil.nga.giat.mage.profile.ProfileActivity;
 import mil.nga.giat.mage.sdk.Temporal;
-import mil.nga.giat.mage.sdk.datastore.layer.Layer;
-import mil.nga.giat.mage.sdk.datastore.layer.LayerHelper;
 import mil.nga.giat.mage.sdk.datastore.location.LocationHelper;
 import mil.nga.giat.mage.sdk.datastore.location.LocationProperty;
 import mil.nga.giat.mage.sdk.datastore.observation.Observation;
@@ -117,7 +108,6 @@ import mil.nga.giat.mage.sdk.datastore.user.UserHelper;
 import mil.nga.giat.mage.sdk.event.ILocationEventListener;
 import mil.nga.giat.mage.sdk.event.IObservationEventListener;
 import mil.nga.giat.mage.sdk.event.IUserEventListener;
-import mil.nga.giat.mage.sdk.exceptions.LayerException;
 import mil.nga.giat.mage.sdk.exceptions.UserException;
 import mil.nga.giat.mage.sdk.location.LocationService;
 import mil.nga.mgrs.MGRS;
@@ -170,7 +160,6 @@ public class MapFragment extends Fragment implements
 	private RefreshMarkersRunnable refreshObservationsTask;
 	private RefreshMarkersRunnable refreshLocationsTask;
 	private RefreshMarkersRunnable refreshHistoricLocationsTask;
-	private Map<Layer, CleanlyStaticFeatureLoadTask> loadingLayers = new HashMap<>();
 
 	private PointCollection<Observation> observations;
 	private PointCollection<Pair<mil.nga.giat.mage.sdk.datastore.location.Location, User>> locations;
@@ -329,12 +318,6 @@ public class MapFragment extends Fragment implements
 	public void onDestroyView() {
 		super.onDestroyView();
 
-		Iterator<CleanlyStaticFeatureLoadTask> loadingLayerIter = loadingLayers.values().iterator();
-		while (loadingLayerIter.hasNext()) {
-			loadingLayerIter.next().cancel(false);
-			loadingLayerIter.remove();
-		}
-
 		if (observations != null) {
 			observations.clear();
 			observations = null;
@@ -490,6 +473,7 @@ public class MapFragment extends Fragment implements
 
 			// TODO: can't wait for dagger
 			mapOverlayManager = MapDataManager.getInstance().createMapLayerManager(map);
+			MapDataManager.getInstance().refreshMapData();
 
 			observations = new ObservationMarkerCollection(mage, map);
 			locations = new LocationMarkerCollection(mage, map);
@@ -524,7 +508,6 @@ public class MapFragment extends Fragment implements
 		locationLoad.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
 
 		loadLastMapPosition();
-		updateStaticFeatureLayers();
 
 		// Set visibility on map markers as preferences may have changed
 		observations.setVisibility(preferences.getBoolean(getResources().getString(R.string.showObservationsKey), true));
@@ -1170,63 +1153,6 @@ public class MapFragment extends Fragment implements
 		mgrsNorthingTextView.setText(String.format(Locale.getDefault(),"%05d", mgrs.getNorthing()));
 	}
 
-	/**
-	 * Remove {@link #removeStaticFeatureLayers() non-applicable} layers from the map and
-	 * add enabled layers for the current event.
-	 */
-	private void updateStaticFeatureLayers() {
-		removeStaticFeatureLayers();
-		try {
-			for (Layer l : LayerHelper.getInstance(mage).readByEvent(EventHelper.getInstance(mage).getCurrentEvent())) {
-				onStaticFeatureLayer(l);
-			}
-		}
-		catch (LayerException e) {
-			Log.e(LOG_NAME, "error updating static features.", e);
-		}
-	}
-
-	/**
-	 * Remove from the map layers that are not in the current event and are not enabled
-	 * in preferences.
-	 */
-	private void removeStaticFeatureLayers() {
-		// TODO: clean up loading layers as well
-		Set<String> selectedLayerIds = preferences.getStringSet(getResources().getString(R.string.staticFeatureLayersKey), Collections.<String> emptySet());
-
-		Set<String> eventLayerIds = new HashSet<>();
-		try {
-			for (Layer layer : LayerHelper.getInstance(mage).readByEvent(EventHelper.getInstance(mage).getCurrentEvent())) {
-				eventLayerIds.add(layer.getRemoteId());
-			}
-		}
-		catch (LayerException e) {
-			Log.e(LOG_NAME, "error reading static layers", e);
-		}
-
-		Set<String> layersNotInEvent = Sets.difference(selectedLayerIds, eventLayerIds);
-		for (String layerId : staticGeometryCollection.getLayers()) {
-			if (!selectedLayerIds.contains(layerId) || layersNotInEvent.contains(layerId)) {
-				staticGeometryCollection.removeLayer(layerId);
-			}
-		}
-	}
-
-	/**
-	 * Add the given layer to the map if it's enabled in preferences.
-	 * @param layer
-	 */
-	private void onStaticFeatureLayer(Layer layer) {
-		Set<String> layers = preferences.getStringSet(getString(R.string.staticFeatureLayersKey), Collections.<String> emptySet());
-
-		// The user has asked for this feature layer
-		String layerId = layer.getId().toString();
-		if (layers.contains(layerId) && layer.isLoaded() && !loadingLayers.containsKey(layer)) {
-			CleanlyStaticFeatureLoadTask loadLayer = new CleanlyStaticFeatureLoadTask(mage, staticGeometryCollection, map);
-			loadLayer.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, layer);
-		}
-	}
-
 	private void loadLastMapPosition() {
 		// Check the map type
 		map.setMapType(preferences.getInt(getString(R.string.baseLayerKey), getResources().getInteger(R.integer.baseLayerDefaultValue)));
@@ -1373,25 +1299,6 @@ public class MapFragment extends Fragment implements
 				points.refreshMarkerIcons(getTemporalFilter(filterColumnName, timePeriodFilterPreferenceKeyResId, filterType));
 			}
 			scheduleMarkerRefresh(this);
-		}
-	}
-
-	private class CleanlyStaticFeatureLoadTask extends StaticFeatureLoadTask {
-
-		public CleanlyStaticFeatureLoadTask(Context context, StaticGeometryCollection staticGeometryCollection, GoogleMap map) {
-			super(context, staticGeometryCollection, map);
-		}
-
-		@Override
-		protected Layer doInBackground(Layer... layers) {
-			loadingLayers.put(layers[0], this);
-			return super.doInBackground(layers);
-		}
-
-		@Override
-		protected void onPostExecute(Layer result) {
-			super.onPostExecute(result);
-			loadingLayers.remove(result);
 		}
 	}
 }

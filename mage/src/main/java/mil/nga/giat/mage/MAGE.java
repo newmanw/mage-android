@@ -28,19 +28,21 @@ import javax.net.ssl.TrustManagerFactory;
 import mil.nga.giat.mage.login.LoginActivity;
 import mil.nga.giat.mage.login.ServerUrlActivity;
 import mil.nga.giat.mage.login.SignupActivity;
-import mil.nga.giat.mage.map.cache.MapDataManager;
-import mil.nga.giat.mage.map.cache.LocalStorageMapDataRepository;
 import mil.nga.giat.mage.map.cache.GeoPackageProvider;
+import mil.nga.giat.mage.map.cache.LocalStorageMapDataRepository;
+import mil.nga.giat.mage.map.cache.MapDataManager;
+import mil.nga.giat.mage.map.cache.StaticFeatureLayerProvider;
+import mil.nga.giat.mage.map.cache.StaticFeatureLayerRepository;
 import mil.nga.giat.mage.map.cache.XYZDirectoryProvider;
 import mil.nga.giat.mage.observation.ObservationNotificationListener;
 import mil.nga.giat.mage.sdk.datastore.observation.ObservationHelper;
+import mil.nga.giat.mage.sdk.datastore.staticfeature.StaticFeatureHelper;
 import mil.nga.giat.mage.sdk.datastore.user.User;
 import mil.nga.giat.mage.sdk.datastore.user.UserHelper;
 import mil.nga.giat.mage.sdk.event.ISessionEventListener;
 import mil.nga.giat.mage.sdk.exceptions.UserException;
 import mil.nga.giat.mage.sdk.fetch.LocationFetchIntentService;
 import mil.nga.giat.mage.sdk.fetch.ObservationFetchIntentService;
-import mil.nga.giat.mage.map.cache.StaticFeatureLayerRepository;
 import mil.nga.giat.mage.sdk.http.HttpClientManager;
 import mil.nga.giat.mage.sdk.http.resource.UserResource;
 import mil.nga.giat.mage.sdk.location.LocationService;
@@ -107,13 +109,18 @@ public class MAGE extends MultiDexApplication implements ISessionEventListener, 
 			}
 		});
 
+		StaticFeatureLayerRepository.initialize(this);
 		LocalStorageMapDataRepository.initialize(this);
 
         MapDataManager.initialize(new MapDataManager.Config()
 			.context(this)
-			.providers(new XYZDirectoryProvider())
-			.providers(new GeoPackageProvider(this))
-			.repositories(LocalStorageMapDataRepository.getInstance())
+			.providers(new StaticFeatureLayerProvider(
+				StaticFeatureHelper.getInstance(this), this),
+			 	new GeoPackageProvider(this),
+			 	new XYZDirectoryProvider())
+			.repositories(
+				StaticFeatureLayerRepository.getInstance(),
+				LocalStorageMapDataRepository.getInstance())
 			.updatePermission(new MapDataManager.CreateUpdatePermission(){}));
 
         StaticFeatureLayerRepository.initialize(this);
