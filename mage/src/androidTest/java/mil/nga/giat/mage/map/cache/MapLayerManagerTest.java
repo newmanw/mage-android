@@ -188,7 +188,7 @@ public class MapLayerManagerTest {
         return 5000L;
     }
 
-    static class BaseConfig implements MapDataManager.CreateUpdatePermission {
+    public static class BaseConfig implements MapDataManager.CreateUpdatePermission {
 
         MapDataManager mapDataManager;
         MapDataRepository repo1;
@@ -216,7 +216,7 @@ public class MapLayerManagerTest {
         }
 
         @Before
-        public void setup() throws InterruptedException {
+        public void before1_setupMocksAndMap() throws InterruptedException {
             repo1 = mock(MapDataRepository.class);
             when(repo1.getId()).thenReturn(getClass().getSimpleName());
             provider1 = mock(MapLayerDescriptorTest.TestMapDataProvider1.class);
@@ -507,18 +507,19 @@ public class MapLayerManagerTest {
 
             TestLayerAdapter layer1 = showAndWaitForLayerOnMap(overlayManager, layerDesc1, markerSpec("m1"), markerSpec("m2"));
 
-            MapLayerDescriptor layerDesc2 = new MapLayerDescriptorTest.TestLayerDescriptor1(layerDesc1.getLayerName(), layerDesc1.getResourceUri(), layerDesc1.getDataType());
-            mapData = new MapDataResource(layerDesc2.getResourceUri(), repo1, 0,
-                new MapDataResource.Resolved(requireNonNull(mapData.getResolved()).getName(), mapData.getResolved().getType(), setOf(layerDesc2)));
+            MapLayerDescriptor layerDesc1Updated = new MapLayerDescriptorTest.TestLayerDescriptor1(layerDesc1.getLayerName(), layerDesc1.getResourceUri(), layerDesc1.getDataType());
+            mapData = new MapDataResource(layerDesc1Updated.getResourceUri(), repo1, 0,
+                new MapDataResource.Resolved(requireNonNull(mapData.getResolved()).getName(), mapData.getResolved().getType(), setOf(layerDesc1Updated)));
             MapDataManager.MapDataUpdate update = mapDataManager.new MapDataUpdate(this, emptyMap(), mapOf(mapData), emptyMap());
 
-            TestLayerAdapter layerUpdated = prepareLayerAdapterStubs(overlayManager, layerDesc2, markerSpec("m2"));
+            TestLayerAdapter layerUpdated = prepareLayerAdapterStubs(overlayManager, layerDesc1Updated, markerSpec("m2"));
 
             when(mapDataManager.getLayers()).thenReturn(mapData.getLayers());
 
             waitForMainThreadToRun(() -> {
+                overlayManager.hideLayer(layerDesc1);
                 overlayManager.onMapDataUpdated(update);
-                verify(provider1, never()).createMapLayerAdapter(same(layerDesc2), same(map));
+                verify(provider1, never()).createMapLayerAdapter(same(layerDesc1Updated), same(map));
                 assertTrue(layer1.isRemoved());
                 assertFalse(layerUpdated.isOnMap());
                 // TODO: uiautomator verify markers
@@ -795,10 +796,10 @@ public class MapLayerManagerTest {
         MapDataResource cache2;
 
         @Before
-        public void setupMapData() throws URISyntaxException {
+        public void before2_setupMapData() throws URISyntaxException {
 
-            c1Uri = new URI("test", "z-order", "c1", null);
-            c2Uri = new URI("test", "z-order", "c2", null);
+            c1Uri = new URI("test", "z-order", "/c1", null);
+            c2Uri = new URI("test", "z-order", "/c2", null);
 
             c1o1 = new MapLayerDescriptorTest.TestLayerDescriptor1("c1.1", c1Uri, provider1.getClass());
             c1o2 = new MapLayerDescriptorTest.TestLayerDescriptor1("c1.2", c1Uri, provider1.getClass());
@@ -1026,7 +1027,7 @@ public class MapLayerManagerTest {
         Map<MapLayerDescriptor, TestLayerAdapter> overlaysOnMap;
 
         @Before
-        public void addAllOverlaysToMap() throws InterruptedException {
+        public void before3_addAllLayersToMap() throws InterruptedException {
             overlayManager = new MapLayerManager(mapDataManager, providers, map);
             overlaysOnMap = new HashMap<>();
             List<MapLayerDescriptor> orderByName = overlayManager.getLayersInZOrder();
@@ -1048,7 +1049,6 @@ public class MapLayerManagerTest {
         }
 
         private void assertZIndexMove(int from, int to) {
-
             waitForMainThreadToRun(() -> {
                 List<MapLayerDescriptor> order = overlayManager.getLayersInZOrder();
                 List<MapLayerDescriptor> expectedOrder = new ArrayList<>(order);
@@ -1060,10 +1060,9 @@ public class MapLayerManagerTest {
                 for (int zIndex = 0; zIndex < expectedOrder.size(); zIndex++) {
                     MapLayerDescriptor overlay = expectedOrder.get(zIndex);
                     TestLayerAdapter onMap = overlaysOnMap.get(overlay);
-                    assertThat((double) onMap.elements.withElementForId(overlay.getLayerName() + ".m1", GET_MARKER).getZIndex(), is(zIndex));
+                    assertThat((float) onMap.elements.withElementForId(overlay.getLayerName() + ".m1", GET_MARKER).getZIndex(), is((float) zIndex));
                 }
             });
-
         }
 
         @Test
