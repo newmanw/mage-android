@@ -16,7 +16,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -103,6 +102,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements I
     private RefreshCurrentEventLayers pendingRefresh;
     private Resource.Status refreshStatus = Status.Success;
     private String statusMessage = "Ready";
+    private long contentTimestamp = 0;
 
     StaticFeatureLayerRepository(EventHelper eventHelper, LayerHelper layerHelper, StaticFeatureHelper featureHelper, LayerResource layerService, File iconsDir, NetworkCondition network) {
         this.eventHelper = eventHelper;
@@ -547,13 +547,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements I
         }
 
         private File resolveIcon() throws Exception {
-            URL iconUrl;
-            try {
-                iconUrl = new URL(iconUrlStr);
-            }
-            catch (MalformedURLException e) {
-                throw e;
-            }
+            URL iconUrl = new URL(iconUrlStr);
             String fileName = iconUrl.getPath();
             if (fileName == null) {
                 throw new IllegalArgumentException("icon url has no path component: " + iconUrlStr);
@@ -624,7 +618,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements I
                 }
                 MapDataResource.Resolved resolvedLayers = new MapDataResource.Resolved(RESOURCE_NAME, StaticFeatureLayerProvider.class, descriptors);
                 MapDataResource mapData = new MapDataResource(
-                    RESOURCE_URI, StaticFeatureLayerRepository.this, 0, resolvedLayers);
+                    RESOURCE_URI, StaticFeatureLayerRepository.this, ++contentTimestamp, resolvedLayers);
                 return new SyncMapDataFromDatabaseResult(mapData, null);
             }
             catch (LayerException e) {

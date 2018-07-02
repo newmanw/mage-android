@@ -62,6 +62,7 @@ import static java.util.Collections.emptyMap;
 import static java.util.Collections.emptySet;
 import static mil.nga.giat.mage.test.AsyncTesting.waitForMainThreadToRun;
 import static mil.nga.giat.mage.test.TargetSuppliesPropertyValueMatcher.withValueSuppliedBy;
+import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.hasValue;
 import static org.hamcrest.Matchers.is;
@@ -1445,6 +1446,35 @@ public class StaticFeatureLayerRepositoryTest {
         refreshLock.unlock();
 
         onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+    }
+
+    @Test
+    public void incrementsTheContentTimestampForEachRefresh() throws Exception {
+        TestLayer layer = new TestLayer("abcd", "test", "layer 1", currentEvent);
+        when(layerService.getLayers(currentEvent)).thenReturn(Collections.singleton(layer));
+        when(layerHelper.read("abcd")).then(invoc -> layer.setId(123L));
+        when(layerHelper.create(layer)).then(invoc -> layer.setId(1234L));
+        when(layerService.getFeatures(layer)).thenReturn(Collections.emptySet());
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+
+        MapDataResource res1 = (MapDataResource) repo.getValue().toArray()[0];
+
+        waitForMainThreadToRun(() -> {
+            repo.refreshAvailableMapData(emptyMap(), executor);
+            assertThat(repo.getStatus(), is(Resource.Status.Loading));
+        });
+
+        onMainThread.assertThatWithin(oneSecond(), repo::getStatus, is(Resource.Status.Success));
+
+        MapDataResource res2 = (MapDataResource) repo.getValue().toArray()[0];
+
+        assertThat(res2.getContentTimestamp(), greaterThan(res1.getContentTimestamp()));
     }
 
     @Test
