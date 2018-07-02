@@ -27,7 +27,6 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.concurrent.Callable;
@@ -91,21 +90,25 @@ public class MapLayerManager implements MapDataManager.MapDataListener, GoogleMa
         private final Callable<? extends MapLayerAdapter> createLayerAdapter;
         private final AtomicReference<MapLayerAdapter> layerAdapter = new AtomicReference<>();
         private final AtomicReference<MapLayer> layer = new AtomicReference<>();
+        private final SetSpecZIndex initZIndex;
 
         // TODO: this is for later when implementing dynamic culling of layer elements based on bounds and map movement
+        // passing in the already existing MapLayer
         private UpdateLayerMapElements(MapLayer layer, MapLayerDescriptor layerDescriptor, LatLngBounds bounds, MapLayerManager layerManager) {
             this.layer.set(layer);
             this.createLayerAdapter = () -> layer.adapter;
             this.layerDescriptor = layerDescriptor;
             this.bounds = bounds;
             this.layerManager = layerManager;
+            initZIndex = new SetSpecZIndex(layer.zIndex);
         }
 
-        private UpdateLayerMapElements(Callable<? extends MapLayerAdapter> createLayerAdapter, MapLayerDescriptor layerDescriptor, LatLngBounds bounds, MapLayerManager layerManager) {
+        private UpdateLayerMapElements(Callable<? extends MapLayerAdapter> createLayerAdapter, MapLayerDescriptor layerDescriptor, int zIndex, LatLngBounds bounds, MapLayerManager layerManager) {
             this.createLayerAdapter = createLayerAdapter;
             this.layerDescriptor = layerDescriptor;
             this.bounds = bounds;
             this.layerManager = layerManager;
+            initZIndex = new SetSpecZIndex(zIndex);
         }
 
         @Override
@@ -127,6 +130,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener, GoogleMa
             Iterator<? extends MapElementSpec> specs = layerAdapter.get().elementsInBounds(bounds);
             while (specs.hasNext() && !isCancelled()) {
                 MapElementSpec spec = specs.next();
+                spec.accept(initZIndex);
                 publishProgress(spec);
             }
             return null;
@@ -181,6 +185,47 @@ public class MapLayerManager implements MapDataManager.MapDataListener, GoogleMa
         }
     }
 
+    private static class SetSpecZIndex implements MapElementSpec.MapElementSpecVisitor {
+
+        private final int zIndex;
+
+        private SetSpecZIndex(int zIndex) {
+            this.zIndex = zIndex;
+        }
+
+        @Override
+        public void visit(MapElementSpec.MapCircleSpec x) {
+            x.options.zIndex(zIndex);
+        }
+
+        @Override
+        public void visit(MapElementSpec.MapGroundOverlaySpec x) {
+            x.options.zIndex(zIndex);
+        }
+
+        @Override
+        public void visit(MapElementSpec.MapMarkerSpec x) {
+            x.options.zIndex(zIndex);
+
+        }
+
+        @Override
+        public void visit(MapElementSpec.MapPolygonSpec x) {
+            x.options.zIndex(zIndex);
+        }
+
+        @Override
+        public void visit(MapElementSpec.MapPolylineSpec x) {
+            x.options.zIndex(zIndex);
+
+        }
+
+        @Override
+        public void visit(MapElementSpec.MapTileOverlaySpec x) {
+            x.options.zIndex(zIndex);
+        }
+    }
+
 
     /**
      * A {@code MapLayer} is the visual representation on a {@link GoogleMap} of the data
@@ -198,6 +243,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener, GoogleMa
         private final MapLayerAdapter adapter;
         private final MapElements mapElements = new BasicMapElementContainer();
         private boolean visible = true;
+        private int zIndex = 0;
 
         private MapLayer(MapLayerAdapter adapter) {
             this.adapter = adapter;
@@ -224,6 +270,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener, GoogleMa
         }
 
         protected void setZIndex(int z) {
+            zIndex = z;
             mapElements.forEach(new MapElementOperation.SetZIndex(z));
         }
 
@@ -545,7 +592,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener, GoogleMa
             MapDataProvider provider = providers.get(resourceType);
             Callable<? extends MapLayerAdapter> createLayerAdapter = provider.createMapLayerAdapter(layerDesc, getMap());
             UpdateLayerMapElements loadLayerElements = (UpdateLayerMapElements) new UpdateLayerMapElements(
-                createLayerAdapter, layerDesc, ANYWHERE, this).executeOnExecutor(AsyncTask.SERIAL_EXECUTOR);
+                createLayerAdapter, layerDesc, position, ANYWHERE, this).executeOnExecutor(AsyncTask.SERIAL_EXECUTOR);
             layersOnMap.put(layerDesc, new PendingLayer(loadLayerElements));
         }
         else {

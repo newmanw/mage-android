@@ -845,23 +845,19 @@ public class MapLayerManagerTest {
             TestLayerAdapter c1o2OnMap = prepareLayerAdapterStubs(overlayManager, c1o2, markerSpec("c1o2.1"));
             TestLayerAdapter c2o1OnMap = prepareLayerAdapterStubs(overlayManager, c2o1, markerSpec("c2o1.1"));
 
-            when(map.addMarker(c1o2OnMap.elementSpecForId("c1o2.1", MapElementSpec.MapMarkerSpec.class).options)).then(invoc -> {
-                MarkerOptions options = invoc.getArgument(0);
-                assertThat(options.getZIndex(), is(c1o2z));
-                return mock(Marker.class);
-            });
-            when(map.addMarker(c2o1OnMap.elementSpecForId("c2o1.1", MapElementSpec.MapMarkerSpec.class).options)).then(invoc -> {
-                MarkerOptions options = invoc.getArgument(0);
-                assertThat(options.getZIndex(), is(c2o1z));
-                return mock(Marker.class);
-            });
-
             waitForMainThreadToRun(() -> {
-                overlayManager.showLayer(c1o1);
+                overlayManager.showLayer(c1o2);
                 overlayManager.showLayer(c2o1);
             });
 
             onMainThread.assertThatWithin(timeout(), () -> c1o2OnMap.isOnMap() && c2o1OnMap.isOnMap(), is(true));
+
+            waitForMainThreadToRun(() -> {
+                assertThat(c1o2OnMap.elementSpecForId("c1o2.1", MapElementSpec.MapMarkerSpec.class).options.getZIndex(), is((float) c1o2z));
+                assertThat(c1o2OnMap.elements.withElementForId("c1o2.1", GET_MARKER).getZIndex(), is((float) c1o2z));
+                assertThat(c2o1OnMap.elementSpecForId("c2o1.1", MapElementSpec.MapMarkerSpec.class).options.getZIndex(), is((float) c2o1z));
+                assertThat(c2o1OnMap.elements.withElementForId("c2o1.1", GET_MARKER).getZIndex(), is((float) c2o1z));
+            });
 
             // TODO: uiautomator verify markers
 //            verify(map).addMarker(same(c1o2OnMap.elementSpecForId("c1o2.1", MapElementSpec.MapMarkerSpec.class).options));
@@ -920,9 +916,10 @@ public class MapLayerManagerTest {
                 assertThat(orderMod.indexOf(c1o1), is(c1o1zMod));
                 assertThat(orderMod.indexOf(c2o1), is(c2o1zMod));
                 assertThat(orderMod.indexOf(c2o2), is(c2o2zMod));
-                assertThat(c1o1OnMap.elements.withElementForId("c1o1.1", (Marker x, Object id) -> x.getZIndex()), is(c1o1zMod));
-                assertThat(c2o1OnMap.elements.withElementForId("c2o1.1", (Marker x, Object id) -> x.getZIndex()), is(c2o1zMod));
-                assertThat(c2o1OnMap.elements.withElementForId("c2o1.2", (Marker x, Object id) -> x.getZIndex()), is(c2o2zMod));
+                assertThat(c1o1OnMap.elements.withElementForId("c1o1.1", (Marker x, Object id) -> x.getZIndex()), is((float) c1o1zMod));
+                assertThat(c2o1OnMap.elements.withElementForId("c2o1.1", (Marker x, Object id) -> x.getZIndex()), is((float) c2o1zMod));
+                assertThat(c2o1OnMap.elements.withElementForId("c2o1.2", (Marker x, Object id) -> x.getZIndex()), is((float) c2o1zMod));
+                assertThat(c2o2OnMap.elements.count(), is(0));
             });
         }
 
@@ -980,7 +977,7 @@ public class MapLayerManagerTest {
 
                 assertThat(unchangedOrder, not(equalTo(invalidOrder)));
                 assertThat(unchangedOrder, not(hasItem(invalidOrder.get(1))));
-                assertThat((double) firstOnMap.elements.withElementForId("m1", GET_MARKER).getZIndex(), is(originalZIndex));
+                assertThat(firstOnMap.elements.withElementForId("m1", GET_MARKER).getZIndex(), is(originalZIndex));
             });
         }
 
@@ -1005,7 +1002,7 @@ public class MapLayerManagerTest {
 
                 assertThat(unchangedOrder, not(equalTo(invalidOrder)));
                 assertThat(unchangedOrder.size(), is(invalidOrder.size() + 1));
-                assertThat((double) lastOnMap.elements.withElementForId("m1", GET_MARKER).getZIndex(), is(originalZIndex));
+                assertThat(lastOnMap.elements.withElementForId("m1", GET_MARKER).getZIndex(), is(originalZIndex));
             });
         }
 
@@ -1060,7 +1057,7 @@ public class MapLayerManagerTest {
                 for (int zIndex = 0; zIndex < expectedOrder.size(); zIndex++) {
                     MapLayerDescriptor overlay = expectedOrder.get(zIndex);
                     TestLayerAdapter onMap = overlaysOnMap.get(overlay);
-                    assertThat((float) onMap.elements.withElementForId(overlay.getLayerName() + ".m1", GET_MARKER).getZIndex(), is((float) zIndex));
+                    assertThat(onMap.elements.withElementForId(overlay.getLayerName() + ".m1", GET_MARKER).getZIndex(), is((float) zIndex));
                 }
             });
         }
