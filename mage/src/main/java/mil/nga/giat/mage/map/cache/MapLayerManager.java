@@ -38,6 +38,8 @@ import mil.nga.giat.mage.map.MapElements;
 import mil.nga.giat.mage.map.MapElementOperation;
 import mil.nga.giat.mage.map.MapElementSpec;
 
+import static java.util.Objects.requireNonNull;
+
 /**
  * A {@code MapLayerManager} binds {@link MapLayerDescriptor layer data} from various
  * {@link MapDataRepository sources} to visual objects on a {@link GoogleMap}.
@@ -208,6 +210,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener, GoogleMa
          */
         protected void removeFromMap() {
             mapElements.forEach(MapElementOperation.REMOVE);
+            adapter.onLayerRemoved();
         }
 
         protected void show() {
@@ -538,8 +541,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener, GoogleMa
         MapLayerDescriptor layerDesc = overlaysInZOrder.get(position);
         MapLayer layer = layersOnMap.get(layerDesc);
         if (layer == null) {
-            MapDataResource resource = mapDataManager.getResources().get(layerDesc.getResourceUri());
-            Class<? extends MapDataProvider> resourceType = Objects.requireNonNull(resource.getResolved()).getType();
+            Class<? extends MapDataProvider> resourceType = layerDesc.getDataType();
             MapDataProvider provider = providers.get(resourceType);
             Callable<? extends MapLayerAdapter> createLayerAdapter = provider.createMapLayerAdapter(layerDesc, getMap());
             UpdateLayerMapElements loadLayerElements = (UpdateLayerMapElements) new UpdateLayerMapElements(
