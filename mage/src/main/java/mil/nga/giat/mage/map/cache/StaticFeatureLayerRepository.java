@@ -82,8 +82,8 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements I
         LayerHelper layerHelper = LayerHelper.getInstance(context);
         StaticFeatureHelper featureHelper = StaticFeatureHelper.getInstance(context);
         LayerResource layerResource = new LayerResource(context);
-        File iconsDir = new File(context.getFilesDir(), "icons/staticfeatures");
-        NetworkCondition network = () -> !ConnectivityUtility.isOnline(context) || LoginTaskFactory.getInstance(context).isLocalLogin();
+        File iconsDir = new File(context.getFilesDir(), "icons/static_features");
+        NetworkCondition network = () -> ConnectivityUtility.isOnline(context) || LoginTaskFactory.getInstance(context).isLocalLogin();
         instance = new StaticFeatureLayerRepository(eventHelper, layerHelper, featureHelper, layerResource, iconsDir, network);
     }
 
