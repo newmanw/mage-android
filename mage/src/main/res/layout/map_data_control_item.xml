@@ -49,7 +49,7 @@
 
     <ImageView
         android:id="@+id/map_data_drag_icon"
-        android:src="@drawable/ic_swap_vert_black_24dp"
+        app:srcCompat="@drawable/ic_swap_vert_black_24dp"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginRight="12dp"
@@ -57,7 +57,8 @@
         app:layout_constraintTop_toTopOf="@id/vertical_center"
         app:layout_constraintBottom_toBottomOf="@id/vertical_center"
         app:layout_goneMarginRight="12dp"
-        tools:ignore="RtlHardcoded"/>
+        tools:ignore="RtlHardcoded"
+        android:contentDescription="@string/cd_layer_drag_handle"/>
 
     <android.support.v7.widget.SwitchCompat
         android:id="@+id/map_data_visible"
@@ -78,7 +79,16 @@
         app:layout_constraintTop_toTopOf="@id/vertical_center"
         app:layout_constraintBottom_toBottomOf="@id/vertical_center"
         app:layout_constraintRight_toRightOf="parent"
-        >
-    </Spinner>
+        />
+
+    <ProgressBar
+        android:id="@+id/map_data_layer_progress"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:indeterminate="true"
+        android:visibility="invisible"
+        app:layout_constraintTop_toBottomOf="@id/map_data_detail"
+        style="@style/Widget.AppCompat.ProgressBar.Horizontal"
+        />
 
 </android.support.constraint.ConstraintLayout>

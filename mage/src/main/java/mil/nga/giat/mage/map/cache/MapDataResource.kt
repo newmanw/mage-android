@@ -15,7 +15,7 @@ class MapDataResource private constructor (val uri: URI, val repositoryId: Strin
     /**
      * Create a [MapDataResource] with the given ID that has been resolved
      */
-    constructor(uri: URI, repository: MapDataRepository, contentTimestamp: Long = System.currentTimeMillis(), resolved: Resolved) : this(uri, repository.id, contentTimestamp, resolved)
+    constructor(uri: URI, repository: MapDataRepository, contentTimestamp: Long = System.currentTimeMillis(), resolved: Resolved?) : this(uri, repository.id, contentTimestamp, resolved)
 
     /**
      * Create a [MapDataResource] with the same URI, repository, and content timestamp as the given source repository,
@@ -38,6 +38,7 @@ class MapDataResource private constructor (val uri: URI, val repositoryId: Strin
             private set
     }
 
+
     /**
      * Return a map of [layer descriptors][MapLayerDescriptor] keyed by their [URIs][MapLayerDescriptor.layerUri].
      * @return
@@ -51,10 +52,7 @@ class MapDataResource private constructor (val uri: URI, val repositoryId: Strin
         get() = null
         private set
 
-    fun updateRefreshTimestamp(): MapDataResource {
-        this.refreshTimestamp = System.currentTimeMillis()
-        return this
-    }
+    fun requireResolved(): Resolved { return resolved!! }
 
     /**
      * Return a [new][MapDataResource(MapDataResource,Resolved)]
@@ -64,7 +62,7 @@ class MapDataResource private constructor (val uri: URI, val repositoryId: Strin
     }
 
     fun resolve(resolved: Resolved, contentTimestamp: Long): MapDataResource {
-        return MapDataResource(uri, repositoryId, contentTimestamp, resolved);
+        return MapDataResource(uri, repositoryId, contentTimestamp, resolved)
     }
 
     /**

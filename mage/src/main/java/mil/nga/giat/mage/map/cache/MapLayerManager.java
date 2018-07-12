@@ -1,7 +1,6 @@
 package mil.nga.giat.mage.map.cache;
 
 import android.os.AsyncTask;
-import android.support.annotation.NonNull;
 import android.support.annotation.UiThread;
 import android.support.annotation.WorkerThread;
 import android.util.Log;
@@ -33,17 +32,15 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicReference;
 
 import mil.nga.giat.mage.map.BasicMapElementContainer;
-import mil.nga.giat.mage.map.MapElements;
 import mil.nga.giat.mage.map.MapElementOperation;
 import mil.nga.giat.mage.map.MapElementSpec;
-
-import static java.util.Objects.requireNonNull;
+import mil.nga.giat.mage.map.MapElements;
 
 /**
  * A {@code MapLayerManager} binds {@link MapLayerDescriptor layer data} from various
  * {@link MapDataRepository sources} to visual objects on a {@link GoogleMap}.
  */
-public class MapLayerManager implements MapDataManager.MapDataListener, GoogleMap.OnMarkerClickListener, GoogleMap.OnMapClickListener, GoogleMap.OnCircleClickListener, GoogleMap.OnPolylineClickListener, GoogleMap.OnPolygonClickListener, GoogleMap.OnGroundOverlayClickListener {
+public class MapLayerManager implements GoogleMap.OnMarkerClickListener, GoogleMap.OnMapClickListener, GoogleMap.OnCircleClickListener, GoogleMap.OnPolylineClickListener, GoogleMap.OnPolygonClickListener, GoogleMap.OnGroundOverlayClickListener {
 
     private static final String LOG_NAME = MapLayerManager.class.getSimpleName();
 
@@ -217,7 +214,6 @@ public class MapLayerManager implements MapDataManager.MapDataListener, GoogleMa
         @Override
         public void visit(MapElementSpec.MapPolylineSpec x) {
             x.options.zIndex(zIndex);
-
         }
 
         @Override
@@ -361,7 +357,6 @@ public class MapLayerManager implements MapDataManager.MapDataListener, GoogleMa
     private final Map<Class<? extends MapDataProvider>, MapDataProvider> providers = new HashMap<>();
     private final Map<MapLayerDescriptor, MapLayer> layersOnMap = new HashMap<>();
     private final List<MapLayerListener> listeners = new ArrayList<>();
-    private List<MapLayerDescriptor> overlaysInZOrder = new ArrayList<>();
     private final Comparator<MapLayerDescriptor> DEFAULT_LAYER_ORDER = (a, b) -> {
         if (a.equals(b)) {
             return 0;
@@ -371,6 +366,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener, GoogleMa
         }
         return a.getResourceUri().compareTo(b.getResourceUri());
     };
+    private List<MapLayerDescriptor> overlaysInZOrder = new ArrayList<>();
 
     public MapLayerManager(MapDataManager mapDataManager, List<MapDataProvider> providers, GoogleMap map) {
         this.mapDataManager = mapDataManager;
@@ -380,14 +376,14 @@ public class MapLayerManager implements MapDataManager.MapDataListener, GoogleMa
         }
         overlaysInZOrder.addAll(mapDataManager.getLayers().values());
         Collections.sort(overlaysInZOrder, DEFAULT_LAYER_ORDER);
-        mapDataManager.addUpdateListener(this);
+        // TODO: observe MapDataManager
+//        mapDataManager.addUpdateListener(this);
     }
 
-    @Override
-    public void onMapDataUpdated(@NonNull MapDataManager.MapDataUpdate update) {
+    public void onMapDataChanged() {
         int position = 0;
         Iterator<MapLayerDescriptor> orderIterator = overlaysInZOrder.iterator();
-        Map<URI, MapLayerDescriptor> allLayers = update.getSource().getLayers();
+        Map<URI, MapLayerDescriptor> allLayers = mapDataManager.getLayers();
         while (orderIterator.hasNext()) {
             MapLayerDescriptor existingLayer = orderIterator.next();
             MapLayerDescriptor updatedLayer = allLayers.remove(existingLayer.getLayerUri());
@@ -419,6 +415,10 @@ public class MapLayerManager implements MapDataManager.MapDataListener, GoogleMa
 
     public GoogleMap getMap() {
         return map;
+    }
+
+    public MapDataManager getMapDataManager() {
+        return mapDataManager;
     }
 
     /**
@@ -547,7 +547,7 @@ public class MapLayerManager implements MapDataManager.MapDataListener, GoogleMa
 
     public void dispose() {
         // TODO: remove and dispose all overlays/notify providers
-        mapDataManager.removeUpdateListener(this);
+//        mapDataManager.removeUpdateListener(this);
         Iterator<Map.Entry<MapLayerDescriptor, MapLayer>> entries = layersOnMap.entrySet().iterator();
         while (entries.hasNext()) {
             MapLayer onMap = entries.next().getValue();

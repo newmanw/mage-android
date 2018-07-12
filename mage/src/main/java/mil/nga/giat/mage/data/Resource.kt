@@ -1,20 +1,33 @@
 package mil.nga.giat.mage.data
 
-const val UNKNOWN_STATUS_CODE: Int = -1
-
 interface Resource<out T> {
+
+    val content: T?
+    val status: Resource.Status
+    val statusCode: Int
+    val statusMessage: String?
 
     enum class Status {
         Loading,
         Success,
         Error
     }
+}
 
-    val value: T?
+data class BasicResource<T>(
+        override val content: T?,
+        override val status: Resource.Status,
+        override val statusCode: Int,
+        override val statusMessage: String?) : Resource<T> {
 
-    val status: Status
+    constructor(content: T?, status: Resource.Status) : this(content, status, status.ordinal, status.name)
 
-    val statusCode: Int
 
-    val statusMessage: String?
+    companion object {
+
+        @JvmStatic
+        fun <T> loading(): Resource<T> {
+            return BasicResource(null, Resource.Status.Loading)
+        }
+    }
 }

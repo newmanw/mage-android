@@ -37,7 +37,7 @@ abstract class MapLayerDescriptor protected constructor(
 
     /**
      * Return an optional human-readable alternative to the [layerName].
-     * The default value is the [layerName].
+     * The default content is the [layerName].
      */
     open var layerTitle: String = layerName
     protected set

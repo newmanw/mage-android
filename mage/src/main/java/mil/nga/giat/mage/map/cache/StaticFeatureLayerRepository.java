@@ -5,12 +5,10 @@ import android.annotation.SuppressLint;
 import android.app.Application;
 import android.os.AsyncTask;
 import android.support.annotation.MainThread;
-import android.support.annotation.Nullable;
+import android.support.annotation.NonNull;
 import android.util.Log;
 
 import com.google.common.io.ByteStreams;
-
-import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -30,6 +28,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executor;
 
+import mil.nga.giat.mage.data.BasicResource;
 import mil.nga.giat.mage.data.Resource;
 import mil.nga.giat.mage.sdk.connectivity.ConnectivityUtility;
 import mil.nga.giat.mage.sdk.datastore.layer.Layer;
@@ -44,6 +43,8 @@ import mil.nga.giat.mage.sdk.exceptions.LayerException;
 import mil.nga.giat.mage.sdk.exceptions.StaticFeatureException;
 import mil.nga.giat.mage.sdk.http.resource.LayerResource;
 import mil.nga.giat.mage.sdk.login.LoginTaskFactory;
+
+import static mil.nga.giat.mage.data.Resource.Status.*;
 
 
 @MainThread
@@ -100,8 +101,6 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements I
     private Event lastSyncedEvent;
     private RefreshCurrentEventLayers refreshInProgress;
     private RefreshCurrentEventLayers pendingRefresh;
-    private Resource.Status refreshStatus = Status.Success;
-    private String statusMessage = "Ready";
     private long contentTimestamp = 0;
 
     StaticFeatureLayerRepository(EventHelper eventHelper, LayerHelper layerHelper, StaticFeatureHelper featureHelper, LayerResource layerService, File iconsDir, NetworkCondition network) {
@@ -113,35 +112,19 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements I
         this.network = network;
     }
 
-    @NotNull
     @Override
-    public Status getStatus() {
-        return refreshStatus;
-    }
-
-    @Override
-    public int getStatusCode() {
-        return getStatus().ordinal();
-    }
-
-    @Nullable
-    @Override
-    public String getStatusMessage() {
-        return statusMessage;
-    }
-
-    @Override
-    public boolean ownsResource(URI resourceUri) {
+    public boolean ownsResource(@NonNull URI resourceUri) {
         return RESOURCE_URI.equals(resourceUri);
     }
 
     @Override
-    public void refreshAvailableMapData(Map<URI, MapDataResource> resolvedResources, Executor executor) {
+    public void refreshAvailableMapData(@NonNull Map<URI, MapDataResource> resolvedResources, @NonNull Executor executor) {
         // TODO: this db query should really be on background thread too, but this should be fixed with Room/LiveData later
         Event currentEvent = eventHelper.getCurrentEvent();
         if (refreshInProgress != null && currentEvent.equals(refreshInProgress.event)) {
             return;
         }
+        setValue(BasicResource.loading());
         pendingRefresh = new RefreshCurrentEventLayers(executor, currentEvent);
         if (refreshInProgress != null) {
             refreshInProgress.cancel();
@@ -170,7 +153,6 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements I
             return;
         }
         pendingRefresh = null;
-        refreshStatus = Status.Loading;
         refreshInProgress.layerFetch.executeOnExecutor(refreshInProgress.executor);
     }
 
@@ -179,7 +161,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements I
         Collection<Layer> remoteLayers = fetch.result.layers;
         if (remoteLayers == null && fetch.result.failure != null) {
             refreshInProgress.cancel();
-            refreshInProgress.status = Status.Error;
+            refreshInProgress.status = Error;
             refreshInProgress.statusMessage.add("Error fetching layers for event "
                 + refreshInProgress.event.getName() + ": " + fetch.result.failure.getLocalizedMessage());
             createMapDataFromSyncedData();
@@ -203,7 +185,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements I
                 sync.layer.getRemoteId() + " but did not match the expected feature sync in progress");
         }
         if (sync.result.failure != null) {
-            refreshInProgress.status = Status.Error;
+            refreshInProgress.status = Error;
             refreshInProgress.statusMessage.add("Error syncing feature data for layer " + sync.layer.getName() +
                 " (" + sync.layer.getRemoteId() + "): " + sync.result.failure.getLocalizedMessage());
             if (refreshInProgress.isFinishedSyncing()) {
@@ -249,7 +231,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements I
                 sync.iconUrlStr + " but did not match the expected icon sync in progress");
         }
         if (sync.result.iconResolveFailure != null || sync.result.featureUpdateFailures != null) {
-            refreshInProgress.status = Status.Error;
+            refreshInProgress.status = Error;
             if (sync.result.iconResolveFailure != null) {
                 refreshInProgress.statusMessage.add("Error fetching feature icon at " +
                     sync.iconUrlStr + ": " + sync.result.iconResolveFailure.getLocalizedMessage());
@@ -271,7 +253,6 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements I
     private void onMapDataCreated(SyncMapDataFromDatabase sync) {
         RefreshCurrentEventLayers refresh = refreshInProgress;
         refreshInProgress = null;
-        refreshStatus = refresh.status;
         StringBuilder message = new StringBuilder();
         for (String messagePart : refresh.statusMessage) {
             if (message.length() > 0 && messagePart.length() > 0) {
@@ -279,10 +260,9 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements I
             }
             message.append(messagePart);
         }
-        statusMessage = message.toString();
         if (!refresh.isCancelled() || (pendingRefresh == null && (!refresh.event.equals(lastSyncedEvent) || getValue() == null))) {
             lastSyncedEvent = refresh.event;
-            setValue(Collections.singleton(sync.result.mapData));
+            setValue(new BasicResource<>(Collections.singleton(sync.result.mapData), refresh.status, refresh.status.ordinal(), message.toString()));
         }
         beginPendingRefresh();
     }
@@ -299,7 +279,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements I
         private final FetchEventLayers layerFetch;
         private final SyncMapDataFromDatabase syncMapData;
         private boolean cancelled = false;
-        private Status status = Status.Success;
+        private Resource.Status status = Success;
         private List<String> statusMessage = new ArrayList<>();
 
         private RefreshCurrentEventLayers(Executor executor, Event event) {
@@ -324,6 +304,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements I
             return layerFetch.result != null && featureSyncForLayer.isEmpty() && iconSyncForIconUrl.isEmpty();
         }
 
+        @SuppressWarnings("BooleanMethodIsAlwaysInverted")
         private boolean isCancelled() {
             return cancelled;
         }

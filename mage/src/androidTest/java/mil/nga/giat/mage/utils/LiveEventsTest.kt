@@ -6,12 +6,13 @@ import android.arch.lifecycle.LifecycleRegistry
 import mil.nga.giat.mage.test.AsyncTesting
 import mil.nga.giat.mage.utils.LiveEvents.EventProtocol
 import org.hamcrest.Matchers.equalTo
+import org.junit.Assert.assertThat
 import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.mockito.Mockito
-import org.mockito.Mockito.mock
+import org.mockito.Mockito.*
 import java.lang.ref.ReferenceQueue
 import java.lang.ref.WeakReference
 
@@ -126,6 +127,33 @@ class LiveEventsTest : LifecycleOwner {
 
     @Test
     fun doesNotSendEventsToInactiveListeners() {
-        fail("unimplemented")
+
+        val inactiveOwner = object: LifecycleOwner {
+            val life = LifecycleRegistry(this)
+            override fun getLifecycle(): Lifecycle {
+                return life
+            }
+        }
+
+        val events = LiveEvents<TestListener>(testListenerProtocol)
+        val activeListener = mock(TestListener::class.java)
+        val inactiveListener = mock(TestListener::class.java)
+        events.listen(this, activeListener)
+        events.listen(inactiveOwner, inactiveListener)
+
+        lifecycle.markState(Lifecycle.State.RESUMED)
+
+        assertThat(inactiveOwner.life.currentState, equalTo(Lifecycle.State.INITIALIZED))
+
+        events.trigger(EVENT_1)
+
+        verify(activeListener).onEvent1()
+        verifyNoMoreInteractions(inactiveListener)
+
+        inactiveOwner.life.markState(Lifecycle.State.CREATED)
+        events.trigger(EVENT_1)
+
+        verify(activeListener, times(2)).onEvent1()
+        verifyNoMoreInteractions(inactiveListener)
     }
 }

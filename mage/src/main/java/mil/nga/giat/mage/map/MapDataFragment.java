@@ -1,8 +1,12 @@
 package mil.nga.giat.mage.map;
 
+import android.arch.lifecycle.ViewModelProviders;
 import android.content.Context;
 import android.os.Bundle;
+import android.support.annotation.CallSuper;
+import android.support.annotation.NonNull;
 import android.support.v4.app.Fragment;
+import android.support.v7.util.DiffUtil;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.SwitchCompat;
 import android.view.LayoutInflater;
@@ -11,7 +15,9 @@ import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.CompoundButton;
+import android.widget.ImageButton;
 import android.widget.ImageView;
+import android.widget.ProgressBar;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -27,21 +33,23 @@ import java.util.List;
 import java.util.Map;
 
 import mil.nga.giat.mage.R;
+import mil.nga.giat.mage.data.Resource;
 import mil.nga.giat.mage.map.cache.MapLayerDescriptor;
 import mil.nga.giat.mage.map.cache.MapLayerManager;
+import mil.nga.giat.mage.map.view.MapLayersViewModel;
 
 import static android.support.v7.widget.RecyclerView.NO_ID;
 
 public class MapDataFragment extends Fragment implements MapLayerManager.MapLayerListener, DragListView.DragListListener, DragListView.DragListCallback {
 
     public interface MapDataListener {
-        void onBaseMapChanged(BuiltinDataControlValues change);
-        void onObservationsVisibilityChanged(BuiltinDataControlValues change);
-        void onLocationsVisibilityChanged(BuiltinDataControlValues change);
-        void onMgrsVisibilityChanged(BuiltinDataControlValues change);
+        void onBaseMapChanged(IntrinsicMapDataControls change);
+        void onObservationsVisibilityChanged(IntrinsicMapDataControls change);
+        void onLocationsVisibilityChanged(IntrinsicMapDataControls change);
+        void onMgrsVisibilityChanged(IntrinsicMapDataControls change);
     }
 
-    public static class BuiltinDataControlValues {
+    public static class IntrinsicMapDataControls {
 
         static class Builder {
 
@@ -70,8 +78,8 @@ public class MapDataFragment extends Fragment implements MapLayerManager.MapLaye
                 return this;
             }
 
-            BuiltinDataControlValues finish() {
-                return new BuiltinDataControlValues(baseMapType, observationsVisible, locationsVisible, mgrsVisible);
+            IntrinsicMapDataControls finish() {
+                return new IntrinsicMapDataControls(baseMapType, observationsVisible, locationsVisible, mgrsVisible);
             }
         }
 
@@ -79,7 +87,7 @@ public class MapDataFragment extends Fragment implements MapLayerManager.MapLaye
             return new Builder();
         }
 
-        static Builder from(BuiltinDataControlValues init) {
+        static Builder from(IntrinsicMapDataControls init) {
             return create()
                 .baseMapType(init.getBaseMapType())
                 .observationsVisible(init.isObservationsVisible())
@@ -92,7 +100,7 @@ public class MapDataFragment extends Fragment implements MapLayerManager.MapLaye
         private final boolean locationsVisible;
         private final boolean mgrsVisible;
 
-        BuiltinDataControlValues(int baseMapType, boolean observationsVisible, boolean locationsVisible, boolean mgrsVisible) {
+        IntrinsicMapDataControls(int baseMapType, boolean observationsVisible, boolean locationsVisible, boolean mgrsVisible) {
             this.baseMapType = baseMapType;
             this.observationsVisible = observationsVisible;
             this.locationsVisible = locationsVisible;
@@ -119,7 +127,7 @@ public class MapDataFragment extends Fragment implements MapLayerManager.MapLaye
     private enum StaticControl {
         BaseMap {
             @Override
-            void bindSpecific(MapDataControlViewHolder holder, BuiltinDataControlValues values) {
+            void bindSpecific(LayerControlViewHolder holder, IntrinsicMapDataControls values) {
                 holder.name.setText(R.string.map_data_base_map_label);
                 holder.dataVisible.setVisibility(View.GONE);
                 holder.dataChoice.setVisibility(View.VISIBLE);
@@ -128,7 +136,7 @@ public class MapDataFragment extends Fragment implements MapLayerManager.MapLaye
         },
         Observations {
             @Override
-            void bindSpecific(MapDataControlViewHolder holder, BuiltinDataControlValues values) {
+            void bindSpecific(LayerControlViewHolder holder, IntrinsicMapDataControls values) {
                 holder.name.setText(R.string.map_data_observations_label);
                 holder.dataChoice.setVisibility(View.GONE);
                 holder.dataVisible.setVisibility(View.VISIBLE);
@@ -136,8 +144,8 @@ public class MapDataFragment extends Fragment implements MapLayerManager.MapLaye
             }
 
             @Override
-            BuiltinDataControlValues onCheckedChanged(CompoundButton buttonView, boolean checked, BuiltinDataControlValues values, MapDataListener listener) {
-                BuiltinDataControlValues update = BuiltinDataControlValues.from(values).observationsVisible(checked).finish();
+            IntrinsicMapDataControls onCheckedChanged(CompoundButton buttonView, boolean checked, IntrinsicMapDataControls values, MapDataListener listener) {
+                IntrinsicMapDataControls update = IntrinsicMapDataControls.from(values).observationsVisible(checked).finish();
                 if (listener != null) {
                     listener.onObservationsVisibilityChanged(update);
                 }
@@ -146,7 +154,7 @@ public class MapDataFragment extends Fragment implements MapLayerManager.MapLaye
         },
         Locations {
             @Override
-            void bindSpecific(MapDataControlViewHolder holder, BuiltinDataControlValues values) {
+            void bindSpecific(LayerControlViewHolder holder, IntrinsicMapDataControls values) {
                 holder.name.setText(R.string.map_data_locations_label);
                 holder.dataChoice.setVisibility(View.GONE);
                 holder.dataVisible.setVisibility(View.VISIBLE);
@@ -154,8 +162,8 @@ public class MapDataFragment extends Fragment implements MapLayerManager.MapLaye
             }
 
             @Override
-            BuiltinDataControlValues onCheckedChanged(CompoundButton buttonView, boolean checked, BuiltinDataControlValues values, MapDataListener listener) {
-                BuiltinDataControlValues update = BuiltinDataControlValues.from(values).locationsVisible(checked).finish();
+            IntrinsicMapDataControls onCheckedChanged(CompoundButton buttonView, boolean checked, IntrinsicMapDataControls values, MapDataListener listener) {
+                IntrinsicMapDataControls update = IntrinsicMapDataControls.from(values).locationsVisible(checked).finish();
                 if (listener != null) {
                     listener.onLocationsVisibilityChanged(update);
                 }
@@ -164,7 +172,7 @@ public class MapDataFragment extends Fragment implements MapLayerManager.MapLaye
         },
         MGRS {
             @Override
-            void bindSpecific(MapDataControlViewHolder holder, BuiltinDataControlValues values) {
+            void bindSpecific(LayerControlViewHolder holder, IntrinsicMapDataControls values) {
                 holder.name.setText(R.string.map_data_mgrs_label);
                 holder.dataChoice.setVisibility(View.GONE);
                 holder.dataVisible.setVisibility(View.VISIBLE);
@@ -172,29 +180,21 @@ public class MapDataFragment extends Fragment implements MapLayerManager.MapLaye
             }
 
             @Override
-            BuiltinDataControlValues onCheckedChanged(CompoundButton buttonView, boolean checked, BuiltinDataControlValues values, MapDataListener listener) {
-                BuiltinDataControlValues update = BuiltinDataControlValues.from(values).mgrsVisible(checked).finish();
+            IntrinsicMapDataControls onCheckedChanged(CompoundButton buttonView, boolean checked, IntrinsicMapDataControls values, MapDataListener listener) {
+                IntrinsicMapDataControls update = IntrinsicMapDataControls.from(values).mgrsVisible(checked).finish();
                 if (listener != null) {
                     listener.onMgrsVisibilityChanged(update);
                 }
                 return update;
             }
-        },
-        DataOverlaysHeader {
-            @Override
-            void bindSpecific(MapDataControlViewHolder holder, BuiltinDataControlValues values) {
-                holder.name.setText(R.string.map_data_overlays_header);
-                holder.dataVisible.setVisibility(View.GONE);
-                holder.dataChoice.setVisibility(View.GONE);
-            }
         };
 
-        abstract void bindSpecific(MapDataControlViewHolder holder, BuiltinDataControlValues values);
-        BuiltinDataControlValues onCheckedChanged(CompoundButton buttonView, boolean checked, BuiltinDataControlValues values, MapDataListener listener) {
+        abstract void bindSpecific(LayerControlViewHolder holder, IntrinsicMapDataControls values);
+        IntrinsicMapDataControls onCheckedChanged(CompoundButton buttonView, boolean checked, IntrinsicMapDataControls values, MapDataListener listener) {
             return values;
         }
 
-        final void bind(MapDataControlViewHolder holder, BuiltinDataControlValues values) {
+        final void bind(LayerControlViewHolder holder, IntrinsicMapDataControls values) {
             holder.icon.setVisibility(View.GONE);
             holder.mGrabView.setVisibility(View.GONE);
             holder.detail.setText("");
@@ -202,7 +202,21 @@ public class MapDataFragment extends Fragment implements MapLayerManager.MapLaye
         }
     }
 
-    private class MapDataItemAdapter extends DragItemAdapter<Object, MapDataControlViewHolder> {
+    private static final int VIEW_TYPE_HEADER = 0;
+    private static final int VIEW_TYPE_STATIC_LAYER = 1;
+    private static final int VIEW_TYPE_SUPPLEMENTAL_LAYER = 2;
+
+    private abstract class BindableViewHolder extends DragItemAdapter.ViewHolder {
+
+        private BindableViewHolder(View itemView, int handleResId, boolean dragOnLongPress) {
+            super(itemView, handleResId, dragOnLongPress);
+        }
+
+        abstract void bindTo(int position);
+    }
+
+
+    private class MapDataItemAdapter extends DragItemAdapter<Object, BindableViewHolder> {
 
         private final Map<Object, Long> itemIds = new HashMap<>();
 
@@ -213,17 +227,27 @@ public class MapDataFragment extends Fragment implements MapLayerManager.MapLaye
             return id == null ? NO_ID : id;
         }
 
+        @NonNull
         @Override
-        public MapDataControlViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+        public BindableViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+            if (viewType == VIEW_TYPE_HEADER) {
+                View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.map_data_supplemental_header, parent, false);
+                return new HeaderViewHolder(view);
+            }
             View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.map_data_control_item, parent, false);
-            return new MapDataControlViewHolder(view);
+            if (viewType == VIEW_TYPE_STATIC_LAYER) {
+                return new StaticLayerViewHolder(view);
+            }
+            else if (viewType == VIEW_TYPE_SUPPLEMENTAL_LAYER) {
+                return new SupplementalLayerViewHolder(view);
+            }
+            throw new IllegalArgumentException("invalid view type: " + viewType);
         }
 
         @Override
-        public void onBindViewHolder(MapDataControlViewHolder holder, int position) {
+        public void onBindViewHolder(@NonNull BindableViewHolder holder, int position) {
             super.onBindViewHolder(holder, position);
-            Object item = getItemList().get(position);
-            holder.bindMapDataItem(item);
+            holder.bindTo(position);
         }
 
         @Override
@@ -237,89 +261,80 @@ public class MapDataFragment extends Fragment implements MapLayerManager.MapLaye
 
         @Override
         public int getItemViewType(int position) {
-            return super.getItemViewType(position);
+            if (position == SUPPLEMENTAL_HEADER_POS) {
+                return SUPPLEMENTAL_HEADER_POS;
+            }
+            return -1;
         }
     }
 
+    private class HeaderViewHolder extends BindableViewHolder implements View.OnClickListener {
 
+        private final ImageButton refreshButton;
+        private final ProgressBar progressBar;
 
-    private class MapDataControlViewHolder extends DragItemAdapter.ViewHolder implements CompoundButton.OnCheckedChangeListener, AdapterView.OnItemSelectedListener {
+        HeaderViewHolder(View view) {
+            super(view, R.id.map_refresh_layers_button, false);
+            refreshButton = view.findViewById(R.id.map_refresh_layers_button);
+            progressBar = view.findViewById(R.id.map_refresh_layers_progress);
+            refreshButton.setOnClickListener(this);
+        }
 
-        private final ImageView icon;
-        private final TextView name;
-        private final TextView detail;
-        private final Spinner dataChoice;
-        private final SwitchCompat dataVisible;
-        private Object mapData;
+        @Override
+        public void onClick(View v) {
+            refreshButton.setClickable(false);
+            progressBar.setVisibility(View.VISIBLE);
+            model.refreshLayers();
+        }
 
-        MapDataControlViewHolder(View itemView) {
+        @Override
+        void bindTo(int pos) {
+            if (model.getLayersInZOrder().getValue() == null || model.getLayersInZOrder().getValue().getStatus() == Resource.Status.Loading) {
+                progressBar.setVisibility(View.VISIBLE);
+                refreshButton.setClickable(false);
+            }
+            else {
+                progressBar.setVisibility(View.INVISIBLE);
+                refreshButton.setClickable(true);
+            }
+        }
+    }
+
+    private abstract class LayerControlViewHolder extends BindableViewHolder implements CompoundButton.OnCheckedChangeListener, AdapterView.OnItemSelectedListener {
+
+        final ImageView icon;
+        final TextView name;
+        final TextView detail;
+        final Spinner dataChoice;
+        final SwitchCompat dataVisible;
+        Object mapData;
+
+        LayerControlViewHolder(View itemView) {
             super(itemView, R.id.map_data_drag_icon, false);
-            icon = (ImageView) itemView.findViewById(R.id.map_data_icon);
-            name = (TextView) itemView.findViewById(R.id.map_data_name);
-            detail = (TextView) itemView.findViewById(R.id.map_data_detail);
-            dataVisible = (SwitchCompat) itemView.findViewById(R.id.map_data_visible);
-            dataChoice = (Spinner) itemView.findViewById(R.id.map_data_choice);
+            icon = itemView.findViewById(R.id.map_data_icon);
+            name = itemView.findViewById(R.id.map_data_name);
+            detail = itemView.findViewById(R.id.map_data_detail);
+            dataVisible = itemView.findViewById(R.id.map_data_visible);
+            dataChoice = itemView.findViewById(R.id.map_data_choice);
             // base map is the only control that uses the spinner, so just set it here instead of during binding
             dataChoice.setAdapter(baseMapChoices);
         }
 
-        private void bindMapDataItem(Object x) {
-            mapData = x;
-            dataVisible.setOnCheckedChangeListener(null);
-            dataChoice.setOnItemSelectedListener(null);
-            if (mapData instanceof StaticControl) {
-                bindStaticControl();
-            }
-            else if (mapData instanceof MapLayerDescriptor) {
-                bindCacheOverlay();
-            }
-            // don't let the switches animate as the list scrolls
+        @Override
+        @CallSuper
+        void bindTo(int pos) {
+            mapData = listAdapter.getItemList().get(pos);
             dataVisible.jumpDrawablesToCurrentState();
             dataVisible.setOnCheckedChangeListener(this);
             dataChoice.setOnItemSelectedListener(this);
         }
 
-        private void bindStaticControl() {
-            StaticControl x = (StaticControl) mapData;
-            x.bind(this, builtinDataControlValues);
-        }
-
-        private void bindCacheOverlay() {
-            dataChoice.setVisibility(View.GONE);
-            icon.setVisibility(View.VISIBLE);
-            mGrabView.setVisibility(View.VISIBLE);
-            dataVisible.setVisibility(View.VISIBLE);
-            MapLayerDescriptor x = (MapLayerDescriptor) mapData;
-            Integer iconResourceId = x.getIconImageResourceId();
-            if (iconResourceId != null) {
-                icon.setImageResource(iconResourceId);
-            }
-            name.setText(x.getLayerName());
-            detail.setText(x.getLayerTitle());
-            dataVisible.setChecked(overlayManager.isLayerVisible(x));
-        }
-
-        @Override
-        public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-            if (mapData instanceof StaticControl) {
-                builtinDataControlValues = ((StaticControl) mapData).onCheckedChanged(buttonView, isChecked, builtinDataControlValues, listener);
-            }
-            else if (mapData instanceof MapLayerDescriptor) {
-                if (isChecked){
-                    overlayManager.showLayer((MapLayerDescriptor) mapData);
-                }
-                else {
-                    overlayManager.hideLayer((MapLayerDescriptor) mapData);
-                }
-            }
-        }
-
         @Override
         public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
             // it's always base map control, so just do this here and cut out the middle man
-            builtinDataControlValues = BuiltinDataControlValues.from(builtinDataControlValues).baseMapType(position + 1).finish();
+            intrinsicMapDataControls = IntrinsicMapDataControls.from(intrinsicMapDataControls).baseMapType(position + 1).finish();
             if (listener != null) {
-                listener.onBaseMapChanged(builtinDataControlValues);
+                listener.onBaseMapChanged(intrinsicMapDataControls);
             }
         }
 
@@ -327,20 +342,70 @@ public class MapDataFragment extends Fragment implements MapLayerManager.MapLaye
         public void onNothingSelected(AdapterView<?> parent) {}
     }
 
-    private static final int LAST_STATIC_CONTROL_POS = StaticControl.values().length - 1;
+    private class StaticLayerViewHolder extends LayerControlViewHolder {
 
+        StaticLayerViewHolder(View itemView) {
+            super(itemView);
+        }
+
+        @Override
+        void bindTo(int pos) {
+            super.bindTo(pos);
+            StaticControl control = (StaticControl) mapData;
+            control.bind(this, intrinsicMapDataControls);
+        }
+
+        @Override
+        public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+            intrinsicMapDataControls = ((StaticControl) mapData).onCheckedChanged(buttonView, isChecked, intrinsicMapDataControls, listener);
+        }
+    }
+
+    private class SupplementalLayerViewHolder extends LayerControlViewHolder {
+
+        SupplementalLayerViewHolder(View itemView) {
+            super(itemView);
+        }
+
+        @Override
+        void bindTo(int pos) {
+            super.bindTo(pos);
+            dataChoice.setVisibility(View.GONE);
+            icon.setVisibility(View.VISIBLE);
+            mGrabView.setVisibility(View.VISIBLE);
+            dataVisible.setVisibility(View.VISIBLE);
+            MapLayersViewModel.LayerItem layer = (MapLayersViewModel.LayerItem) mapData;
+            Integer iconResourceId = layer.getContent().getIconImageResourceId();
+            if (iconResourceId != null) {
+                icon.setImageResource(iconResourceId);
+            }
+            name.setText(layer.getContent().getLayerTitle());
+            detail.setText(layer.getResourceName());
+            dataVisible.setChecked(layer.getVisible());
+        }
+
+        @Override
+        public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+            model.setLayerVisible((MapLayersViewModel.LayerItem) mapData, isChecked);
+        }
+    }
+
+    private static final int SUPPLEMENTAL_HEADER_POS = StaticControl.values().length - 1;
+
+    private MapLayersViewModel model;
     private DragListView mapControlList;
-    private BuiltinDataControlValues builtinDataControlValues;
-    private MapLayerManager overlayManager;
+    private IntrinsicMapDataControls intrinsicMapDataControls;
+    private MapLayerManager layerManager;
     private ArrayAdapter<CharSequence> baseMapChoices;
     private MapDataListener listener;
+    private MapDataItemAdapter listAdapter;
 
     public MapDataFragment() {
     }
 
-    public void setDataSources(BuiltinDataControlValues builtinDataControlValues, MapLayerManager overlayManager) {
-        this.builtinDataControlValues = builtinDataControlValues;
-        this.overlayManager = overlayManager;
+    public void setDataSources(IntrinsicMapDataControls intrinsicMapDataControls, MapLayerManager overlayManager) {
+        this.intrinsicMapDataControls = intrinsicMapDataControls;
+        this.layerManager = overlayManager;
     }
 
     public void setMapDataListener(MapDataListener x) {
@@ -357,30 +422,33 @@ public class MapDataFragment extends Fragment implements MapLayerManager.MapLaye
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        model = ViewModelProviders.of(requireActivity()).get(MapLayersViewModel.class);
+        model.getLayersInZOrder().observe(this, layersResource -> {
+            // TODO: update the list
+        });
     }
 
     @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+    public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         View root = inflater.inflate(R.layout.fragment_map_data, container, false);
-        mapControlList = (DragListView) root.findViewById(R.id.local_data_list);
+        mapControlList = root.findViewById(R.id.local_data_list);
         mapControlList.getRecyclerView().setVerticalScrollBarEnabled(true);
+        listAdapter = new MapDataItemAdapter();
         LinearLayoutManager linearLayout = new LinearLayoutManager(getContext());
         mapControlList.setLayoutManager(linearLayout);
         mapControlList.getRecyclerView().setNestedScrollingEnabled(true);
-        mapControlList.setAdapter(new MapDataItemAdapter(), false);
+        mapControlList.setAdapter(listAdapter, false);
         mapControlList.setDragListListener(this);
         mapControlList.setDragListCallback(this);
         mapControlList.setSnapDragItemToTouch(false);
-        // TODO: add loading status getter to MapLayerManager
-        overlayManager.addListener(this);
-        syncDataList();
+        layerManager.addListener(this);
         return root;
     }
 
     @Override
     public void onDestroyView() {
         super.onDestroyView();
-        overlayManager.removeListener(this);
+        layerManager.removeListener(this);
         mapControlList.setDragListListener(null);
         mapControlList = null;
     }
@@ -416,27 +484,51 @@ public class MapDataFragment extends Fragment implements MapLayerManager.MapLaye
         int lastIndex = mapControlList.getAdapter().getItemList().size() - 1;
         int fromReversed = lastIndex - fromPosition;
         int toReversed = lastIndex - toPosition;
-        if (!overlayManager.moveZIndex(fromReversed, toReversed)) {
+        if (!model.moveZIndex(fromReversed, toReversed)) {
             Toast.makeText(getContext(), R.string.z_index_move_failed, Toast.LENGTH_SHORT).show();
-            syncDataList();
+            // TODO: restore old list
         }
     }
 
     @Override
     public boolean canDragItemAtPosition(int dragPosition) {
-        return dragPosition > LAST_STATIC_CONTROL_POS;
+        return dragPosition > SUPPLEMENTAL_HEADER_POS;
     }
 
     @Override
     public boolean canDropItemAtPosition(int dropPosition) {
-        return dropPosition > LAST_STATIC_CONTROL_POS;
+        return dropPosition > SUPPLEMENTAL_HEADER_POS;
     }
 
     private void syncDataList() {
         MapDataItemAdapter adapter = (MapDataItemAdapter) mapControlList.getAdapter();
-        List<MapLayerDescriptor> overlays = overlayManager.getLayersInZOrder();
+        adapter.getItemList();
+        // TODO: diff util
+//        DiffUtil.DiffResult diff = DiffUtil.calculateDiff(new DiffUtil.Callback() {
+//            @Override
+//            public int getOldListSize() {
+//                return 0;
+//            }
+//
+//            @Override
+//            public int getNewListSize() {
+//                return 0;
+//            }
+//
+//            @Override
+//            public boolean areItemsTheSame(int oldItemPosition, int newItemPosition) {
+//                return false;
+//            }
+//
+//            @Override
+//            public boolean areContentsTheSame(int oldItemPosition, int newItemPosition) {
+//                return false;
+//            }
+//        }, true);
+//        diff.dispatchUpdatesTo(listAdapter);
+        List<MapLayerDescriptor> overlays = layerManager.getLayersInZOrder();
         Collections.reverse(overlays);
-        List<Object> mapDataItems = new ArrayList<Object>(Arrays.asList(StaticControl.values()));
+        List<Object> mapDataItems = new ArrayList<>(Arrays.asList(StaticControl.values()));
         mapDataItems.addAll(overlays);
         adapter.setItemList(mapDataItems);
     }

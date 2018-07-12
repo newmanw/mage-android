@@ -4,8 +4,6 @@
 
     <!-- ************************************************************* -->
 
-    <!-- ***************** set in mappreferences.xml ***************** -->
-
     <string name="baseLayerKey">baseLayer</string>
     <integer name="baseLayerDefaultValue">1</integer>
 

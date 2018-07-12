@@ -91,6 +91,8 @@ import mil.nga.giat.mage.map.marker.MyHistoricalLocationMarkerCollection;
 import mil.nga.giat.mage.map.marker.ObservationMarkerCollection;
 import mil.nga.giat.mage.map.marker.PointCollection;
 import mil.nga.giat.mage.map.marker.StaticGeometryCollection;
+import mil.nga.giat.mage.map.view.MapLayersViewModel;
+import mil.nga.giat.mage.map.view.MapViewModel;
 import mil.nga.giat.mage.observation.ObservationEditActivity;
 import mil.nga.giat.mage.observation.ObservationFormPickerActivity;
 import mil.nga.giat.mage.observation.ObservationLocation;
@@ -194,6 +196,9 @@ public class MapFragment extends Fragment implements
 	private TextView mgrs100KmTextView;
 	private TextView mgrsEastingTextView;
 	private TextView mgrsNorthingTextView;
+
+	private MapViewModel mapModel;
+	private MapLayersViewModel layersModel;
 
 	@Override
 	public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -633,13 +638,13 @@ public class MapFragment extends Fragment implements
 		// TODO: animate layout change with ObjectAnimator on map padding
 		layoutOverlaysExpanded.applyTo(constraintLayout);
 		MapDataFragment mapDataFragment = (MapDataFragment) Fragment.instantiate(getActivity(), MapDataFragment.class.getName());
-		MapDataFragment.BuiltinDataControlValues builtinDataControlValues = MapDataFragment.BuiltinDataControlValues.create()
+		MapDataFragment.IntrinsicMapDataControls intrinsicMapDataControls = MapDataFragment.IntrinsicMapDataControls.create()
 			.baseMapType(map.getMapType())
 			.observationsVisible(observations.isVisible())
 			.locationsVisible(locations.isVisible())
 			.mgrsVisible(mgrsVisible)
 			.finish();
-		mapDataFragment.setDataSources(builtinDataControlValues, mapOverlayManager);
+		mapDataFragment.setDataSources(intrinsicMapDataControls, mapOverlayManager);
 		mapDataFragment.setMapDataListener(this);
 		FragmentManager fragmentManager = getChildFragmentManager();
 		fragmentManager.beginTransaction().replace(R.id.map_data_panel, mapDataFragment).commit();
@@ -1114,22 +1119,22 @@ public class MapFragment extends Fragment implements
 	}
 
 	@Override
-	public void onBaseMapChanged(MapDataFragment.BuiltinDataControlValues change) {
+	public void onBaseMapChanged(MapDataFragment.IntrinsicMapDataControls change) {
 		map.setMapType(change.getBaseMapType());
 	}
 
 	@Override
-	public void onObservationsVisibilityChanged(MapDataFragment.BuiltinDataControlValues change) {
+	public void onObservationsVisibilityChanged(MapDataFragment.IntrinsicMapDataControls change) {
 		observations.setVisibility(change.isObservationsVisible());
 	}
 
 	@Override
-	public void onLocationsVisibilityChanged(MapDataFragment.BuiltinDataControlValues change) {
+	public void onLocationsVisibilityChanged(MapDataFragment.IntrinsicMapDataControls change) {
 		locations.setVisibility(change.isLocationsVisible());
 	}
 
 	@Override
-	public void onMgrsVisibilityChanged(MapDataFragment.BuiltinDataControlValues change) {
+	public void onMgrsVisibilityChanged(MapDataFragment.IntrinsicMapDataControls change) {
 		if (change.isMgrsVisible()) {
 			showMgrs();
 		}

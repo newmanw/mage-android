@@ -2,13 +2,12 @@ package mil.nga.giat.mage.map.cache
 
 import android.annotation.SuppressLint
 import android.app.Application
-import android.arch.lifecycle.Lifecycle
-import android.arch.lifecycle.LifecycleOwner
-import android.arch.lifecycle.LifecycleRegistry
+import android.arch.lifecycle.*
 import android.arch.lifecycle.Observer
 import android.os.AsyncTask
 import android.support.annotation.MainThread
 import com.google.android.gms.maps.GoogleMap
+import mil.nga.giat.mage.data.BasicResource
 import mil.nga.giat.mage.data.Resource
 import java.io.File
 import java.net.URI
@@ -19,27 +18,28 @@ import kotlin.collections.HashSet
 
 
 @MainThread
-class MapDataManager(config: Config) : LifecycleOwner {
+class MapDataManager(config: Config) : LifecycleOwner, LiveData<Resource<Map<URI, MapDataResource>>>() {
 
-    private val updatePermission: CreateUpdatePermission
     private val executor: Executor
     private val repositories: Array<out MapDataRepository>
     private val providers: Array<out MapDataProvider>
-    private val listeners = ArrayList<MapDataListener>()
     private val lifecycle = LifecycleRegistry(this)
     private val mutableResources = HashMap<URI, MapDataResource>()
     private val nextChangeForRepository = HashMap<String, ResolveRepositoryChangeTask>()
     private val changeInProgressForRepository = HashMap<String, ResolveRepositoryChangeTask>()
 
+    fun requireValue(): Resource<Map<URI, MapDataResource>> { return value!! }
+    /**
+     * Return a non-null map of resources, keyed by their [URIs][MapDataResource.uri], even if the [LiveData value][getValue] is null.
+     */
     val resources: Map<URI, MapDataResource> = mutableResources
     /**
-     * Return a mutable map of all layers from every [resource][resources], keyed by [layer URI][MapLayerDescriptor.layerUri].
+     * Return a non-null, mutable map of all layers from every [resource][resources], keyed by [layer URI][MapLayerDescriptor.layerUri].
      * Changes to the returned mutable map have no effect on this [MapDataManager]'s layers and resources.
      */
     val layers: MutableMap<URI, MapLayerDescriptor> get() = mutableResources.values.flatMap({ it.layers.values }).associateBy({ it.layerUri }).toMutableMap()
 
     init {
-        updatePermission = config.updatePermission!!
         repositories = config.repositories!!
         providers = config.providers!!
         executor = config.executor!!
@@ -50,12 +50,8 @@ class MapDataManager(config: Config) : LifecycleOwner {
         lifecycle.markState(Lifecycle.State.RESUMED)
     }
 
-    fun addUpdateListener(listener: MapDataListener) {
-        listeners.add(listener)
-    }
-
-    fun removeUpdateListener(listener: MapDataListener) {
-        listeners.remove(listener)
+    fun resourceForLayer(layer: MapLayerDescriptor): MapDataResource? {
+        return mutableResources[layer.resourceUri]
     }
 
     /**
@@ -80,12 +76,12 @@ class MapDataManager(config: Config) : LifecycleOwner {
 
     /**
      * Discover new resources available in known [locations][MapDataRepository], then remove defunct resources.
-     * Asynchronous notifications to [listeners][addUpdateListener]
-     * will result, one notification per refresh, per listener.  Only one refresh can be active at any moment.
+     * One or more asynchronous notifications to [observers][observe] will result as data from the various
+     * [repositories][MapDataRepository] loads and [resolves][MapDataProvider.resolveResource].
      */
     fun refreshMapData() {
         for (repo in repositories) {
-            if (repo.status != Resource.Status.Loading && changeInProgressForRepository[repo.id] == null) {
+            if (repo.value?.status != Resource.Status.Loading && !changeInProgressForRepository.containsKey(repo.id)) {
                 repo.refreshAvailableMapData(resourcesForRepo(repo), executor)
             }
         }
@@ -95,20 +91,16 @@ class MapDataManager(config: Config) : LifecycleOwner {
         return MapLayerManager(this, Arrays.asList(*providers), map)
     }
 
-    fun destroy() {
-        listeners.clear()
-        lifecycle.markState(Lifecycle.State.DESTROYED)
-    }
-
     private fun resourcesForRepo(repo: MapDataRepository): Map<URI, MapDataResource> {
         return mutableResources.filter { it.value.repositoryId == repo.id }
     }
 
-    private fun onMapDataChanged(resources: Set<MapDataResource>, source: MapDataRepository) {
+    private fun onMapDataChanged(data: Resource<Set<MapDataResource>>?, source: MapDataRepository) {
         if (lifecycle.currentState != Lifecycle.State.RESUMED) {
             return
         }
-        nextChangeForRepository[source.id] = ResolveRepositoryChangeTask(source, resources)
+        nextChangeForRepository[source.id] = ResolveRepositoryChangeTask(source, data ?:
+            BasicResource(emptySet(), Resource.Status.Error, Resource.Status.Error.ordinal, "no map data for repository"))
         val changeInProgress = changeInProgressForRepository[source.id]
         if (changeInProgress == null) {
             beginNextChangeForRepository(source)
@@ -166,45 +158,12 @@ class MapDataManager(config: Config) : LifecycleOwner {
             return
         }
         removed.keys.forEach({ mutableResources.remove(it) })
-        val update = MapDataUpdate(updatePermission, added, updated, removed)
-        for (listener in listeners) {
-            listener.onMapDataUpdated(update)
-        }
-    }
-
-    /**
-     * The create update permission is an opaque interface that enforces only holders of
-     * the the permission instance have the ability to create a [MapDataUpdate]
-     * associated with a given instance of [MapDataManager].  This can simply be an
-     * anonymous implementation created at the call site of the [configuration][Config.updatePermission].
-     * For example:
-     *
-     * <pre>
-     * new MapDataManager(new MapDataManager.Config()<br></br>
-     * .updatePermission(new MapDataManager.CreateUpdatePermission(){})
-     * // other config items
-     * );
-     * </pre>
-     *
-     * This prevents the programmer error of creating update objects outside of the
-     * `MapDataManager` instance to [deliver][MapDataListener.onMapDataUpdated]
-     * to listeners.
-     */
-    interface CreateUpdatePermission
-
-    /**
-     * Implement this interface and [register][.addUpdateListener]
-     * an instance to receive [notifications][.onMapDataUpdated] when the set of resources changes.
-     */
-    @FunctionalInterface
-    interface MapDataListener {
-        fun onMapDataUpdated(update: MapDataUpdate)
+        // TODO: set LiveData value
     }
 
     class Config {
+
         var context: Application? = null
-            private set
-        var updatePermission: CreateUpdatePermission? = null
             private set
         var repositories: Array<out MapDataRepository>? = emptyArray()
             private set
@@ -215,11 +174,6 @@ class MapDataManager(config: Config) : LifecycleOwner {
 
         fun context(x: Application): Config {
             context = x
-            return this
-        }
-
-        fun updatePermission(x: CreateUpdatePermission): Config {
-            updatePermission = x
             return this
         }
 
@@ -239,44 +193,28 @@ class MapDataManager(config: Config) : LifecycleOwner {
         }
     }
 
-    inner class MapDataUpdate(
-            updatePermission: CreateUpdatePermission,
-            val added: Map<URI, MapDataResource>,
-            val updated: Map<URI, MapDataResource>,
-            val removed: Map<URI, MapDataResource>) {
+    private inner class RepositoryObserver internal constructor(private val repo: MapDataRepository) : Observer<Resource<Set<MapDataResource>>> {
 
-        val source = this@MapDataManager
-
-        init {
-            if (updatePermission !== source.updatePermission) {
-                throw Error("erroneous attempt to create update from cache manager instance " + this@MapDataManager)
-            }
-        }
-    }
-
-    private inner class RepositoryObserver internal constructor(private val repo: MapDataRepository) : Observer<Set<MapDataResource>> {
-
-        override fun onChanged(data: Set<MapDataResource>?) {
-            onMapDataChanged(data ?: emptySet(), repo)
+        override fun onChanged(data: Resource<Set<MapDataResource>>?) {
+            onMapDataChanged(data, repo)
         }
     }
 
     @SuppressLint("StaticFieldLeak")
     private inner class ResolveRepositoryChangeTask internal constructor(
             val repository: MapDataRepository,
-            changedResources: Set<MapDataResource>)
-        : AsyncTask<Void, Void, ResolveRepositoryChangeResult>() {
+            data: Resource<Set<MapDataResource>>)
+        : AsyncTask<Void, Pair<MapDataResource, MapDataResolveException?>, ResolveRepositoryChangeResult>() {
 
         internal val toResolve: SortedSet<MapDataResource> = TreeSet({ a, b -> a.uri.compareTo(b.uri) })
         internal var result: ResolveRepositoryChangeResult
         internal val stringValue: String
 
         init {
+            val changedResources = data.content ?: emptySet()
             val oldResources = resourcesForRepo(repository)
-            val newResources = HashMap<URI, MapDataResource>()
             val resolved = HashMap<MapDataResource, MapDataResource>()
             for (resource in changedResources) {
-                newResources[resource.uri] = resource
                 if (resource.resolved == null) {
                     toResolve.add(resource)
                 }
@@ -284,7 +222,7 @@ class MapDataManager(config: Config) : LifecycleOwner {
                     resolved[resource] = resource
                 }
             }
-            result = ResolveRepositoryChangeResult(repository, oldResources, newResources, resolved)
+            result = ResolveRepositoryChangeResult(repository, oldResources, resolved)
             stringValue = "${javaClass.simpleName} repo ${repository.id} resolving\n  ${toResolve.map { it.uri }}"
         }
 
@@ -319,10 +257,10 @@ class MapDataManager(config: Config) : LifecycleOwner {
                     val unresolved = next()
                     try {
                         val resolved = resolveWithFirstCapableProvider(unresolved)
-                        result.resolved[unresolved] = resolved
+                        publishProgress(Pair(resolved, null))
                     }
                     catch (e: MapDataResolveException) {
-                        result.failed[unresolved] = e
+                        publishProgress(Pair(unresolved, e))
                     }
                     remove()
                 }
@@ -339,6 +277,17 @@ class MapDataManager(config: Config) : LifecycleOwner {
                 }
             }
             onResolveFinished(this)
+        }
+
+        override fun onProgressUpdate(vararg values: Pair<MapDataResource, MapDataResolveException?>?) {
+            val progress: Pair<MapDataResource, MapDataResolveException?> = values[0]!!
+            if (progress.second == null) {
+                result.resolved[progress.first] = progress.first
+            }
+            else {
+                result.resolved.remove(progress.first)
+                result.failed[progress.first] = progress.second!!
+            }
         }
 
         override fun onPostExecute(result: ResolveRepositoryChangeResult) {
@@ -372,7 +321,6 @@ class MapDataManager(config: Config) : LifecycleOwner {
     private class ResolveRepositoryChangeResult internal constructor(
             val repository: MapDataRepository,
             val oldResources: Map<URI, MapDataResource>,
-            val newResources: Map<URI, MapDataResource>,
             val resolved: MutableMap<MapDataResource, MapDataResource>) {
 
         val cancelled = HashMap<MapDataResource, MapDataResource>()

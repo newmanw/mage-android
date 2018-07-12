@@ -7,7 +7,6 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Environment;
 import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 
 import java.io.File;
 import java.io.IOException;
@@ -24,8 +23,12 @@ import java.util.concurrent.Executor;
 import mil.nga.geopackage.GeoPackageConstants;
 import mil.nga.geopackage.validate.GeoPackageValidate;
 import mil.nga.giat.mage.R;
+import mil.nga.giat.mage.data.BasicResource;
+import mil.nga.giat.mage.data.Resource;
 import mil.nga.giat.mage.sdk.utils.MediaUtility;
 import mil.nga.giat.mage.sdk.utils.StorageUtility;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * Find <code>/MapDataResource</code> directories in storage roots using {@link StorageUtility},
@@ -48,31 +51,13 @@ public class LocalStorageMapDataRepository extends MapDataRepository {
     }
 
     private final Application context;
-    private Status status = Status.Success;
 
     private LocalStorageMapDataRepository(Application context) {
         this.context = context;
     }
 
-    @NonNull
     @Override
-    public Status getStatus() {
-        return status;
-    }
-
-    @Nullable
-    @Override
-    public String getStatusMessage() {
-        return status.name();
-    }
-
-    @Override
-    public int getStatusCode() {
-        return status.ordinal();
-    }
-
-    @Override
-    public boolean ownsResource(URI resourceUri) {
+    public boolean ownsResource(@NonNull URI resourceUri) {
         if (!"file".equals(resourceUri.getScheme())) {
             return false;
         }
@@ -82,15 +67,15 @@ public class LocalStorageMapDataRepository extends MapDataRepository {
     }
 
     @Override
-    public void refreshAvailableMapData(Map<URI, MapDataResource> resolvedResources, Executor executor) {
-        status = Status.Loading;
+    public void refreshAvailableMapData(@NonNull Map<URI, MapDataResource> resolvedResources, @NonNull Executor executor) {
+        setValue(BasicResource.loading());
         new RefreshTask(resolvedResources).executeOnExecutor(executor);
     }
 
     /**
      * Copy the content at the given URI to the cache directory in a background task
      *
-     * @param uri
+     * @param uri a {@link Uri}
      * @param path
      *
      * TODO: not real sure why this is all geopackage-specific - investigate
@@ -170,28 +155,24 @@ public class LocalStorageMapDataRepository extends MapDataRepository {
     }
 
     private void onRefreshComplete(Set<MapDataResource> newAndUpdatedResources) {
-        status = Status.Success;
-        Set<MapDataResource> existing = getValue();
+        Set<? extends MapDataResource> existing = requireNonNull(getValue()).getContent();
         if (!newAndUpdatedResources.isEmpty()) {
             if (existing != null) {
                 newAndUpdatedResources.addAll(existing);
             }
         }
-        setValue(existing);
+        setValue(new BasicResource<>(existing, Resource.Status.Success));
     }
 
     private void onResourceCopyComplete(File file) {
         MapDataResource newResource = new MapDataResource(file.toURI(), this, file.lastModified());
-        Set<MapDataResource> updated = getValue();
-        if (updated == null) {
-            updated = Collections.singleton(newResource);
+        Set<? extends MapDataResource> existing = requireNonNull(getValue()).getContent();
+        if (existing == null) {
+            existing = Collections.emptySet();
         }
-        else {
-            updated = new HashSet<>(updated);
-            updated.add(newResource);
-            updated = Collections.unmodifiableSet(updated);
-        }
-        setValue(updated);
+        Set<MapDataResource> updated = new HashSet<>(existing);
+        updated.add(newResource);
+        setValue(new BasicResource<>(Collections.unmodifiableSet(updated), Resource.Status.Success));
     }
 
     @SuppressLint("StaticFieldLeak")
