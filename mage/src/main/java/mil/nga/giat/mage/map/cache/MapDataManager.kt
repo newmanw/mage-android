@@ -17,6 +17,19 @@ import kotlin.collections.HashMap
 import kotlin.collections.HashSet
 
 
+fun <K, V> Map<K, V>.minusIf(predicate: (K, V) -> Boolean, removeTo: MutableMap<K, V>? = null): Map<K, V> {
+    val result = HashMap<K, V>()
+    forEach { key, value ->
+        if (!predicate.invoke(key, value)) {
+            result[key] = value
+        }
+        else {
+            removeTo?.put(key, value)
+        }
+    }
+    return result
+}
+
 @MainThread
 class MapDataManager(config: Config) : LifecycleOwner, LiveData<Resource<Map<URI, MapDataResource>>>() {
 
@@ -24,34 +37,34 @@ class MapDataManager(config: Config) : LifecycleOwner, LiveData<Resource<Map<URI
     private val repositories: Array<out MapDataRepository>
     private val providers: Array<out MapDataProvider>
     private val lifecycle = LifecycleRegistry(this)
-    private val mutableResources = HashMap<URI, MapDataResource>()
     private val nextChangeForRepository = HashMap<String, ResolveRepositoryChangeTask>()
     private val changeInProgressForRepository = HashMap<String, ResolveRepositoryChangeTask>()
 
     fun requireValue(): Resource<Map<URI, MapDataResource>> { return value!! }
     /**
-     * Return a non-null map of resources, keyed by their [URIs][MapDataResource.uri], even if the [LiveData value][getValue] is null.
+     * Return a non-null map of resources, keyed by their [URIs][MapDataResource.uri].
      */
-    val resources: Map<URI, MapDataResource> = mutableResources
+    var resources: Map<URI, MapDataResource> = emptyMap()
+        private set
     /**
      * Return a non-null, mutable map of all layers from every [resource][resources], keyed by [layer URI][MapLayerDescriptor.layerUri].
      * Changes to the returned mutable map have no effect on this [MapDataManager]'s layers and resources.
      */
-    val layers: MutableMap<URI, MapLayerDescriptor> get() = mutableResources.values.flatMap({ it.layers.values }).associateBy({ it.layerUri }).toMutableMap()
+    val layers: MutableMap<URI, MapLayerDescriptor> get() = resources.values.flatMap({ it.layers.values }).associateBy({ it.layerUri }).toMutableMap()
 
     init {
         repositories = config.repositories!!
         providers = config.providers!!
         executor = config.executor!!
-        lifecycle.markState(Lifecycle.State.STARTED)
+        lifecycle.markState(Lifecycle.State.RESUMED)
+        value = BasicResource.success(emptyMap())
         for (repo in repositories) {
             repo.observe(this, RepositoryObserver(repo))
         }
-        lifecycle.markState(Lifecycle.State.RESUMED)
     }
 
     fun resourceForLayer(layer: MapLayerDescriptor): MapDataResource? {
-        return mutableResources[layer.resourceUri]
+        return resources[layer.resourceUri]
     }
 
     /**
@@ -92,22 +105,54 @@ class MapDataManager(config: Config) : LifecycleOwner, LiveData<Resource<Map<URI
     }
 
     private fun resourcesForRepo(repo: MapDataRepository): Map<URI, MapDataResource> {
-        return mutableResources.filter { it.value.repositoryId == repo.id }
+        return resources.filter { it.value.repositoryId == repo.id }
     }
 
-    private fun onMapDataChanged(data: Resource<Set<MapDataResource>>?, source: MapDataRepository) {
-        if (lifecycle.currentState != Lifecycle.State.RESUMED) {
+    private fun onMapDataChanged(resource: Resource<Set<MapDataResource>>?, source: MapDataRepository) {
+        val existing = HashMap<URI, MapDataResource>()
+        resources = resources.minusIf({ _, value ->
+            value.repositoryId == source.id
+        }, existing)
+        if (resource?.status == Resource.Status.Loading && (existing.isNotEmpty() || requireValue().status != Resource.Status.Loading)) {
+            value = BasicResource.loading(resources)
             return
         }
-        nextChangeForRepository[source.id] = ResolveRepositoryChangeTask(source, data ?:
-            BasicResource(emptySet(), Resource.Status.Error, Resource.Status.Error.ordinal, "no map data for repository"))
-        val changeInProgress = changeInProgressForRepository[source.id]
-        if (changeInProgress == null) {
-            beginNextChangeForRepository(source)
+        if (resource?.content?.isEmpty() != false && existing.isEmpty() && requireValue().status == Resource.Status.Loading) {
+            if (repositories.none { it.value?.status == Resource.Status.Loading }) {
+                value = BasicResource(resources, resource?.status ?: Resource.Status.Success)
+            }
+            return
         }
-        else {
-            changeInProgress.cancel(false)
+        val change = resource!!.content!!
+        val resolved = HashMap<URI, MapDataResource>(change.size)
+        val unresolved = HashMap<URI, MapDataResource>(change.size)
+        change.forEach {
+            if (it.resolved != null) {
+                resolved[it.uri] = it
+            }
+            else {
+                unresolved[it.uri] = it
+            }
         }
+        resources += resolved
+        var nextStatus = Resource.Status.Success
+        if (resource.status == Resource.Status.Loading ||
+            unresolved.isNotEmpty() ||
+            repositories.any { it.value?.status == Resource.Status.Loading }) {
+            nextStatus = Resource.Status.Loading
+        }
+
+        value = BasicResource(resources, nextStatus)
+
+//        nextChangeForRepository[source.id] = ResolveRepositoryChangeTask(source, resource ?:
+//            BasicResource(emptySet(), Resource.Status.Error, Resource.Status.Error.ordinal, "no map data for repository"))
+//        val changeInProgress = changeInProgressForRepository[source.id]
+//        if (changeInProgress == null) {
+//            beginNextChangeForRepository(source)
+//        }
+//        else {
+//            changeInProgress.cancel(false)
+//        }
     }
 
     private fun beginNextChangeForRepository(source: MapDataRepository, changeInProgress: ResolveRepositoryChangeTask? = null) {
@@ -153,12 +198,7 @@ class MapDataManager(config: Config) : LifecycleOwner, LiveData<Resource<Map<URI
                 updated[value.uri] = value
             }
         }
-        mutableResources.putAll(result.resolved.mapKeys { it.key.uri })
-        if (added.isEmpty() && updated.isEmpty() && removed.isEmpty()) {
-            return
-        }
-        removed.keys.forEach({ mutableResources.remove(it) })
-        // TODO: set LiveData value
+        // TODO: update resources and set LiveData value
     }
 
     class Config {

@@ -47,23 +47,6 @@ public class MapDataResourceTest {
         public void refreshAvailableMapData(Map<URI, MapDataResource> resolvedResources, Executor executor) {
 
         }
-
-        @NotNull
-        @Override
-        public Resource.Status getStatus() {
-            return null;
-        }
-
-        @Override
-        public int getStatusCode() {
-            return 0;
-        }
-
-        @Nullable
-        @Override
-        public String getStatusMessage() {
-            return null;
-        }
     };
 
     private TestRepo repo1 = new TestRepo("repo1");

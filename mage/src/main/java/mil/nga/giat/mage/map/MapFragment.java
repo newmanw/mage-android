@@ -82,9 +82,6 @@ import mil.nga.giat.mage.filter.DateTimeFilter;
 import mil.nga.giat.mage.filter.Filter;
 import mil.nga.giat.mage.filter.FilterActivity;
 import mil.nga.giat.mage.map.cache.MapDataManager;
-import mil.nga.giat.mage.map.cache.MapDataManager.MapDataListener;
-import mil.nga.giat.mage.map.cache.MapDataResource;
-import mil.nga.giat.mage.map.cache.MapLayerDescriptor;
 import mil.nga.giat.mage.map.cache.MapLayerManager;
 import mil.nga.giat.mage.map.marker.LocationMarkerCollection;
 import mil.nga.giat.mage.map.marker.MyHistoricalLocationMarkerCollection;
@@ -128,7 +125,6 @@ public class MapFragment extends Fragment implements
         OnClickListener,
         LocationSource,
         LocationListener,
-    	MapDataListener,
         SearchView.OnQueryTextListener,
         IObservationEventListener,
         ILocationEventListener,
@@ -1102,21 +1098,22 @@ public class MapFragment extends Fragment implements
 	public void onProviderDisabled(String provider) {
 	}
 
-	@Override
-	public void onMapDataUpdated(MapDataManager.MapDataUpdate update) {
-		if (update.getAdded().size() != 1) {
-			return;
-		}
-		MapDataResource explicitlyRequestedCache = update.getAdded().values().iterator().next();
-		for (MapLayerDescriptor layerDesc : explicitlyRequestedCache.getLayers().values()) {
-			mapOverlayManager.showLayer(layerDesc);
-		}
-		LatLngBounds cacheBounds = explicitlyRequestedCache.getBounds();
-		if (cacheBounds != null) {
-			CameraUpdate showCache = CameraUpdateFactory.newLatLngBounds(cacheBounds, 0);
-			map.animateCamera(showCache);
-		}
-	}
+	// TODO: restore
+//	public void onMapDataUpdated(MapDataManager.MapDataUpdate update) {
+//		MapDataManager.getInstance().get
+//		if (update.getAdded().size() != 1) {
+//			return;
+//		}
+//		MapDataResource explicitlyRequestedCache = update.getAdded().values().iterator().next();
+//		for (MapLayerDescriptor layerDesc : explicitlyRequestedCache.getLayers().values()) {
+//			mapOverlayManager.showLayer(layerDesc);
+//		}
+//		LatLngBounds cacheBounds = explicitlyRequestedCache.getBounds();
+//		if (cacheBounds != null) {
+//			CameraUpdate showCache = CameraUpdateFactory.newLatLngBounds(cacheBounds, 0);
+//			map.animateCamera(showCache);
+//		}
+//	}
 
 	@Override
 	public void onBaseMapChanged(MapDataFragment.IntrinsicMapDataControls change) {

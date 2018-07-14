@@ -15,9 +15,14 @@ public class AsyncTesting {
 
     /**
      * Run the given task on the main thread, blocking the calling thread until the task returns.
+     * If the calling thread is the main thread, simply run the given task and return.
      * @param task a {@link Runnable} task
      */
     public static void waitForMainThreadToRun(Runnable task) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            task.run();
+            return;
+        }
         FutureTask<Void> blockUntilRun = new FutureTask<>(task, null);
         new Handler(Looper.getMainLooper()).post(blockUntilRun);
         try {

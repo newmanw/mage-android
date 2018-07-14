@@ -1,6 +1,7 @@
 package mil.nga.giat.mage.data
 
-interface Resource<out T> {
+@Suppress("AddVarianceModifier")
+interface Resource<T> {
 
     val content: T?
     val status: Resource.Status
@@ -13,6 +14,12 @@ interface Resource<out T> {
         Error
     }
 }
+
+interface ListResource<T> : Resource<List<T>>
+
+interface SetResource<T> : Resource<Set<T>>
+
+interface MapResource<K, V> : Resource<Map<K, V>>
 
 data class BasicResource<T>(
         override val content: T?,
@@ -28,6 +35,21 @@ data class BasicResource<T>(
         @JvmStatic
         fun <T> loading(): Resource<T> {
             return BasicResource(null, Resource.Status.Loading)
+        }
+
+        @JvmStatic
+        fun <T> loading(content: T): Resource<T> {
+            return BasicResource(content, Resource.Status.Loading)
+        }
+
+        @JvmStatic
+        fun <T> success(): Resource<T> {
+            return BasicResource(null, Resource.Status.Success)
+        }
+
+        @JvmStatic
+        fun <T> success(content: T): Resource<T> {
+            return BasicResource(content, Resource.Status.Success)
         }
     }
 }
