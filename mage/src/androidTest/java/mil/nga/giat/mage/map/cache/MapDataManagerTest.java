@@ -451,36 +451,200 @@ public class MapDataManagerTest implements LifecycleOwner {
         assertThat(manager.getResources(), is(mapOf(res1, res2)));
         assertThat(manager.getLayers(), is(mapOfLayers(res1, res2)));
         verify(observer).onChanged(manager.getValue());
+
+        MapDataResource res3 = repo2.buildResource("test3.cat", catProvider).finish();
+        repo2.setValue(BasicResource.success(setOf(res3)));
+
+        assertThat(manager.requireValue().getStatus(), is(Success));
+        assertThat(manager.requireValue().getContent(), is(mapOf(res1, res2, res3)));
+        assertThat(manager.getResources(), is(mapOf(res1, res2, res3)));
+        assertThat(manager.getLayers(), is(mapOfLayers(res1, res2, res3)));
+
+        verify(observer, times(2)).onChanged(changeCaptor.capture());
+        assertThat(changeCaptor.getAllValues().get(0).getContent(), is(mapOf(res1, res2)));
+        assertThat(changeCaptor.getAllValues().get(1).getContent(), is(mapOf(res1, res2, res3)));
     }
 
     @Test
     @UiThreadTest
     public void changesValueWhenRepositoryUpdatesResolvedResources() {
 
+        MapDataResource res1 = repo1.buildResource("test1.dog", dogProvider).layers("layer1", "layer2").finish();
+        MapDataResource res2 = repo1.buildResource("test2.dog", dogProvider).layers("layer1").finish();
+        repo1.setValue(BasicResource.success(setOf(res1, res2)));
+
+        assertThat(manager.requireValue().getStatus(), is(Success));
+        assertThat(manager.requireValue().getContent(), is(mapOf(res1, res2)));
+        assertThat(manager.getResources(), is(mapOf(res1, res2)));
+        assertThat(manager.getLayers(), is(mapOfLayers(res1, res2)));
+        verify(observer).onChanged(manager.getValue());
+
+        MapDataResource res1Updated = repo1.updateContentTimestampAndLayers(res1, "layer1", "layer2", "layer3");
+        repo1.setValue(BasicResource.success(setOf(res1Updated, res2)));
+
+        assertThat(manager.requireValue().getStatus(), is(Success));
+        assertThat(manager.requireValue().getContent(), allOf(
+            is(mapOf(res1, res2)),
+            hasEntry(is(res1.getUri()), sameInstance(res1Updated))));
+        assertThat(manager.getLayers(), is(mapOfLayers(res1Updated, res2)));
+        verify(observer, times(2)).onChanged(changeCaptor.capture());
+        assertThat(changeCaptor.getValue().getContent(), allOf(
+            is(mapOf(res1, res2)),
+            hasEntry(is(res1.getUri()), sameInstance(res1Updated))));
     }
 
     @Test
     @UiThreadTest
     public void changesValueWhenRepositoryRemovesResolvedResources() {
 
+        MapDataResource res1 = repo1.buildResource("test1.dog", dogProvider).layers("layer1", "layer2").finish();
+        MapDataResource res2 = repo1.buildResource("test2.dog", dogProvider).layers("layer1").finish();
+        repo1.setValue(BasicResource.success(setOf(res1, res2)));
+
+        assertThat(manager.requireValue().getStatus(), is(Success));
+        assertThat(manager.requireValue().getContent(), is(mapOf(res1, res2)));
+        assertThat(manager.getResources(), is(mapOf(res1, res2)));
+        assertThat(manager.getLayers(), is(mapOfLayers(res1, res2)));
+        verify(observer).onChanged(manager.getValue());
+
+        repo1.setValue(BasicResource.success(setOf(res2)));
+
+        assertThat(manager.requireValue().getStatus(), is(Success));
+        assertThat(manager.requireValue().getContent(), is(mapOf(res2)));
+        assertThat(manager.getLayers(), is(mapOfLayers(res2)));
+        verify(observer, times(2)).onChanged(changeCaptor.capture());
+        assertThat(changeCaptor.getValue().getContent(), is(mapOf(res2)));
     }
 
     @Test
     @UiThreadTest
-    public void changeValueWhenRepositoryChangesWithSameDataButDifferentInstances() {
+    public void changesValueWhenRepositoryRemovesAllResolvedResourcesWithNullChange() {
 
+        MapDataResource res1 = repo1.buildResource("test1.dog", dogProvider).layers("layer1", "layer2").finish();
+        MapDataResource res2 = repo1.buildResource("test2.dog", dogProvider).layers("layer1").finish();
+        repo1.setValue(BasicResource.success(setOf(res1, res2)));
+
+        assertThat(manager.requireValue().getStatus(), is(Success));
+        assertThat(manager.requireValue().getContent(), is(mapOf(res1, res2)));
+        assertThat(manager.getResources(), is(mapOf(res1, res2)));
+        assertThat(manager.getLayers(), is(mapOfLayers(res1, res2)));
+        verify(observer).onChanged(manager.getValue());
+
+        repo1.setValue(null);
+
+        assertThat(manager.requireValue().getStatus(), is(Success));
+        assertThat(manager.requireValue().getContent(), is(emptyMap()));
+        assertThat(manager.getLayers(), is(emptyMap()));
+        verify(observer, times(2)).onChanged(changeCaptor.capture());
+        assertThat(changeCaptor.getValue().getContent(), is(emptyMap()));
     }
 
     @Test
     @UiThreadTest
-    public void doesNotChangeValueIfRepositoryChangesValueWithSameDataAndSameInstances() {
+    public void changesValueWhenRepositoryRemovesAllResolvedResourcesWithNullContent() {
 
+        MapDataResource res1 = repo1.buildResource("test1.dog", dogProvider).layers("layer1", "layer2").finish();
+        MapDataResource res2 = repo1.buildResource("test2.dog", dogProvider).layers("layer1").finish();
+        repo1.setValue(BasicResource.success(setOf(res1, res2)));
+
+        assertThat(manager.requireValue().getStatus(), is(Success));
+        assertThat(manager.requireValue().getContent(), is(mapOf(res1, res2)));
+        assertThat(manager.getResources(), is(mapOf(res1, res2)));
+        assertThat(manager.getLayers(), is(mapOfLayers(res1, res2)));
+        verify(observer).onChanged(manager.getValue());
+
+        repo1.setValue(BasicResource.success());
+
+        assertThat(manager.requireValue().getStatus(), is(Success));
+        assertThat(manager.requireValue().getContent(), is(emptyMap()));
+        assertThat(manager.getLayers(), is(emptyMap()));
+        verify(observer, times(2)).onChanged(changeCaptor.capture());
+        assertThat(changeCaptor.getValue().getContent(), is(emptyMap()));
+    }
+
+    @Test
+    @UiThreadTest
+    public void changesValueWhenRepositoryRemovesAllResolvedResourcesWithEmptyContent() {
+
+        MapDataResource res1 = repo1.buildResource("test1.dog", dogProvider).layers("layer1", "layer2").finish();
+        MapDataResource res2 = repo1.buildResource("test2.dog", dogProvider).layers("layer1").finish();
+        repo1.setValue(BasicResource.success(setOf(res1, res2)));
+
+        assertThat(manager.requireValue().getStatus(), is(Success));
+        assertThat(manager.requireValue().getContent(), is(mapOf(res1, res2)));
+        assertThat(manager.getResources(), is(mapOf(res1, res2)));
+        assertThat(manager.getLayers(), is(mapOfLayers(res1, res2)));
+        verify(observer).onChanged(manager.getValue());
+
+        repo1.setValue(BasicResource.success(emptySet()));
+
+        assertThat(manager.requireValue().getStatus(), is(Success));
+        assertThat(manager.requireValue().getContent(), is(emptyMap()));
+        assertThat(manager.getLayers(), is(emptyMap()));
+        verify(observer, times(2)).onChanged(changeCaptor.capture());
+        assertThat(changeCaptor.getValue().getContent(), is(emptyMap()));
+    }
+
+    @Test
+    @UiThreadTest
+    public void changesValueWhenRepositoryChangesWithSameResolvedDataButDifferentInstances() {
+
+        MapDataResource res1 = repo1.buildResource("test1.dog", dogProvider).layers("layer1", "layer2").finish();
+        MapDataResource res2 = repo1.buildResource("test2.dog", dogProvider).layers("layer1").finish();
+        repo1.setValue(BasicResource.success(setOf(res1, res2)));
+
+        assertThat(manager.requireValue().getStatus(), is(Success));
+        assertThat(manager.requireValue().getContent(), is(mapOf(res1, res2)));
+        assertThat(manager.getResources(), is(mapOf(res1, res2)));
+        assertThat(manager.getLayers(), is(mapOfLayers(res1, res2)));
+        verify(observer).onChanged(manager.getValue());
+
+        MapDataResource res1Copy = new MapDataResource(res1.getUri(), repo1, res1.getContentTimestamp(), res1.requireResolved());
+        repo1.setValue(BasicResource.success(setOf(res1Copy, res2)));
+
+        assertThat(manager.requireValue().getStatus(), is(Success));
+        assertThat(manager.requireValue().getContent(), allOf(
+            is(mapOf(res1, res2)),
+            hasEntry(is(res1.getUri()), sameInstance(res1Copy))));
+        assertThat(manager.getLayers(), is(mapOfLayers(res1Copy, res2)));
+        verify(observer, times(2)).onChanged(changeCaptor.capture());
+        assertThat(changeCaptor.getValue().getContent(), allOf(
+            is(mapOf(res1, res2)),
+            hasEntry(is(res1.getUri()), sameInstance(res1Copy))));
+    }
+
+    @Test
+    @UiThreadTest
+    public void doesNotChangeValueIfRepositoryChangesValueWithSameResolvedDataAndSameInstances() {
+
+        MapDataResource res1 = repo1.buildResource("test1.dog", dogProvider).layers("layer1", "layer2").finish();
+        MapDataResource res2 = repo1.buildResource("test2.dog", dogProvider).layers("layer1").finish();
+        repo1.setValue(BasicResource.success(setOf(res1, res2)));
+
+        assertThat(manager.requireValue().getStatus(), is(Success));
+        assertThat(manager.requireValue().getContent(), is(mapOf(res1, res2)));
+        assertThat(manager.getResources(), is(mapOf(res1, res2)));
+        assertThat(manager.getLayers(), is(mapOfLayers(res1, res2)));
+        verify(observer).onChanged(manager.getValue());
+
+        repo1.setValue(BasicResource.success(setOf(res1, res2)));
+
+        assertThat(manager.requireValue().getStatus(), is(Success));
+        assertThat(manager.requireValue().getContent(), is(mapOf(res1, res2)));
+        assertThat(manager.getLayers(), is(mapOfLayers(res1, res2)));
+        verify(observer, times(1)).onChanged(changeCaptor.capture());
+        assertThat(changeCaptor.getValue().getContent(), is(mapOf(res1, res2)));
     }
 
     @Test
     @UiThreadTest
     public void doesNotChangeValueIfRepositoryChangesFromNullToEmptyData() {
 
+        repo1.setValue(null);
+        repo1.setValue(BasicResource.success());
+        repo1.setValue(BasicResource.success(emptySet()));
+
+        verify(observer, never()).onChanged(any());
     }
 
     @Test
@@ -622,19 +786,16 @@ public class MapDataManagerTest implements LifecycleOwner {
     }
 
     @Test
+    @UiThreadTest
     public void providesResolvedResourcesToRepositoryForRefresh() throws InterruptedException {
         MapDataResource res1 = repo1.buildResource("res1.dog", dogProvider).finish();
         MapDataResource res2 = repo1.buildResource("res2.cat", catProvider).finish();
         MapDataResource res3 = repo2.buildResource("res3.cat", catProvider).finish();
 
-        activateExecutor();
+        repo1.setValue(resourceOf(res1, res2));
+        repo2.setValue(resourceOf(res3));
 
-        repo1.postValue(resourceOf(res1, res2));
-        repo2.postValue(resourceOf(res3));
-
-        onMainLooper.assertThatWithin(timeout(), manager::getResources, is(mapOf(res1, res2, res3)));
-
-        deactivateExecutorAndWait();
+        assertThat(manager.requireValue().getContent(), is(mapOf(res1, res2, res3)));
 
         manager.refreshMapData();
 
@@ -650,17 +811,21 @@ public class MapDataManagerTest implements LifecycleOwner {
     @Test
     @UiThreadTest
     public void doesNotRefreshRepositoryThatIsLoading() {
-        repo1.setValue(new BasicResource<>(null, Resource.Status.Loading));
+
+        repo1.setValue(BasicResource.loading());
+
         manager.refreshMapData();
 
         assertThat(repo1.refreshCount, is(0));
         assertThat(repo2.refreshCount, is(1));
 
-        repo1.setValue(new BasicResource<>(emptySet(), Success));
+        repo1.setValue(BasicResource.success());
+        repo2.setValue(BasicResource.loading());
+
         manager.refreshMapData();
 
         assertThat(repo1.refreshCount, is(1));
-        assertThat(repo2.refreshCount, is(2));
+        assertThat(repo2.refreshCount, is(1));
     }
 
     @Test

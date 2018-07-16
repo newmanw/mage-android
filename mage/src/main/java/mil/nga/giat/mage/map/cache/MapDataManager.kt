@@ -17,7 +17,11 @@ import kotlin.collections.HashMap
 import kotlin.collections.HashSet
 
 
-fun <K, V> Map<K, V>.minusIf(predicate: (K, V) -> Boolean, removeTo: MutableMap<K, V>? = null): Map<K, V> {
+/**
+ * Return a new Map excluding the pairs from this Map for which the given lambda returns true.  Return this
+ * Map if the given lambda returns false for all of this Map's pairs.
+ */
+fun <K, V> Map<K, V>.removeIf(predicate: (K, V) -> Boolean, removeTo: MutableMap<K, V>? = null): Map<K, V> {
     val result = HashMap<K, V>()
     forEach { key, value ->
         if (!predicate.invoke(key, value)) {
@@ -27,8 +31,12 @@ fun <K, V> Map<K, V>.minusIf(predicate: (K, V) -> Boolean, removeTo: MutableMap<
             removeTo?.put(key, value)
         }
     }
+    if (result.size == size) {
+        return this
+    }
     return result
 }
+
 
 @MainThread
 class MapDataManager(config: Config) : LifecycleOwner, LiveData<Resource<Map<URI, MapDataResource>>>() {
@@ -109,38 +117,51 @@ class MapDataManager(config: Config) : LifecycleOwner, LiveData<Resource<Map<URI
     }
 
     private fun onMapDataChanged(resource: Resource<Set<MapDataResource>>?, source: MapDataRepository) {
-        val existing = HashMap<URI, MapDataResource>()
-        resources = resources.minusIf({ _, value ->
-            value.repositoryId == source.id
-        }, existing)
-        if (resource?.status == Resource.Status.Loading && (existing.isNotEmpty() || requireValue().status != Resource.Status.Loading)) {
-            value = BasicResource.loading(resources)
-            return
-        }
-        if (resource?.content?.isEmpty() != false && existing.isEmpty() && requireValue().status == Resource.Status.Loading) {
-            if (repositories.none { it.value?.status == Resource.Status.Loading }) {
-                value = BasicResource(resources, resource?.status ?: Resource.Status.Success)
+        val preChangeSize = requireValue().content!!.size
+        val preChangeStatus = requireValue().status
+        if (resource?.status == Resource.Status.Loading) {
+            resources = resources.removeIf({ _, res ->
+                res.repositoryId == source.id
+            })
+            if (resources.size < preChangeSize || preChangeStatus != Resource.Status.Loading) {
+                value = BasicResource.loading(resources)
             }
             return
         }
-        val change = resource!!.content!!
+
+        val change = resource?.content ?: emptySet()
+        val unchanged = HashSet<URI>()
         val resolved = HashMap<URI, MapDataResource>(change.size)
         val unresolved = HashMap<URI, MapDataResource>(change.size)
-        change.forEach {
-            if (it.resolved != null) {
-                resolved[it.uri] = it
-            }
-            else {
-                unresolved[it.uri] = it
+        for (changeRes in change) {
+            when {
+                changeRes.resolved == null -> unresolved[changeRes.uri] = changeRes
+                resources[changeRes.uri] !== changeRes -> resolved[changeRes.uri] = changeRes
+                else -> unchanged.add(changeRes.uri)
             }
         }
-        resources += resolved
+        val remove = HashMap<URI, MapDataResource>()
+        for ((uri, existing) in resources) {
+            if (existing.repositoryId == source.id && !resolved.containsKey(uri) && !unchanged.contains(uri)) {
+                remove[uri] = existing
+            }
+        }
+
         var nextStatus = Resource.Status.Success
-        if (resource.status == Resource.Status.Loading ||
-            unresolved.isNotEmpty() ||
-            repositories.any { it.value?.status == Resource.Status.Loading }) {
+        if (unresolved.isNotEmpty()) {
+            nextStatus = Resource.Status.Loading
+            // TODO: start async resolves
+        }
+        else if (repositories.any { it.value?.status == Resource.Status.Loading }) {
             nextStatus = Resource.Status.Loading
         }
+
+        if (nextStatus == preChangeStatus && resolved.isEmpty() && remove.isEmpty()) {
+            return
+        }
+
+        resources -= remove.keys
+        resources += resolved
 
         value = BasicResource(resources, nextStatus)
 
