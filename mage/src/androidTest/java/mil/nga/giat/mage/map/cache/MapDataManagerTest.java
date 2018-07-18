@@ -13,6 +13,7 @@ import android.support.test.runner.AndroidJUnit4;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestName;
@@ -23,7 +24,6 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
-import org.mockito.stubbing.Answer;
 import org.mockito.verification.VerificationWithTimeout;
 
 import java.net.URI;
@@ -41,12 +41,10 @@ import java.util.TreeSet;
 import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import mil.nga.giat.mage.data.BasicResource;
 import mil.nga.giat.mage.data.Resource;
@@ -57,7 +55,7 @@ import static java.util.Collections.emptySet;
 import static java.util.Objects.requireNonNull;
 import static mil.nga.giat.mage.data.Resource.Status.*;
 import static mil.nga.giat.mage.test.AsyncTesting.waitForMainThreadToRun;
-import static mil.nga.giat.mage.test.TargetSuppliesPropertyValueMatcher.withValueSuppliedBy;
+import static mil.nga.giat.mage.test.TargetSuppliesPropertyValueMatcher.valueSuppliedBy;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.hasItem;
 import static org.hamcrest.CoreMatchers.is;
@@ -74,16 +72,19 @@ import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.withSettings;
+import static org.mockito.hamcrest.MockitoHamcrest.argThat;
 
 @RunWith(AndroidJUnit4.class)
 @SmallTest
@@ -167,6 +168,7 @@ public class MapDataManagerTest implements LifecycleOwner {
         }
 
         private class ResourceBuilder {
+
             private final String name;
             private final Class<? extends MapDataProvider> type;
             private final Set<String> layerNames = new HashSet<>();
@@ -243,12 +245,12 @@ public class MapDataManagerTest implements LifecycleOwner {
         return map;
     }
 
-    private static long timeout() {
-        return 1000;
+    private static long testTimeout() {
+        return 100000;
     }
 
     private static VerificationWithTimeout beforeTimeout() {
-        return Mockito.timeout(timeout());
+        return timeout(testTimeout());
     }
 
     @Rule
@@ -273,6 +275,7 @@ public class MapDataManagerTest implements LifecycleOwner {
     private MapDataManager.Config config;
     private MapDataManager manager;
     private ThreadPoolExecutor realExecutor;
+    private ThreadGroup threadGroup;
     private TestRepository repo1;
     private TestRepository repo2;
     private LifecycleRegistry lifecycle;
@@ -347,8 +350,25 @@ public class MapDataManagerTest implements LifecycleOwner {
         }
     }
 
+    @After
+    public void freeObservers() {
+        waitForMainThreadToRun(() -> {
+            repo1.removeObservers(this);
+            repo2.removeObservers(this);
+        });
+    }
+
     private void activateExecutor() {
-        realExecutor = new ThreadPoolExecutor(2, 4, 0, TimeUnit.SECONDS, new LinkedBlockingQueue<>());
+        threadGroup = new ThreadGroup(testName.getMethodName());
+        realExecutor = new ThreadPoolExecutor(2, 4, 0, TimeUnit.SECONDS, new LinkedBlockingQueue<>(), new ThreadFactory() {
+
+            final AtomicInteger count = new AtomicInteger(0);
+
+            @Override
+            public Thread newThread(@NonNull Runnable r) {
+                return new Thread(threadGroup, r, threadGroup.getName() + "." + count.incrementAndGet());
+            }
+        });
         doAnswer(invocationOnMock -> {
             Runnable task = invocationOnMock.getArgument(0);
             realExecutor.execute(task);
@@ -721,26 +741,36 @@ public class MapDataManagerTest implements LifecycleOwner {
     }
 
     @Test
-    public void doesNotBeginResolvingResourcesUntilRepositoryStatusIsSuccess() {
-        fail("unimplemented");
+    @UiThreadTest
+    public void doesNotChangeValueWhenStatusIsLoadingAndRepositoryChangesFromEmptyToAllUnresolvedResources() {
+
+        repo2.setValue(BasicResource.loading());
+
+        assertThat(manager.requireValue().getStatus(), is(Loading));
+        verify(observer).onChanged(any());
+
+        MapDataResource unresolved = repo1.buildResource("unresolved.dog", null).finish();
+        repo1.setValue(resourceOf(unresolved));
+
+        assertThat(manager.requireValue().getStatus(), is(Loading));
+        assertThat(manager.requireValue().getContent(), is(emptyMap()));
+        assertThat(manager.getResources(), equalTo(emptyMap()));
+        assertThat(manager.getLayers(), equalTo(emptyMap()));
+        verifyNoMoreInteractions(observer);
     }
 
     @Test
-    public void doesNotChangeValueUntilResourcesAreResolvedForRepositoryChange() {
-        /*
-        MapDataManager should resolve resources, then call MapDataRepository.onExternallyResolved(),
-        and wait for the resulting LiveData change with no unresolved resources before changing its
-        own LiveData value
-         */
-        fail("unimplemented");
-    }
-
-    @Test
+    @UiThreadTest
     public void refreshChangesValueToLoadingOnlyOnceInsteadOfOneForEachRepositoryChange() {
-        fail("unimplemented");
+
+        repo1.setValue(BasicResource.loading());
+        repo2.setValue(BasicResource.loading());
+
+        verify(observer, times(1)).onChanged(any());
     }
 
     @Test
+    @Ignore
     public void whatToDoWhenOneOrMoreRepositoriesChangeToErrorStatus() {
         // TODO: remove resources for repository, or just take repository's resolved resources as successful
         // but add the repo status message to its own status message and change to error status?
@@ -748,9 +778,13 @@ public class MapDataManagerTest implements LifecycleOwner {
     }
 
     @Test
+    @Ignore
     public void doesNotResolveOnConstruction() throws MapDataResolveException {
 
         // TODO: this test will be invalid if repository has inintial observed value with unresolved resources
+        // maybe instead leave the manager in the CREATED state so the repositories don't deliver their LiveData
+        // values at that point and provide a manager method to activate.  maybe it just doesn't matter though
+        // and it's better to just let things proceed.
 
         waitForMainThreadToRun(() -> {
             repo1.setValue(resourceOf(repo1.buildResource("do_not_resolve_yet.dog", null).finish()));
@@ -772,6 +806,7 @@ public class MapDataManagerTest implements LifecycleOwner {
     @Test
     @UiThreadTest
     public void refreshSeriallyBeginsRefreshOnRepositories() {
+
         MapDataRepository repo1 = mock(MapDataRepository.class);
         when(repo1.getId()).thenReturn("repo1");
         MapDataRepository repo2 = mock(MapDataRepository.class);
@@ -788,6 +823,7 @@ public class MapDataManagerTest implements LifecycleOwner {
     @Test
     @UiThreadTest
     public void providesResolvedResourcesToRepositoryForRefresh() throws InterruptedException {
+
         MapDataResource res1 = repo1.buildResource("res1.dog", dogProvider).finish();
         MapDataResource res2 = repo1.buildResource("res2.cat", catProvider).finish();
         MapDataResource res3 = repo2.buildResource("res3.cat", catProvider).finish();
@@ -829,59 +865,9 @@ public class MapDataManagerTest implements LifecycleOwner {
     }
 
     @Test
-    public void doesNotRefreshRepositoryWithResolvingResources() throws MapDataResolveException, InterruptedException {
-//        MapDataResource res1 = repo1.buildResource("res.cat", null).finish();
-//        Lock lock = new ReentrantLock();
-//        Condition resolveCondition = lock.newCondition();
-//        AtomicBoolean resolveBlocked = new AtomicBoolean(false);
-//
-//        when(catProvider.resolveResource(res1)).then(invocation -> {
-//            lock.lock();
-//            resolveBlocked.set(true);
-//            resolveCondition.signal();
-//            while (resolveBlocked.get()) {
-//                resolveCondition.await(timeout(), TimeUnit.MILLISECONDS);
-//            }
-//            lock.unlock();
-//            return repo1.resolveResource(res1, catProvider);
-//        });
-//
-//        activateExecutor();
-//
-//        waitForMainThreadToRun(() -> repo1.setValue(resourceOf(res1)));
-//
-//        lock.lock();
-//        while (!resolveBlocked.get()) {
-//            resolveCondition.await(timeout(), TimeUnit.MILLISECONDS);
-//        }
-//        lock.unlock();
-//
-//        waitForMainThreadToRun(() -> {
-//            manager.refreshMapData();
-//
-//            assertThat(repo1.requireValue().getStatus(), not(Resource.Status.Loading));
-//            assertThat(repo1.refreshCount, is(0));
-//            assertThat(repo2.refreshCount, is(1));
-//        });
-//
-//        lock.lock();
-//        resolveBlocked.set(false);
-//        resolveCondition.signal();
-//        lock.unlock();
-//
-//        onMainLooper.assertThatWithin(timeout(), manager::getResources, is(mapOf(res1)));
-//
-//        waitForMainThreadToRun(() -> {
-//            manager.refreshMapData();
-//
-//            assertThat(repo1.refreshCount, is(1));
-//            assertThat(repo2.refreshCount, is(2));
-//        });
-    }
-
-    @Test
     @UiThreadTest
     public void addsLayersAndResourcesWhenRepositoryAddsNewResources() {
+
         MapDataResource repo1_1 = repo1.buildResource("repo1.1.dog", dogProvider).finish();
         MapDataResource repo1_2 = repo1.buildResource("repo1.2.cat", catProvider).layers("repo1.2.cat.1", "repo1.2.cat.2").finish();
         MapDataResource repo2_1 = repo2.buildResource("repo2.1.dog", dogProvider).layers("repo2.1.dog.1").finish();
@@ -900,6 +886,7 @@ public class MapDataManagerTest implements LifecycleOwner {
     @Test
     @UiThreadTest
     public void removesLayersAndResourcesWhenRepositoryRemovesResources() {
+
         MapDataResource doomed = repo1.buildResource("doomed.dog", dogProvider).layers("doomed.1").finish();
         repo1.setValue(resourceOf(doomed));
 
@@ -917,25 +904,8 @@ public class MapDataManagerTest implements LifecycleOwner {
 
     @Test
     @UiThreadTest
-    public void doesNotFireUpdateIfResourceDidNotChange() {
-        MapDataResource mod = repo1.buildResource("mod.dog", dogProvider).layers("mod.1").finish();
-        repo1.setValue(resourceOf(mod));
-
-        assertThat(manager.getResources(), equalTo(mapOf(mod)));
-        assertThat(manager.getLayers(), equalTo(mapOfLayers(mod)));
-        verify(observer).onChanged(any());
-
-        mod = repo1.buildResource("mod.dog", dogProvider).layers("mod.1").finish();
-        repo1.setValue(resourceOf(mod));
-
-        assertThat(manager.getResources(), equalTo(mapOf(mod)));
-        assertThat(manager.getLayers(), equalTo(mapOfLayers(mod)));
-        verifyNoMoreInteractions(observer);
-    }
-
-    @Test
-    @UiThreadTest
     public void firesUpdateWhenResourceContentTimestampChanges() {
+
         MapDataResource mod = repo1.buildResource("mod.dog", dogProvider).layers("mod.1").finish();
         repo1.setValue(resourceOf(mod));
 
@@ -959,6 +929,7 @@ public class MapDataManagerTest implements LifecycleOwner {
     @Test
     @UiThreadTest
     public void addsLayersWhenRepositoryUpdatesResource() {
+
         MapDataResource mod = repo1.buildResource("mod.dog", dogProvider).layers("mod.1").finish();
         repo1.setValue(resourceOf(mod));
 
@@ -976,6 +947,7 @@ public class MapDataManagerTest implements LifecycleOwner {
     @Test
     @UiThreadTest
     public void removesLayersWhenRepositoryUpdatesResource() {
+
         MapDataResource mod = repo1.buildResource("mod.dog", dogProvider).layers("mod.1").finish();
         repo1.setValue(resourceOf(mod));
 
@@ -991,18 +963,8 @@ public class MapDataManagerTest implements LifecycleOwner {
 
     @Test
     @UiThreadTest
-    public void doesNotFireUpdateUntilAllResourcesAreResolved() {
-        MapDataResource unresolved = repo1.buildResource("unresolved.dog", null).finish();
-        repo1.setValue(resourceOf(unresolved));
-
-        assertThat(manager.getResources(), equalTo(emptyMap()));
-        assertThat(manager.getLayers(), equalTo(emptyMap()));
-        verify(observer, never()).onChanged(any());
-    }
-
-    @Test
-    @UiThreadTest
     public void doesNotResolveNewResourcesRepositoryResolved() throws MapDataResolveException {
+
         MapDataResource res1 = repo1.buildResource("res1.dog", dogProvider).finish();
         MapDataResource res2 = repo1.buildResource("res2.cat", catProvider).finish();
         repo1.setValue(resourceOf(res1, res2));
@@ -1020,6 +982,7 @@ public class MapDataManagerTest implements LifecycleOwner {
     @Test
     @UiThreadTest
     public void doesNotResolveUpdatedResourcesTheRepositoryResolved() throws MapDataResolveException {
+
         MapDataResource res1 = repo1.buildResource("res1.dog", dogProvider).finish();
         MapDataResource res2 = repo1.buildResource("res2.cat", catProvider).finish();
         repo1.setValue(resourceOf(res1, res2));
@@ -1046,8 +1009,89 @@ public class MapDataManagerTest implements LifecycleOwner {
     }
 
     @Test
+    public void doesNotBeginResolvingResourcesUntilRepositoryStatusIsSuccess() throws MapDataResolveException {
+
+        MapDataResource res1 = repo1.buildResource("res1.dog", null).finish();
+        MapDataResource res2 = repo1.buildResource("res2.cat", null).finish();
+
+        waitForMainThreadToRun(() -> repo1.setValue(BasicResource.loading(setOf(res1))));
+
+        verify(executor, never()).execute(any());
+
+        waitForMainThreadToRun(() -> repo1.setValue(BasicResource.loading(setOf(res2))));
+
+        verify(executor, never()).execute(any());
+        verify(catProvider, never()).resolveResource(any());
+        verify(dogProvider, never()).resolveResource(any());
+
+        activateExecutor();
+
+        when(dogProvider.resolveResource(res1)).then(answer -> repo1.resolveResource(res1, dogProvider));
+        when(catProvider.resolveResource(res2)).then(answer -> repo1.resolveResource(res2, catProvider));
+
+        waitForMainThreadToRun(() -> {
+            repo1.setValue(BasicResource.success(setOf(res1, res2)));
+
+            assertThat(manager.requireValue().getStatus(), is(Loading));
+        });
+
+        verify(executor, atLeastOnce()).execute(any());
+        verify(dogProvider, timeout(testTimeout())).resolveResource(res1);
+        verify(catProvider, timeout(testTimeout())).resolveResource(res2);
+    }
+
+    @Test
+    public void statusRemainsLoadingWhenRepositoryChangeResolvesAndOthersAreStillLoading() throws MapDataResolveException, InterruptedException {
+
+        MapDataResource res1 = repo1.buildResource("res1.cat", null).finish();
+        MapDataResource res1Resolved = repo1.resolveResource(res1, catProvider);
+
+        when(catProvider.resolveResource(res1)).thenReturn(res1Resolved);
+
+        activateExecutor();
+        repo1.postValue(resourceOf(res1));
+        repo2.postValue(BasicResource.loading());
+
+        onMainLooper.assertThatWithin(testTimeout(), manager::getResources, is(mapOf(res1)));
+
+        waitForMainThreadToRun(() -> assertThat(manager.requireValue().getStatus(), is(Loading)));
+    }
+
+    @Test
+    public void statusIsSuccessAfterAllRepositoryChangesResolve() throws MapDataResolveException, InterruptedException {
+
+        MapDataResource res1 = repo1.buildResource("res1.cat", null).finish();
+        MapDataResource res1Resolved = repo1.resolveResource(res1, catProvider);
+        MapDataResource res2 = repo2.buildResource("res2.cat", null).finish();
+        MapDataResource res2Resolved = repo2.resolveResource(res2, catProvider);
+
+        when(catProvider.resolveResource(res1)).thenReturn(res1Resolved);
+        when(catProvider.resolveResource(res2)).thenReturn(res2Resolved);
+
+        activateExecutor();
+        repo1.postValue(resourceOf(res1));
+        repo2.postValue(BasicResource.loading());
+
+        onMainLooper.assertThatWithin(testTimeout(), manager::getResources, allOf(is(mapOf(res1)), hasEntry(is(res1.getUri()), sameInstance(res1Resolved))));
+
+        waitForMainThreadToRun(() -> {
+            assertThat(manager.requireValue().getStatus(), is(Loading));
+            repo2.setValue(resourceOf(res2));
+            assertThat(manager.requireValue().getStatus(), is(Loading));
+        });
+
+        onMainLooper.assertThatWithin(testTimeout(), manager::getResources, allOf(
+            is(mapOf(res1, res2)),
+            hasEntry(is(res1.getUri()), sameInstance(res1Resolved)),
+            hasEntry(is(res2.getUri()), sameInstance(res2Resolved))));
+
+        assertThat(manager.requireValue().getStatus(), is(Success));
+    }
+
+    @Test
     @SuppressWarnings("unchecked")
     public void asynchronouslyResolvesNewUnresolvedResources() throws MapDataResolveException {
+
         activateExecutor();
 
         MapDataResource res1 = repo1.buildResource("res1.dog", null).finish();
@@ -1063,7 +1107,7 @@ public class MapDataManagerTest implements LifecycleOwner {
         assertThat(manager.getLayers(), is(emptyMap()));
         verify(dogProvider, beforeTimeout()).resolveResource(res1);
         verify(catProvider, beforeTimeout()).resolveResource(res2);
-        verify(observer, beforeTimeout()).onChanged(changeCaptor.capture());
+        verify(observer, beforeTimeout().times(2)).onChanged(changeCaptor.capture());
 
         deactivateExecutorAndWait();
 
@@ -1099,7 +1143,7 @@ public class MapDataManagerTest implements LifecycleOwner {
         verify(executor, never()).execute(any());
         verify(dogProvider, never()).resolveResource(any());
         verify(catProvider, never()).resolveResource(any());
-        verify(observer).onChanged(changeCaptor.capture());
+        verify(observer).onChanged(any());
 
         activateExecutor();
 
@@ -1114,11 +1158,11 @@ public class MapDataManagerTest implements LifecycleOwner {
 
         repo1.postValue(resourceOf(res1Unresolved, res2Unresolved));
 
-        onMainLooper.assertThatWithin(timeout(), () -> manager.requireValue().getStatus(), is(Success));
+        onMainLooper.assertThatWithin(testTimeout(), () -> manager.requireValue().getStatus(), is(Success));
 
         verify(dogProvider).resolveResource(res1Unresolved);
         verify(catProvider).resolveResource(res2Unresolved);
-        verify(observer, times(2)).onChanged(changeCaptor.capture());
+        verify(observer, times(3)).onChanged(changeCaptor.capture());
 
         waitForMainThreadToRun(() -> {
             Map<URI, MapDataResource> resources = manager.requireValue().getContent();
@@ -1127,11 +1171,22 @@ public class MapDataManagerTest implements LifecycleOwner {
                 hasEntry(is(res1.getUri()), sameInstance(res1Resolved)),
                 hasEntry(is(res2.getUri()), sameInstance(res2Resolved))));
             assertThat(manager.getLayers(), is(mapOfLayers(res1Resolved, res2Resolved)));
+            List<Resource<Map<URI, ? extends MapDataResource>>> changes = changeCaptor.getAllValues();
+            assertThat(changes.get(0).getContent(), allOf(
+                is(mapOf(res1, res2)),
+                hasEntry(is(res1.getUri()), sameInstance(res1)),
+                hasEntry(is(res2.getUri()), sameInstance(res2))));
+            assertThat(changes.get(1).getContent(), is(emptyMap()));
+            assertThat(changes.get(2).getContent(), allOf(
+                is(mapOf(res1, res2)),
+                hasEntry(is(res1.getUri()), sameInstance(res1Resolved)),
+                hasEntry(is(res2.getUri()), sameInstance(res2Resolved))));
         });
     }
 
     @Test
     public void resolvesUpdatedUnresolvedResourcesWithExistingDataWhenContentTimestampDidNotChange() throws MapDataResolveException, InterruptedException {
+
         MapDataResource res1Resolved = repo1.buildResource("res1.dog", dogProvider).layers("R1/L1").finish();
 
         waitForMainThreadToRun(() -> {
@@ -1148,16 +1203,16 @@ public class MapDataManagerTest implements LifecycleOwner {
 
         activateExecutor();
 
-        MapDataResource res1Unresolved = repo1.buildResource(res1Resolved.requireResolved().getName(), null).finish();
+        MapDataResource res1Unresolved = new MapDataResource(res1Resolved.getUri(), repo1, res1Resolved.getContentTimestamp());
 
         assertThat(res1Unresolved.getContentTimestamp(), is(res1Resolved.getContentTimestamp()));
 
         repo1.postValue(resourceOf(res1Unresolved));
 
-        onMainLooper.assertThatWithin(timeout(), manager::getResources,
+        onMainLooper.assertThatWithin(testTimeout(), manager::getResources,
             hasEntry(is(res1Resolved.getUri()), allOf(
                 not(sameInstance(res1Resolved)),
-                withValueSuppliedBy(MapDataResource::getResolved, sameInstance(res1Resolved.getResolved())))));
+                valueSuppliedBy(MapDataResource::getResolved, sameInstance(res1Resolved.getResolved())))));
 
         deactivateExecutorAndWait();
 
@@ -1168,12 +1223,16 @@ public class MapDataManagerTest implements LifecycleOwner {
             @SuppressWarnings("unchecked")
             Set<MapDataResource> resources = (Set<MapDataResource>) repo1.requireValue().getContent();
             assertThat(resources, is(setOf(res1Resolved)));
-            assertThat(resources, hasItem(withValueSuppliedBy(MapDataResource::getResolved, sameInstance(res1Resolved.getResolved()))));
-            verifyNoMoreInteractions(observer);
+            assertThat(resources, hasItem(valueSuppliedBy(MapDataResource::getResolved, sameInstance(res1Resolved.getResolved()))));
             assertThat(manager.getResources(), is(mapOf(res1Resolved)));
             assertThat(manager.getResources(), hasEntry(is(res1Resolved.getUri()), not(sameInstance(res1Resolved))));
             assertThat(manager.getResources().get(res1Resolved.getUri()).getResolved(), sameInstance(res1Resolved.getResolved()));
             assertThat(manager.getLayers(), is(mapOfLayers(res1Resolved)));
+            verify(observer, times(3)).onChanged(changeCaptor.capture());
+            assertThat(changeCaptor.getAllValues().get(1).getContent(), is(emptyMap()));
+            assertThat(changeCaptor.getAllValues().get(2).getContent(), allOf(
+                is(mapOf(res1Resolved)),
+                hasEntry(is(res1Resolved.getUri()), valueSuppliedBy(MapDataResource::getResolved, sameInstance(res1Resolved.getResolved())))));
         });
     }
 
@@ -1200,7 +1259,7 @@ public class MapDataManagerTest implements LifecycleOwner {
 
         waitForMainThreadToRun(() -> repo1.setValue(new BasicResource<>(resources, Success)));
 
-        onMainLooper.assertThatWithin(timeout(), () -> manager.requireValue().getStatus(), is(Success));
+        onMainLooper.assertThatWithin(testTimeout(), () -> manager.requireValue().getStatus(), is(Success));
 
         deactivateExecutorAndWait();
 
@@ -1208,6 +1267,41 @@ public class MapDataManagerTest implements LifecycleOwner {
         resolveOrder.verify(catProvider).resolveResource(res1);
         resolveOrder.verify(dogProvider).resolveResource(res2);
         resolveOrder.verify(dogProvider).resolveResource(res3);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void providesResolvedResourcesBackToRepositoryBeforeChangingValue() throws MapDataResolveException, InterruptedException {
+
+        MapDataResource res1 = repo1.buildResource("res1.dog", null).finish();
+        MapDataResource res1Resolved = repo1.resolveResource(res1, dogProvider);
+        when(dogProvider.resolveResource(res1)).thenReturn(res1Resolved);
+        Observer<Resource<Set<? extends MapDataResource>>> repoObserver = mock(Observer.class);
+        ArgumentCaptor<Resource<Set<? extends MapDataResource>>> repoCaptor = ArgumentCaptor.forClass(Resource.class);
+
+        // ensure this observer gets the change first to verify the order, otherwise the manager will get it first
+        // and the verification order will fail
+        waitForMainThreadToRun(() -> {
+            repo1.removeObservers(manager);
+            repo1.observe(this, repoObserver);
+            initializeManager();
+        });
+
+        activateExecutor();
+
+        waitForMainThreadToRun(() -> repo1.setValue(resourceOf(res1)));
+
+        onMainLooper.assertThatWithin(testTimeout(), manager::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+
+        InOrder changeOrder = inOrder(repoObserver, observer);
+        changeOrder.verify(repoObserver, times(2)).onChanged(repoCaptor.capture());
+        changeOrder.verify(observer).onChanged(argThat(valueSuppliedBy(Resource::getStatus, is(Success))));
+        Set<MapDataResource> change = (Set<MapDataResource>) repoCaptor.getAllValues().get(0).getContent();
+        assertThat(change, allOf(is(setOf(res1)), hasItem(sameInstance(res1))));
+        change = (Set<MapDataResource>) repoCaptor.getAllValues().get(1).getContent();
+        assertThat(change, allOf(is(setOf(res1)), hasItem(sameInstance(res1Resolved))));
+        assertThat(repo1.getValue(), notNullValue());
+        assertThat(repo1.getValue().getContent(), sameInstance(change));
     }
 
     /*
@@ -1228,6 +1322,57 @@ public class MapDataManagerTest implements LifecycleOwner {
      */
 
 //    @Test
+//    public void doesNotRefreshRepositoryWithResolvingResources() throws MapDataResolveException, InterruptedException {
+//        MapDataResource res1 = repo1.buildResource("res.cat", null).finish();
+//        Lock lock = new ReentrantLock();
+//        Condition resolveCondition = lock.newCondition();
+//        AtomicBoolean resolveBlocked = new AtomicBoolean(false);
+//
+//        when(catProvider.resolveResource(res1)).then(invocation -> {
+//            lock.lock();
+//            resolveBlocked.set(true);
+//            resolveCondition.signal();
+//            while (resolveBlocked.get()) {
+//                resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
+//            }
+//            lock.unlock();
+//            return repo1.resolveResource(res1, catProvider);
+//        });
+//
+//        activateExecutor();
+//
+//        waitForMainThreadToRun(() -> repo1.setValue(resourceOf(res1)));
+//
+//        lock.lock();
+//        while (!resolveBlocked.get()) {
+//            resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
+//        }
+//        lock.unlock();
+//
+//        waitForMainThreadToRun(() -> {
+//            manager.refreshMapData();
+//
+//            assertThat(repo1.requireValue().getStatus(), not(Resource.Status.Loading));
+//            assertThat(repo1.refreshCount, is(0));
+//            assertThat(repo2.refreshCount, is(1));
+//        });
+//
+//        lock.lock();
+//        resolveBlocked.set(false);
+//        resolveCondition.signal();
+//        lock.unlock();
+//
+//        onMainLooper.assertThatWithin(testTimeout(), manager::getResources, is(mapOf(res1)));
+//
+//        waitForMainThreadToRun(() -> {
+//            manager.refreshMapData();
+//
+//            assertThat(repo1.refreshCount, is(1));
+//            assertThat(repo2.refreshCount, is(2));
+//        });
+//    }
+//
+//    @Test
 //    public void handlesRepositoryChangeThatAddsResourcesWhileResolvingConcurrently() throws MapDataResolveException, InterruptedException {
 //        Lock resolveLock = new ReentrantLock();
 //        AtomicBoolean resolveBlocked = new AtomicBoolean(false);
@@ -1242,7 +1387,7 @@ public class MapDataManagerTest implements LifecycleOwner {
 //            resolveBlocked.set(true);
 //            resolveCondition.signal();
 //            while (resolveBlocked.get()) {
-//                resolveCondition.await(timeout(), TimeUnit.MILLISECONDS);
+//                resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
 //            }
 //            return res1Resolved;
 //        });
@@ -1252,7 +1397,7 @@ public class MapDataManagerTest implements LifecycleOwner {
 //        repo1.postValue(resourceOf(res1));
 //        resolveLock.lock();
 //        while (!resolveBlocked.get()) {
-//            resolveCondition.await(timeout(), TimeUnit.MILLISECONDS);
+//            resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
 //        }
 //        resolveLock.unlock();
 //
@@ -1275,8 +1420,8 @@ public class MapDataManagerTest implements LifecycleOwner {
 //            assertThat(change, sameInstance(manager.getValue()));
 //            assertThat(manager.requireValue().getContent(), allOf(
 //                is(mapOf(res1Resolved, res2Resolved)),
-//                hasEntry(is(res1.getUri()), withValueSuppliedBy(MapDataResource::getResolved, sameInstance(res1Resolved.getResolved()))),
-//                hasEntry(is(res2.getUri()), withValueSuppliedBy(MapDataResource::getResolved, sameInstance(res2Resolved.getResolved())))));
+//                hasEntry(is(res1.getUri()), valueSuppliedBy(MapDataResource::getResolved, sameInstance(res1Resolved.getResolved()))),
+//                hasEntry(is(res2.getUri()), valueSuppliedBy(MapDataResource::getResolved, sameInstance(res2Resolved.getResolved())))));
 //        });
 //    }
 //
@@ -1299,7 +1444,7 @@ public class MapDataManagerTest implements LifecycleOwner {
 //            resolveBlocked.set(true);
 //            resolveCondition.signal();
 //            while (resolveBlocked.get()) {
-//                resolveCondition.await(timeout(), TimeUnit.MILLISECONDS);
+//                resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
 //            }
 //            resolveLock.unlock();
 //            return resolved;
@@ -1311,12 +1456,12 @@ public class MapDataManagerTest implements LifecycleOwner {
 //
 //        resolveLock.lock();
 //        while (!resolveBlocked.get()) {
-//            resolveCondition.await(timeout(), TimeUnit.MILLISECONDS);
+//            resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
 //        }
 //        resolveBlocked.set(false);
 //        resolveCondition.signal();
 //        while (!resolveBlocked.get()) {
-//            resolveCondition.await(timeout(), TimeUnit.MILLISECONDS);
+//            resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
 //        }
 //        // don't let second resolve finish to force a concurrent change from the repository
 //        resolveLock.unlock();
@@ -1339,12 +1484,12 @@ public class MapDataManagerTest implements LifecycleOwner {
 //        resolveBlocked.set(false);
 //        resolveCondition.signal();
 //        while (!resolveBlocked.get()) {
-//            resolveCondition.await(timeout(), TimeUnit.MILLISECONDS);
+//            resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
 //        }
 //        resolveBlocked.set(false);
 //        resolveCondition.signal();
 //        while (!resolveBlocked.get()) {
-//            resolveCondition.await(timeout(), TimeUnit.MILLISECONDS);
+//            resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
 //        }
 //        resolveBlocked.set(false);
 //        resolveCondition.signal();
@@ -1352,7 +1497,7 @@ public class MapDataManagerTest implements LifecycleOwner {
 //
 //        resolveVerification.verify(catProvider).resolveResource(same(res1Updated));
 //
-//        onMainLooper.assertThatWithin(timeout(), manager::getResources, is(mapOf(res1Resolved, res2Resolved)));
+//        onMainLooper.assertThatWithin(testTimeout(), manager::getResources, is(mapOf(res1Resolved, res2Resolved)));
 //
 //        deactivateExecutorAndWait();
 //
@@ -1380,7 +1525,7 @@ public class MapDataManagerTest implements LifecycleOwner {
 //            resolveBlocked.set(true);
 //            resolveCondition.signal();
 //            while (resolveBlocked.get()) {
-//                resolveCondition.await(timeout(), TimeUnit.MILLISECONDS);
+//                resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
 //            }
 //            resolveLock.unlock();
 //            return res1Resolved;
@@ -1392,7 +1537,7 @@ public class MapDataManagerTest implements LifecycleOwner {
 //
 //        resolveLock.lock();
 //        while (!resolveBlocked.get()) {
-//            resolveCondition.await(timeout(), TimeUnit.MILLISECONDS);
+//            resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
 //        }
 //        resolveLock.unlock();
 //
@@ -1407,7 +1552,7 @@ public class MapDataManagerTest implements LifecycleOwner {
 //        resolveCondition.signal();
 //        resolveLock.unlock();
 //
-//        onMainLooper.assertThatWithin(timeout(), () -> manager.requireValue().getStatus(), is(Success));
+//        onMainLooper.assertThatWithin(testTimeout(), () -> manager.requireValue().getStatus(), is(Success));
 //
 //        deactivateExecutorAndWait();
 //
@@ -1433,7 +1578,7 @@ public class MapDataManagerTest implements LifecycleOwner {
 //            resolveBlocked.set(true);
 //            resolveCondition.signal();
 //            while (resolveBlocked.get()) {
-//                resolveCondition.await(timeout(), TimeUnit.MILLISECONDS);
+//                resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
 //            }
 //            resolveLock.unlock();
 //            return res1Resolved;
@@ -1446,7 +1591,7 @@ public class MapDataManagerTest implements LifecycleOwner {
 //
 //        resolveLock.lock();
 //        while (!resolveBlocked.get()) {
-//            resolveCondition.await(timeout(), TimeUnit.MILLISECONDS);
+//            resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
 //        }
 //        resolveLock.unlock();
 //
@@ -1457,7 +1602,7 @@ public class MapDataManagerTest implements LifecycleOwner {
 //        resolveCondition.signal();
 //        resolveLock.unlock();
 //
-//        onMainLooper.assertThatWithin(timeout(), manager::getResources, is(mapOf(res2Resolved)));
+//        onMainLooper.assertThatWithin(testTimeout(), manager::getResources, is(mapOf(res2Resolved)));
 //
 //        deactivateExecutorAndWait();
 //
@@ -1482,7 +1627,7 @@ public class MapDataManagerTest implements LifecycleOwner {
 //            resolveBlocked.set(true);
 //            resolveCondition.signal();
 //            while (resolveBlocked.get()) {
-//                resolveCondition.await(timeout(), TimeUnit.MILLISECONDS);
+//                resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
 //            }
 //            resolveLock.unlock();
 //            return res1Resolved;
@@ -1494,7 +1639,7 @@ public class MapDataManagerTest implements LifecycleOwner {
 //
 //        resolveLock.lock();
 //        while (!resolveBlocked.get()) {
-//            resolveCondition.await(timeout(), TimeUnit.MILLISECONDS);
+//            resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
 //        }
 //        resolveLock.unlock();
 //
@@ -1505,7 +1650,7 @@ public class MapDataManagerTest implements LifecycleOwner {
 //        resolveCondition.signal();
 //        resolveLock.unlock();
 //
-//        onMainLooper.assertThatWithin(timeout(), manager::getResources, is(mapOf(res1Resolved)));
+//        onMainLooper.assertThatWithin(testTimeout(), manager::getResources, is(mapOf(res1Resolved)));
 //
 //        deactivateExecutorAndWait();
 //
@@ -1513,7 +1658,7 @@ public class MapDataManagerTest implements LifecycleOwner {
 //        verify(catProvider, never()).resolveResource(res2);
 //        verify(observer).onChanged(changeCaptor.capture());
 //        assertThat(manager.requireValue().getContent(), is(mapOf(res1)));
-//        assertThat(manager.requireValue().getContent(), hasEntry(is(res1.getUri()), withValueSuppliedBy(MapDataResource::getResolved, sameInstance(res1Resolved.getResolved()))));
+//        assertThat(manager.requireValue().getContent(), hasEntry(is(res1.getUri()), valueSuppliedBy(MapDataResource::getResolved, sameInstance(res1Resolved.getResolved()))));
 //    }
 //
 //    @Test
@@ -1530,7 +1675,7 @@ public class MapDataManagerTest implements LifecycleOwner {
 //            resolveBlocked.set(true);
 //            resolveCondition.signal();
 //            while (resolveBlocked.get()) {
-//                resolveCondition.await(timeout(), TimeUnit.MILLISECONDS);
+//                resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
 //            }
 //            resolveLock.unlock();
 //            return res1Resolved;
@@ -1543,7 +1688,7 @@ public class MapDataManagerTest implements LifecycleOwner {
 //        resolveLock.lock();
 //        try {
 //            while (!resolveBlocked.get()) {
-//                resolveCondition.await(timeout(), TimeUnit.MILLISECONDS);
+//                resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
 //            }
 //        }
 //        finally {
@@ -1583,7 +1728,7 @@ public class MapDataManagerTest implements LifecycleOwner {
 //            resolveBlocked.set(true);
 //            resolveCondition.signal();
 //            while (resolveBlocked.get()) {
-//                resolveCondition.await(timeout(), TimeUnit.MILLISECONDS);
+//                resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
 //            }
 //            resolveLock.unlock();
 //            MapDataResource unresolvedResource = invoc.getArgument(0);
@@ -1599,7 +1744,7 @@ public class MapDataManagerTest implements LifecycleOwner {
 //
 //        resolveLock.lock();
 //        while (!resolveBlocked.get()) {
-//            resolveCondition.await(timeout(), TimeUnit.MILLISECONDS);
+//            resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
 //        }
 //        resolveLock.unlock();
 //
@@ -1609,7 +1754,7 @@ public class MapDataManagerTest implements LifecycleOwner {
 //        resolveBlocked.set(false);
 //        resolveCondition.signal();
 //        while (!resolveBlocked.get()) {
-//            resolveCondition.await(timeout(), TimeUnit.MILLISECONDS);
+//            resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
 //        }
 //        resolveLock.unlock();
 //
@@ -1620,7 +1765,7 @@ public class MapDataManagerTest implements LifecycleOwner {
 //        resolveCondition.signal();
 //        resolveLock.unlock();
 //
-//        onMainLooper.assertThatWithin(timeout(), manager::getResources, is(mapOf(res1RepoResolved, res2RepoResolved)));
+//        onMainLooper.assertThatWithin(testTimeout(), manager::getResources, is(mapOf(res1RepoResolved, res2RepoResolved)));
 //
 //        deactivateExecutorAndWait();
 //
@@ -1686,7 +1831,7 @@ public class MapDataManagerTest implements LifecycleOwner {
 //        firstResolveChanged.signal();
 //        resolveLock.unlock();
 //
-//        onMainLooper.assertThatWithin(timeout(), manager::getResources, hasEntry(is(res3.getUri()), sameInstance(res3Resolved)));
+//        onMainLooper.assertThatWithin(testTimeout(), manager::getResources, hasEntry(is(res3.getUri()), sameInstance(res3Resolved)));
 //
 //        verify(catProvider).resolveResource(res1);
 //        verify(catProvider).resolveResource(res3);

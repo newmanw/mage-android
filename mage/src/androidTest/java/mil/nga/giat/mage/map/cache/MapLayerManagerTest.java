@@ -1042,7 +1042,7 @@ public class MapLayerManagerTest {
 //                }
 //            });
 //            onMainThread.assertThatWithin(timeout(), overlaysOnMap::values,
-//                everyItem(TargetSuppliesPropertyValueMatcher.withValueSuppliedBy(TestLayerAdapter::isOnMap, is(true))));
+//                everyItem(TargetSuppliesPropertyValueMatcher.valueSuppliedBy(TestLayerAdapter::isOnMap, is(true))));
 //        }
 //
 //        private void assertZIndexMove(int from, int to) {

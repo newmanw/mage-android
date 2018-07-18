@@ -8,7 +8,7 @@ import mil.nga.giat.mage.map.cache.StaticFeatureLayerRepositoryTest;
 
 public class TargetSuppliesPropertyValueMatcher<T, V> extends BaseMatcher<T> {
 
-    public static <T, V> TargetSuppliesPropertyValueMatcher<T, V> withValueSuppliedBy(PropertyValueSupplier<T, V> valueProvider, Matcher<V> valueMatcher) {
+    public static <T, V> TargetSuppliesPropertyValueMatcher<T, V> valueSuppliedBy(PropertyValueSupplier<T, V> valueProvider, Matcher<V> valueMatcher) {
         return new TargetSuppliesPropertyValueMatcher<>(valueProvider, valueMatcher);
     }
 
