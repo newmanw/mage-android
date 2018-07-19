@@ -151,10 +151,10 @@ class MapDataManager(config: Config) : LifecycleOwner, LiveData<Resource<Map<URI
         }
 
         var nextStatus = Success
-        if (unresolved.isNotEmpty()) {
+        val changeInProgress = changeInProgressForRepository[source.id]
+        if (unresolved.isNotEmpty() || changeInProgress != null) {
             nextStatus = Loading
             nextChangeForRepository[source.id] = ResolveRepositoryChangeTask(source, unresolved)
-            val changeInProgress = changeInProgressForRepository[source.id]
             if (changeInProgress == null) {
                 beginNextChangeForRepository(source)
             }
