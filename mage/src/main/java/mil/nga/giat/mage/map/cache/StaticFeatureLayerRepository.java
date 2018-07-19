@@ -44,7 +44,8 @@ import mil.nga.giat.mage.sdk.exceptions.StaticFeatureException;
 import mil.nga.giat.mage.sdk.http.resource.LayerResource;
 import mil.nga.giat.mage.sdk.login.LoginTaskFactory;
 
-import static mil.nga.giat.mage.data.Resource.Status.*;
+import static mil.nga.giat.mage.data.Resource.Status.Error;
+import static mil.nga.giat.mage.data.Resource.Status.Success;
 
 
 @MainThread
