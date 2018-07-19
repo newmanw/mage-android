@@ -1333,8 +1333,8 @@ public class MapDataManagerTest implements LifecycleOwner {
      increase the number of updates MapDataManager fires, or overly complicate the
      mechanism of collating or grouping the updates.  Maybe that doesn't matter for
      practical purposes.  Granted this is a bit of an arbitrary granularity of
-     grouping repository changes into MapDataUpdate events, but it's easier to manage
-     and maps directly to the LiveData notifications that come from the MapDataRepository
+     grouping repository changes into change events, but it's easier to manage and
+     maps directly to the LiveData notifications that come from the MapDataRepository
      implementations.
      */
 
@@ -1528,61 +1528,62 @@ public class MapDataManagerTest implements LifecycleOwner {
         assertThat(manager.getResources().get(res2.getUri()).getResolved(), sameInstance(res2Resolved.getResolved()));
     }
 
-//    /**
-//     * Really this is already tested above, but the more tests the better, right?
-//     */
-//    @Test
-//    public void handlesRepositoryChangeWithUnresolvedResourceThatWasResolvedInPendingChangeConcurrently() throws InterruptedException, MapDataResolveException {
-//
-//        Lock resolveLock = new ReentrantLock();
-//        AtomicBoolean resolveBlocked = new AtomicBoolean(false);
-//        Condition resolveCondition = resolveLock.newCondition();
-//        MapDataResource res1 = repo1.buildResource("res1.cat", null).finish();
-//        MapDataResource res1Resolved = repo1.resolveResource(res1, catProvider, "res1/layer1");
-//
-//        when(catProvider.resolveResource(same(res1))).then(invoc -> {
-//            resolveLock.lock();
-//            resolveBlocked.set(true);
-//            resolveCondition.signal();
-//            while (resolveBlocked.get()) {
-//                resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
-//            }
-//            resolveLock.unlock();
-//            return res1Resolved;
-//        });
-//
-//        activateExecutor();
-//
-//        waitForMainThreadToRun(() -> repo1.setValue(resourceOf(res1)));
-//
-//        resolveLock.lock();
-//        while (!resolveBlocked.get()) {
-//            resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
-//        }
-//        resolveLock.unlock();
-//
-//        MapDataResource res1Again = new MapDataResource(res1.getUri(), repo1, res1.getContentTimestamp());
-//
-//        waitForMainThreadToRun(() -> repo1.setValue(resourceOf(res1Again)));
-//
-//        assertThat(manager.getResources(), is(emptyMap()));
-//
-//        resolveLock.lock();
-//        resolveBlocked.set(false);
-//        resolveCondition.signal();
-//        resolveLock.unlock();
-//
-//        onMainLooper.assertThatWithin(testTimeout(), () -> manager.requireValue().getStatus(), is(Success));
-//
-//        deactivateExecutorAndWait();
-//
-//        verify(catProvider, times(1)).resolveResource(res1);
-//        verify(catProvider, never()).resolveResource(same(res1Again));
-//        verify(observer).onChanged(changeCaptor.capture());
-//        assertThat(manager.requireValue().getContent(), is(mapOf(res1Resolved)));
-//        assertThat(manager.requireValue().getContent(), hasEntry(is(res1.getUri()), sameInstance(res1Resolved)));
-//    }
-//
+    /**
+     * Really this is already tested above, but the more tests the better, right?
+     */
+    @Test
+    public void handlesRepositoryChangeWithUnresolvedResourceThatWasResolvedInPendingChangeConcurrently() throws InterruptedException, MapDataResolveException {
+
+        Lock resolveLock = new ReentrantLock();
+        AtomicBoolean resolveBlocked = new AtomicBoolean(false);
+        Condition resolveCondition = resolveLock.newCondition();
+        MapDataResource res1 = repo1.buildResource("res1.cat", null).finish();
+        MapDataResource res1Resolved = repo1.resolveResource(res1, catProvider, "res1/layer1");
+
+        when(catProvider.resolveResource(same(res1))).then(invoc -> {
+            resolveLock.lock();
+            resolveBlocked.set(true);
+            resolveCondition.signal();
+            while (resolveBlocked.get()) {
+                resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
+            }
+            resolveLock.unlock();
+            return res1Resolved;
+        });
+
+        activateExecutor();
+
+        waitForMainThreadToRun(() -> repo1.setValue(resourceOf(res1)));
+
+        resolveLock.lock();
+        while (!resolveBlocked.get()) {
+            resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
+        }
+        resolveLock.unlock();
+
+        MapDataResource res1Again = new MapDataResource(res1.getUri(), repo1, res1.getContentTimestamp());
+
+        waitForMainThreadToRun(() -> repo1.setValue(resourceOf(res1Again)));
+
+        assertThat(manager.getResources(), is(emptyMap()));
+
+        resolveLock.lock();
+        resolveBlocked.set(false);
+        resolveCondition.signal();
+        resolveLock.unlock();
+
+        onMainLooper.assertThatWithin(testTimeout(), () -> manager.requireValue().getStatus(), is(Success));
+
+        deactivateExecutorAndWait();
+
+        verify(catProvider, times(1)).resolveResource(res1);
+        verify(catProvider, never()).resolveResource(same(res1Again));
+        verify(observer, times(2)).onChanged(changeCaptor.capture());
+        assertThat(manager.requireValue().getContent(), is(mapOf(res1Resolved)));
+        assertThat(manager.requireValue().getContent(), hasEntry(is(res1.getUri()),
+            valueSuppliedBy(MapDataResource::getResolved, sameInstance(res1Resolved.getResolved()))));
+    }
+
 //    @Test
 //    public void handlesRepositoryChangeThatRemovesResourceResolvedInPendingChangeConcurrently() throws InterruptedException, MapDataResolveException {
 //        Lock resolveLock = new ReentrantLock();
