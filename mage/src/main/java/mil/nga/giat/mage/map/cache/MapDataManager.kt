@@ -256,13 +256,13 @@ class MapDataManager(config: Config) : LifecycleOwner, LiveData<Resource<Map<URI
     private inner class ResolveRepositoryChangeTask internal constructor(
             val repository: MapDataRepository,
             unresolved: Map<URI, MapDataResource>
-    ): AsyncTask<Void, Pair<MapDataResource, MapDataResolveException?>, ResolveRepositoryChangeResult>() {
+    ): AsyncTask<Void, Pair<MapDataResource, MapDataResolveException?>, MapDataResource?>() {
 
         val existingResolved = resourcesForRepo(repository)
         val unresolvedRemaining: SortedSet<MapDataResource> = TreeSet({ a, b -> a.uri.compareTo(b.uri) })
-        val backgroundUnresolved: Array<MapDataResource>
         val result = ResolveRepositoryChangeResult()
         val stringValue: String
+        var backgroundUnresolved: Array<MapDataResource>
 
         init {
             for (resource in unresolved.values) {
@@ -297,26 +297,29 @@ class MapDataManager(config: Config) : LifecycleOwner, LiveData<Resource<Map<URI
             throw MapDataResolveException(uri, "no cache provider could handle resource $resource")
         }
 
-        override fun doInBackground(vararg nothing: Void): ResolveRepositoryChangeResult {
-            for (unresolved in backgroundUnresolved) {
+        override fun doInBackground(vararg nothing: Void):MapDataResource? {
+            var lastResolved: MapDataResource? = null
+            backgroundUnresolved.forEach { unresolved ->
+                if (isCancelled) {
+                    return@forEach
+                }
                 try {
-                    val resolved = resolveWithFirstCapableProvider(unresolved)
-                    publishProgress(Pair(resolved, null))
+                    lastResolved = resolveWithFirstCapableProvider(unresolved)
+                    // if cancelled while this resolve happens, AsyncTask will not publish the progress,
+                    // so capture it anyway to avoid potentially doing unnecessary work again in the next
+                    // resolve for the associated repository
+                    publishProgress(Pair(lastResolved!!, null))
                 }
                 catch (e: MapDataResolveException) {
                     publishProgress(Pair(unresolved, e))
                 }
             }
-            return result
+            return lastResolved
         }
 
-        override fun onCancelled(cancelledResult: ResolveRepositoryChangeResult?) {
-            unresolvedRemaining.iterator().run {
-                while (hasNext()) {
-                    val resource = next()
-                    result.cancelled[resource] = resource
-                    remove()
-                }
+        override fun onCancelled(lastResolved: MapDataResource?) {
+            if (lastResolved != null) {
+                result.resolved[lastResolved.uri] = lastResolved
             }
             onResolveFinished(this)
         }
@@ -332,7 +335,7 @@ class MapDataManager(config: Config) : LifecycleOwner, LiveData<Resource<Map<URI
             }
         }
 
-        override fun onPostExecute(result: ResolveRepositoryChangeResult) {
+        override fun onPostExecute(lastResolved: MapDataResource?) {
             onResolveFinished(this)
         }
 
@@ -341,16 +344,16 @@ class MapDataManager(config: Config) : LifecycleOwner, LiveData<Resource<Map<URI
             if (status != Status.PENDING) {
                 throw IllegalStateException("attempt to initialize progress from cancelled change after this change already began")
             }
-            unresolvedRemaining.iterator().run {
-                while (hasNext()) {
-                    val unresolvedResource = next()
-                    val resolvedResource = cancelledChange.result.resolved[unresolvedResource.uri]
-                    if (resolvedResource != null && resolvedResource.contentTimestamp >= unresolvedResource.contentTimestamp) {
-                        result.resolved[unresolvedResource.uri] = unresolvedResource.resolve(resolvedResource.resolved!!)
-                        remove()
-                    }
+            val cursor = unresolvedRemaining.iterator()
+            while (cursor.hasNext()) {
+                val unresolvedResource = cursor.next()
+                val resolvedResource = cancelledChange.result.resolved[unresolvedResource.uri]
+                if (resolvedResource != null && resolvedResource.contentTimestamp >= unresolvedResource.contentTimestamp) {
+                    result.resolved[unresolvedResource.uri] = unresolvedResource.resolve(resolvedResource.resolved!!)
+                    cursor.remove()
                 }
             }
+            backgroundUnresolved = unresolvedRemaining.toTypedArray()
         }
 
         override fun toString(): String {
@@ -363,7 +366,6 @@ class MapDataManager(config: Config) : LifecycleOwner, LiveData<Resource<Map<URI
     private class ResolveRepositoryChangeResult {
 
         val resolved = HashMap<URI, MapDataResource>()
-        val cancelled = HashMap<MapDataResource, MapDataResource>()
         // TODO: propagate failed imports to user somehow
         val failed = HashMap<MapDataResource, MapDataResolveException>()
     }
