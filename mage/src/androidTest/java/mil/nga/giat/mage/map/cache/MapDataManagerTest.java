@@ -24,6 +24,7 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
+import org.mockito.stubbing.Answer;
 import org.mockito.verification.VerificationWithTimeout;
 
 import java.net.URI;
@@ -250,7 +251,7 @@ public class MapDataManagerTest implements LifecycleOwner {
     }
 
     private static long testTimeout() {
-        return 200000;
+        return 500000;
     }
 
     private static VerificationWithTimeout beforeTimeout() {
@@ -345,7 +346,7 @@ public class MapDataManagerTest implements LifecycleOwner {
             throw new RejectedExecutionException(testMethodName + " tried to execute more background tasks after shutdown");
         });
         try {
-            if (!localRef.awaitTermination(5, TimeUnit.SECONDS)) {
+            if (!localRef.awaitTermination(testTimeout(), TimeUnit.MILLISECONDS)) {
                 throw new Error(testMethodName + " timed out waiting for thread pool termination");
             }
         }
@@ -1736,75 +1737,103 @@ public class MapDataManagerTest implements LifecycleOwner {
             valueSuppliedBy(Resource::getContent, is(emptyMap()))));
     }
 
-//    @Test
-//    public void handlesRepositoryChangeThatResolvesResourcesWhileResolvingConcurrently() throws MapDataResolveException, InterruptedException {
-//        Lock resolveLock = new ReentrantLock();
-//        AtomicBoolean resolveBlocked = new AtomicBoolean(false);
-//        Condition resolveCondition = resolveLock.newCondition();
-//        MapDataResource res1 = repo1.buildResource("res1.cat", null).finish();
-//        MapDataResource res1RepoResolved = repo1.resolveResource(res1, catProvider, "res1/fromRepo");
-//        MapDataResource res1ProviderResolved = repo1.resolveResource(res1, catProvider, "res1/fromProvider");
-//        MapDataResource res2 = repo1.buildResource("res2.dog", null).finish();
-//        MapDataResource res2RepoResolved = repo1.resolveResource(res2, dogProvider, "res2/fromRepo");
-//        MapDataResource res2ProviderResolved = repo1.resolveResource(res2, dogProvider, "res2/fromProvider");
-//        Map<URI, MapDataResource> providerResolvedResources = mapOf(res1ProviderResolved, res2ProviderResolved);
-//
-//        Answer<MapDataResource> resolveAnswer = invoc -> {
-//            resolveLock.lock();
-//            resolveBlocked.set(true);
-//            resolveCondition.signal();
-//            while (resolveBlocked.get()) {
-//                resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
-//            }
-//            resolveLock.unlock();
-//            MapDataResource unresolvedResource = invoc.getArgument(0);
-//            return providerResolvedResources.get(unresolvedResource.getUri());
-//        };
-//
-//        when(catProvider.resolveResource(any())).then(resolveAnswer);
-//        when(dogProvider.resolveResource(any())).then(resolveAnswer);
-//
-//        activateExecutor();
-//
-//        repo1.postValue(resourceOf(res1, res2));
-//
-//        resolveLock.lock();
-//        while (!resolveBlocked.get()) {
-//            resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
-//        }
-//        resolveLock.unlock();
-//
-//        waitForMainThreadToRun(() -> repo1.setValue(resourceOf(res1RepoResolved, res2)));
-//
-//        resolveLock.lock();
-//        resolveBlocked.set(false);
-//        resolveCondition.signal();
-//        while (!resolveBlocked.get()) {
-//            resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
-//        }
-//        resolveLock.unlock();
-//
-//        waitForMainThreadToRun(() -> repo1.setValue(resourceOf(res1RepoResolved, res2RepoResolved)));
-//
-//        resolveLock.lock();
-//        resolveBlocked.set(false);
-//        resolveCondition.signal();
-//        resolveLock.unlock();
-//
-//        onMainLooper.assertThatWithin(testTimeout(), manager::getResources, is(mapOf(res1RepoResolved, res2RepoResolved)));
-//
-//        deactivateExecutorAndWait();
-//
-//        assertThat(manager.getResources(), hasEntry(is(res1.getUri()), sameInstance(res1RepoResolved)));
-//        assertThat(manager.getResources(), hasEntry(is(res2.getUri()), sameInstance(res2RepoResolved)));
-//        assertThat(manager.getResources().get(res1.getUri()).getResolved(), sameInstance(res1RepoResolved.getResolved()));
-//        assertThat(manager.getResources().get(res2.getUri()).getResolved(), sameInstance(res2RepoResolved.getResolved()));
-//        verify(catProvider).resolveResource(res1);
-//        verify(dogProvider).resolveResource(res2);
-//        verify(observer).onChanged(changeCaptor.capture());
-//        // TODO: assert observed values
-//    }
-//
+    @Test
+    public void handlesRepositoryChangeThatResolvesResourcesWhileResolvingConcurrently() throws MapDataResolveException, InterruptedException {
+
+        Lock resolveLock = new ReentrantLock();
+        AtomicBoolean resolveBlocked = new AtomicBoolean(false);
+        Condition resolveCondition = resolveLock.newCondition();
+        MapDataResource res1 = repo1.buildResource("res1.cat", null).finish();
+        MapDataResource res1RepoResolved = repo1.resolveResource(res1, catProvider, "res1/fromRepo");
+        MapDataResource res1ProviderResolved = repo1.resolveResource(res1, catProvider, "res1/fromProvider");
+        MapDataResource res2 = repo1.buildResource("res2.dog", null).finish();
+        MapDataResource res2RepoResolved = repo1.resolveResource(res2, dogProvider, "res2/fromRepo");
+        MapDataResource res2ProviderResolved = repo1.resolveResource(res2, dogProvider, "res2/fromProvider");
+        Map<URI, MapDataResource> providerResolvedResources = mapOf(res1ProviderResolved, res2ProviderResolved);
+
+        Answer<MapDataResource> resolveAnswer = invoc -> {
+            resolveLock.lock();
+            resolveBlocked.set(true);
+            resolveCondition.signal();
+            while (resolveBlocked.get()) {
+                resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
+            }
+            resolveLock.unlock();
+            MapDataResource unresolvedResource = invoc.getArgument(0);
+            return providerResolvedResources.get(unresolvedResource.getUri());
+        };
+
+        when(catProvider.resolveResource(any())).then(resolveAnswer);
+        when(dogProvider.resolveResource(any())).then(resolveAnswer);
+
+        activateExecutor();
+
+        // change 1: Loading with empty content
+        repo1.postValue(resourceOf(res1, res2));
+
+        // block res1 resolve
+        resolveLock.lock();
+        while (!resolveBlocked.get()) {
+            resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
+        }
+        resolveLock.unlock();
+
+        // override res1 resolve, cancel res2 resolve
+        // change 2: Loading with res1RepoResolved
+        waitForMainThreadToRun(() -> repo1.setValue(resourceOf(res1RepoResolved, res2)));
+
+        // release res1 resolve, block second res2 resolve
+        resolveLock.lock();
+        resolveBlocked.set(false);
+        resolveCondition.signal();
+        while (!resolveBlocked.get()) {
+            resolveCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
+        }
+        resolveLock.unlock();
+
+        // override second res2 resolve
+        // change 3: Loading with res1RepoResolved, res2RepoResolved (resolve still in progress)
+        waitForMainThreadToRun(() -> repo1.setValue(resourceOf(res1RepoResolved, res2RepoResolved)));
+
+        // release second res2 resolve
+        resolveLock.lock();
+        resolveBlocked.set(false);
+        resolveCondition.signal();
+        resolveLock.unlock();
+
+        // change 4: Success with res1RepoResolved, res2RepoResolved
+        onMainLooper.assertThatWithin(testTimeout(), manager::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+
+        deactivateExecutorAndWait();
+
+        assertThat(manager.getResources(), hasEntry(is(res1.getUri()), sameInstance(res1RepoResolved)));
+        assertThat(manager.getResources(), hasEntry(is(res2.getUri()), sameInstance(res2RepoResolved)));
+        assertThat(manager.getResources().get(res1.getUri()).getResolved(), sameInstance(res1RepoResolved.getResolved()));
+        assertThat(manager.getResources().get(res2.getUri()).getResolved(), sameInstance(res2RepoResolved.getResolved()));
+        assertThat(manager.getLayers(), is(mapOfLayers(res1RepoResolved, res2RepoResolved)));
+        verify(catProvider).resolveResource(res1);
+        verify(dogProvider).resolveResource(res2);
+        verify(observer, times(4)).onChanged(changeCaptor.capture());
+        List<Resource<Map<URI, ? extends MapDataResource>>> changes = changeCaptor.getAllValues();
+        Resource<Map<URI, ? extends MapDataResource>> change = changes.get(0);
+        assertThat(change.getStatus(), is(Loading));
+        assertThat(change.getContent(), is(emptyMap()));
+        change = changes.get(1);
+        assertThat(change.getStatus(), is(Loading));
+        assertThat(change.getContent(), allOf(
+            is(mapOf(res1RepoResolved)),
+            hasEntry(is(res1.getUri()), sameInstance(res1RepoResolved))));
+        change = changes.get(2);
+        assertThat(change.getStatus(), is(Loading));
+        assertThat(change.getContent(), allOf(
+            is(mapOf(res1RepoResolved, res2RepoResolved)),
+            hasEntry(is(res1.getUri()), sameInstance(res1RepoResolved)),
+            hasEntry(is(res2.getUri()), sameInstance(res2RepoResolved))));
+        change = changes.get(3);
+        assertThat(change.getStatus(), is(Success));
+        assertThat(change.getContent(), sameInstance(manager.requireValue().getContent()));
+    }
+
 //    @Test
 //    public void doesNotResolveMultipleChangesFromOneRepositoryConcurrently() throws MapDataResolveException, InterruptedException {
 //        Lock resolveLock = new ReentrantLock();
