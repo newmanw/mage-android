@@ -1,4 +1,4 @@
-package mil.nga.giat.mage.map;
+package mil.nga.giat.mage.map.view;
 
 import android.arch.lifecycle.ViewModelProviders;
 import android.content.Context;

@@ -88,6 +88,7 @@ import mil.nga.giat.mage.map.marker.MyHistoricalLocationMarkerCollection;
 import mil.nga.giat.mage.map.marker.ObservationMarkerCollection;
 import mil.nga.giat.mage.map.marker.PointCollection;
 import mil.nga.giat.mage.map.marker.StaticGeometryCollection;
+import mil.nga.giat.mage.map.view.MapDataFragment;
 import mil.nga.giat.mage.map.view.MapLayersViewModel;
 import mil.nga.giat.mage.map.view.MapViewModel;
 import mil.nga.giat.mage.observation.ObservationEditActivity;
