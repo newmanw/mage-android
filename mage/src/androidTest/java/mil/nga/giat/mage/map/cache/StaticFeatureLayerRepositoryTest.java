@@ -136,8 +136,8 @@ public class StaticFeatureLayerRepositoryTest {
         }
     }
 
-    private static long oneSecond() {
-        return 3000;
+    private static long testTimeout() {
+        return 300000;
     }
 
     @Rule
@@ -198,7 +198,7 @@ public class StaticFeatureLayerRepositoryTest {
     @After
     public void awaitThreadPoolTermination() throws InterruptedException {
         executor.shutdown();
-        if (!executor.awaitTermination(oneSecond(), TimeUnit.MILLISECONDS)) {
+        if (!executor.awaitTermination(testTimeout(), TimeUnit.MILLISECONDS)) {
             fail("timed out waiting for thread pool to shutdown");
         }
     }
@@ -217,8 +217,8 @@ public class StaticFeatureLayerRepositoryTest {
     }
 
     @Test
-    public void initialStatusIsSuccess() {
-        fail("unimplemented");
+    public void intialDataIsNull() {
+        assertThat(repo.getValue(), is(nullValue()));
     }
 
     @Test
@@ -236,7 +236,7 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getValue().getStatus(), is(Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
 
         verify(layerService).getLayers(currentEvent);
     }
@@ -252,7 +252,7 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getValue().getStatus(), is(Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
 
         awaitThreadPoolTermination();
 
@@ -280,7 +280,7 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getValue().getStatus(), is(Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
 
         awaitThreadPoolTermination();
 
@@ -319,7 +319,7 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getValue().getStatus(), is(Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
 
         awaitThreadPoolTermination();
 
@@ -382,7 +382,7 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getValue().getStatus(), is(Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
 
         awaitThreadPoolTermination();
 
@@ -415,7 +415,7 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getValue().getStatus(), is(Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
 
         verify(layerHelper).delete(200L);
     }
@@ -431,7 +431,7 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getValue().getStatus(), is(Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
 
         verify(layerHelper).deleteByEvent(currentEvent);
     }
@@ -450,7 +450,7 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getValue().getStatus(), is(Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
 
         InOrder inOrder = inOrder(layerHelper, layerService);
         inOrder.verify(layerService).getFeatures(layer);
@@ -471,7 +471,7 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getValue().getStatus(), is(Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
 
         verify(layerService, never()).getLayers(currentEvent);
         verify(layerHelper, never()).delete(any());
@@ -497,7 +497,7 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getValue().getStatus(), is(Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Resource.Status.Error)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Resource.Status.Error)));
 
         verify(layerHelper, never()).delete(any());
         verify(layerHelper, never()).deleteByEvent(any());
@@ -523,7 +523,7 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getValue().getStatus(), is(Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Resource.Status.Error)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Resource.Status.Error)));
 
         verify(layerHelper, never()).delete(any());
         verify(layerHelper, never()).deleteByEvent(any());
@@ -544,13 +544,13 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getValue().getStatus(), is(Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
 
-        verify(observer).onChanged(observed.capture());
+        verify(observer, times(2)).onChanged(observed.capture());
         @SuppressWarnings("unchecked")
         Set<? extends MapDataResource> resources = observed.getValue().getContent();
         assertThat(resources, hasSize(1));
-        assertThat(repo.getValue(), sameInstance(resources));
+        assertThat(repo.getValue().getContent(), sameInstance(resources));
         MapDataResource res = (MapDataResource) resources.toArray()[0];
         assertThat(res.getResolved(), notNullValue());
         assertThat(res.getResolved().getLayerDescriptors(), is(emptyMap()));
@@ -566,7 +566,7 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getValue().getStatus(), is(Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
 
         verify(network).isConnected();
         verifyZeroInteractions(layerService);
@@ -586,11 +586,11 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getValue().getStatus(), is(Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
 
         verify(network).isConnected();
         verifyZeroInteractions(layerService);
-        verify(observer).onChanged(observed.capture());
+        verify(observer, times(2)).onChanged(observed.capture());
         List<MapDataResource> resources = new ArrayList<>(observed.getValue().getContent());
         assertThat(resources, hasSize(1));
         MapDataResource resource = resources.get(0);
@@ -615,10 +615,10 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getValue().getStatus(), is(Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Error)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Error)));
 
         verify(layerService).getLayers(currentEvent);
-        verify(observer).onChanged(observed.capture());
+        verify(observer, times(2)).onChanged(observed.capture());
         List<MapDataResource> resources = new ArrayList<>(observed.getValue().getContent());
         assertThat(resources, hasSize(1));
         MapDataResource resource = resources.get(0);
@@ -646,13 +646,13 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getValue().getStatus(), is(Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Error)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Error)));
 
         verify(layerService).getLayers(currentEvent);
         verify(layerService).getFeatures(remoteLayers.get(0));
         verify(layerService).getFeatures(remoteLayers.get(1));
         verify(layerService).getFeatures(remoteLayers.get(2));
-        verify(observer).onChanged(observed.capture());
+        verify(observer, times(2)).onChanged(observed.capture());
         List<MapDataResource> resources = new ArrayList<>(observed.getValue().getContent());
         assertThat(resources, hasSize(1));
         MapDataResource resource = resources.get(0);
@@ -673,13 +673,13 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getValue().getStatus(), is(Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
 
         Set<? extends MapDataResource> resources = repo.getValue().getContent();
-        verify(observer).onChanged(observed.capture());
+        verify(observer, times(2)).onChanged(observed.capture());
         assertThat(resources, notNullValue());
         assertThat(resources, hasSize(1));
-        assertThat(observed.getValue(), sameInstance(resources));
+        assertThat(observed.getValue().getContent(), sameInstance(resources));
         MapDataResource resource = (MapDataResource) resources.toArray()[0];
         assertThat(resource.getLayers().values(), hasSize(1));
         assertThat(resource.getLayers(), hasValue(valueSuppliedBy(MapLayerDescriptor::getLayerName, is("layer1"))));
@@ -692,9 +692,12 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getValue().getStatus(), is(Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Error)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Error)));
 
-        verifyNoMoreInteractions(observer);
+        verify(observer, times(4)).onChanged(observed.capture());
+        assertThat(observed.getAllValues().get(2).getStatus(), is(Loading));
+        assertThat(observed.getAllValues().get(2).getContent(), nullValue());
+        assertThat(observed.getAllValues().get(3).getContent(), sameInstance(resources));
         resources = repo.getValue().getContent();
         assertThat(resources, notNullValue());
         assertThat(resources, hasSize(1));
@@ -721,7 +724,7 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getValue().getStatus(), is(Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
 
         Set<? extends MapDataResource> resources = repo.getValue().getContent();
         verify(observer, times(2)).onChanged(observed.capture());
@@ -741,7 +744,7 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getValue().getStatus(), is(Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Error)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Error)));
 
         verify(observer, times(4)).onChanged(observed.capture());
         resources = repo.getValue().getContent();
@@ -776,7 +779,7 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getValue().getStatus(), is(Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Error)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Error)));
 
         InOrder syncOrder = inOrder(layerHelper, layerService);
         syncOrder.verify(layerService).getLayers(currentEvent);
@@ -805,14 +808,14 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getValue().getStatus(), is(Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Error)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Error)));
 
         InOrder syncOrder = inOrder(layerHelper, layerService);
         syncOrder.verify(layerService).getLayers(currentEvent);
         syncOrder.verify(layerHelper).readByEvent(currentEvent);
         syncOrder.verify(layerHelper).delete(222L);
         syncOrder.verify(layerHelper).readByEvent(currentEvent);
-        verify(observer).onChanged(observed.capture());
+        verify(observer, times(2)).onChanged(observed.capture());
         assertThat(observed.getValue(), sameInstance(repo.getValue()));
         assertThat(repo.getValue().getContent(), hasSize(1));
         MapDataResource resource = (MapDataResource) repo.getValue().getContent().toArray()[0];
@@ -856,9 +859,9 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getValue().getStatus(), is(Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Error)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Error)));
 
-        verify(observer).onChanged(observed.capture());
+        verify(observer, times(2)).onChanged(observed.capture());
         assertThat(observed.getValue(), sameInstance(repo.getValue()));
         assertThat(repo.getValue().getContent(), hasSize(1));
         MapDataResource resource = (MapDataResource) repo.getValue().getContent().toArray()[0];
@@ -879,7 +882,7 @@ public class StaticFeatureLayerRepositoryTest {
                 fetchBlocked.set(true);
                 fetchCondition.signal();
                 while (fetchBlocked.get()) {
-                    if (!fetchCondition.await(oneSecond(), TimeUnit.MILLISECONDS)) {
+                    if (!fetchCondition.await(testTimeout(), TimeUnit.MILLISECONDS)) {
                         fail("timed out waiting to unblock");
                     }
                 }
@@ -894,7 +897,7 @@ public class StaticFeatureLayerRepositoryTest {
 
         fetchLock.lock();
         while (!fetchBlocked.get()) {
-            fetchCondition.await(oneSecond(), TimeUnit.MILLISECONDS);
+            fetchCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
         }
         fetchLock.unlock();
 
@@ -909,12 +912,12 @@ public class StaticFeatureLayerRepositoryTest {
         fetchCondition.signal();
         fetchLock.unlock();
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
 
         awaitThreadPoolTermination();
 
         verify(layerService, times(1)).getLayers(any());
-        verify(observer, times(1)).onChanged(any());
+        verify(observer, times(2)).onChanged(any());
     }
 
     @Test
@@ -936,7 +939,7 @@ public class StaticFeatureLayerRepositoryTest {
                 fetchBlocked.set(true);
                 fetchCondition.signal();
                 while (fetchBlocked.get()) {
-                    if (!fetchCondition.await(oneSecond(), TimeUnit.MILLISECONDS)) {
+                    if (!fetchCondition.await(testTimeout(), TimeUnit.MILLISECONDS)) {
                         fail("timed out waiting to unblock");
                     }
                 }
@@ -951,7 +954,7 @@ public class StaticFeatureLayerRepositoryTest {
 
         fetchLock.lock();
         while (!fetchBlocked.get()) {
-            fetchCondition.await(oneSecond(), TimeUnit.MILLISECONDS);
+            fetchCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
         }
         fetchLock.unlock();
 
@@ -973,7 +976,7 @@ public class StaticFeatureLayerRepositoryTest {
         fetchCondition.signal();
         fetchLock.unlock();
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
 
         awaitThreadPoolTermination();
 
@@ -982,7 +985,7 @@ public class StaticFeatureLayerRepositoryTest {
         verify(layerService, times(2)).getLayers(any());
         verify(layerService).getFeatures(layers2.get(0));
         verify(layerService, never()).getFeatures(layers1.get(0));
-        verify(observer, times(1)).onChanged(observed.capture());
+        verify(observer, times(2)).onChanged(observed.capture());
         assertThat(observed.getValue().getContent(), hasSize(1));
         MapDataResource resource = (MapDataResource) observed.getValue().getContent().toArray()[0];
         assertThat(resource.getLayers(), hasValue(valueSuppliedBy(MapLayerDescriptor::getLayerName, is("event2.layer1"))));
@@ -1018,7 +1021,7 @@ public class StaticFeatureLayerRepositoryTest {
                 fetchBlocked.set(true);
                 fetchCondition.signal();
                 while (fetchBlocked.get()) {
-                    if (!fetchCondition.await(oneSecond(), TimeUnit.MILLISECONDS)) {
+                    if (!fetchCondition.await(testTimeout(), TimeUnit.MILLISECONDS)) {
                         fail("timed out waiting to unblock");
                     }
                 }
@@ -1046,7 +1049,7 @@ public class StaticFeatureLayerRepositoryTest {
 
         fetchLock.lock();
         while (!fetchBlocked.get()) {
-            fetchCondition.await(oneSecond(), TimeUnit.MILLISECONDS);
+            fetchCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
         }
         fetchLock.unlock();
 
@@ -1068,7 +1071,7 @@ public class StaticFeatureLayerRepositoryTest {
         fetchCondition.signal();
         fetchLock.unlock();
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
 
         awaitThreadPoolTermination();
 
@@ -1140,7 +1143,7 @@ public class StaticFeatureLayerRepositoryTest {
             fetchBlocked.set(true);
             fetchCondition.signal();
             while (fetchBlocked.get()) {
-                if (!fetchCondition.await(oneSecond(), TimeUnit.MILLISECONDS)) {
+                if (!fetchCondition.await(testTimeout(), TimeUnit.MILLISECONDS)) {
                     fail("timed out waiting to unblock");
                 }
             }
@@ -1156,7 +1159,7 @@ public class StaticFeatureLayerRepositoryTest {
 
         fetchLock.lock();
         while (!fetchBlocked.get()) {
-            fetchCondition.await(oneSecond(), TimeUnit.MILLISECONDS);
+            fetchCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
         }
         fetchLock.unlock();
 
@@ -1179,7 +1182,7 @@ public class StaticFeatureLayerRepositoryTest {
         fetchCondition.signal();
         fetchLock.unlock();
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
 
         awaitThreadPoolTermination();
 
@@ -1221,7 +1224,7 @@ public class StaticFeatureLayerRepositoryTest {
             fetchBlocked.set(true);
             fetchCondition.signal();
             while (fetchBlocked.get()) {
-                if (!fetchCondition.await(oneSecond(), TimeUnit.MILLISECONDS)) {
+                if (!fetchCondition.await(testTimeout(), TimeUnit.MILLISECONDS)) {
                     fail("timed out waiting to unblock");
                 }
             }
@@ -1238,7 +1241,7 @@ public class StaticFeatureLayerRepositoryTest {
 
         fetchLock.lock();
         while (!fetchBlocked.get()) {
-            fetchCondition.await(oneSecond(), TimeUnit.MILLISECONDS);
+            fetchCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
         }
         fetchLock.unlock();
 
@@ -1266,16 +1269,16 @@ public class StaticFeatureLayerRepositoryTest {
         fetchCondition.signal();
         fetchLock.unlock();
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
 
         awaitThreadPoolTermination();
 
         verify(layerService).getLayers(currentEvent);
         verify(layerService, never()).getLayers(event1);
         verify(layerService).getLayers(event2);
-        verify(observer, times(1)).onChanged(observed.capture());
+        verify(observer, times(2)).onChanged(observed.capture());
         Set<? extends MapDataResource> mapData = observed.getValue().getContent();
-        assertThat(repo.getValue(), sameInstance(mapData));
+        assertThat(repo.getValue().getContent(), sameInstance(mapData));
         assertThat(mapData.toArray(new MapDataResource[1])[0].getLayers(), hasValue(valueSuppliedBy(MapLayerDescriptor::getLayerName, is("event2Layer"))));
     }
 
@@ -1296,7 +1299,7 @@ public class StaticFeatureLayerRepositoryTest {
                 fetchBlocked.set(true);
                 fetchCondition.signal();
                 while (fetchBlocked.get()) {
-                    if (!fetchCondition.await(oneSecond(), TimeUnit.MILLISECONDS)) {
+                    if (!fetchCondition.await(testTimeout(), TimeUnit.MILLISECONDS)) {
                         fail("timed out waiting to unblock");
                     }
                 }
@@ -1312,7 +1315,7 @@ public class StaticFeatureLayerRepositoryTest {
 
         fetchLock.lock();
         while (!fetchBlocked.get()) {
-            fetchCondition.await(oneSecond(), TimeUnit.MILLISECONDS);
+            fetchCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
         }
         fetchLock.unlock();
 
@@ -1329,7 +1332,7 @@ public class StaticFeatureLayerRepositoryTest {
         fetchCondition.signal();
         fetchLock.unlock();
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
     }
 
     @Test
@@ -1359,7 +1362,7 @@ public class StaticFeatureLayerRepositoryTest {
                 fetchBlocked.set(true);
                 fetchCondition.signal();
                 while (fetchBlocked.get()) {
-                    if (!fetchCondition.await(oneSecond(), TimeUnit.MILLISECONDS)) {
+                    if (!fetchCondition.await(testTimeout(), TimeUnit.MILLISECONDS)) {
                         fail("timed out waiting to unblock");
                     }
                 }
@@ -1375,7 +1378,7 @@ public class StaticFeatureLayerRepositoryTest {
 
         fetchLock.lock();
         while (!fetchBlocked.get()) {
-            fetchCondition.await(oneSecond(), TimeUnit.MILLISECONDS);
+            fetchCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
         }
         fetchLock.unlock();
 
@@ -1392,7 +1395,7 @@ public class StaticFeatureLayerRepositoryTest {
         fetchCondition.signal();
         fetchLock.unlock();
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
     }
 
     @Test
@@ -1413,7 +1416,7 @@ public class StaticFeatureLayerRepositoryTest {
                 refreshBlocked.set(true);
                 refreshCondition.signal();
                 while (refreshBlocked.get()) {
-                    if (!refreshCondition.await(oneSecond(), TimeUnit.MILLISECONDS)) {
+                    if (!refreshCondition.await(testTimeout(), TimeUnit.MILLISECONDS)) {
                         fail("timed out waiting to unblock");
                     }
                 }
@@ -1428,7 +1431,7 @@ public class StaticFeatureLayerRepositoryTest {
 
         refreshLock.lock();
         while (!refreshBlocked.get()) {
-            refreshCondition.await(oneSecond(), TimeUnit.MILLISECONDS);
+            refreshCondition.await(testTimeout(), TimeUnit.MILLISECONDS);
         }
         refreshLock.unlock();
 
@@ -1445,7 +1448,7 @@ public class StaticFeatureLayerRepositoryTest {
         refreshCondition.signal();
         refreshLock.unlock();
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
     }
 
     @Test
@@ -1461,7 +1464,7 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getValue().getStatus(), is(Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
 
         MapDataResource res1 = (MapDataResource) repo.getValue().getContent().toArray()[0];
 
@@ -1470,7 +1473,7 @@ public class StaticFeatureLayerRepositoryTest {
             assertThat(repo.getValue().getStatus(), is(Loading));
         });
 
-        onMainThread.assertThatWithin(oneSecond(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+        onMainThread.assertThatWithin(testTimeout(), repo::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
 
         MapDataResource res2 = (MapDataResource) repo.getValue().getContent().toArray()[0];
 

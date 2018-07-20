@@ -44,7 +44,9 @@ import mil.nga.giat.mage.sdk.exceptions.StaticFeatureException;
 import mil.nga.giat.mage.sdk.http.resource.LayerResource;
 import mil.nga.giat.mage.sdk.login.LoginTaskFactory;
 
+import static java.util.Collections.emptySet;
 import static mil.nga.giat.mage.data.Resource.Status.Error;
+import static mil.nga.giat.mage.data.Resource.Status.Loading;
 import static mil.nga.giat.mage.data.Resource.Status.Success;
 
 
@@ -99,7 +101,6 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements I
     private final LayerResource layerService;
     private final NetworkCondition network;
     private final File iconsDir;
-    private Event lastSyncedEvent;
     private RefreshCurrentEventLayers refreshInProgress;
     private RefreshCurrentEventLayers pendingRefresh;
     private long contentTimestamp = 0;
@@ -125,7 +126,9 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements I
         if (refreshInProgress != null && currentEvent.equals(refreshInProgress.event)) {
             return;
         }
-        setValue(BasicResource.loading());
+        if (getValue() == null || getValue().getStatus() != Loading) {
+            setValue(BasicResource.loading());
+        }
         pendingRefresh = new RefreshCurrentEventLayers(executor, currentEvent);
         if (refreshInProgress != null) {
             refreshInProgress.cancel();
@@ -150,9 +153,6 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements I
                 refreshInProgress.event.getRemoteId() + " (" + refreshInProgress.event.getName() + ")");
         }
         refreshInProgress = pendingRefresh;
-        if (pendingRefresh == null) {
-            return;
-        }
         pendingRefresh = null;
         refreshInProgress.layerFetch.executeOnExecutor(refreshInProgress.executor);
     }
@@ -261,11 +261,12 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements I
             }
             message.append(messagePart);
         }
-        if (!refresh.isCancelled() || (pendingRefresh == null && (!refresh.event.equals(lastSyncedEvent) || getValue() == null))) {
-            lastSyncedEvent = refresh.event;
+        if (pendingRefresh == null) {
             setValue(new BasicResource<>(Collections.singleton(sync.result.mapData), refresh.status, refresh.status.ordinal(), message.toString()));
         }
-        beginPendingRefresh();
+        else {
+            beginPendingRefresh();
+        }
     }
 
 
@@ -331,7 +332,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements I
                     Collection<Layer> remoteLayers = layerService.getLayers(event);
                     if (remoteLayers.isEmpty()) {
                         layerHelper.deleteByEvent(event);
-                        return new FetchEventLayersResult(Collections.emptySet(), null);
+                        return new FetchEventLayersResult(emptySet(), null);
                     }
                     Collection<Layer> localLayers = layerHelper.readByEvent(event);
                     if (localLayers.isEmpty()) {
@@ -368,7 +369,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements I
         @Override
         protected void onCancelled(FetchEventLayersResult result) {
             if (result == null) {
-                result = new FetchEventLayersResult(Collections.emptySet(), null);
+                result = new FetchEventLayersResult(emptySet(), null);
             }
             onPostExecute(result);
         }
