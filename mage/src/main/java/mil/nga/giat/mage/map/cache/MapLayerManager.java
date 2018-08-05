@@ -1,13 +1,12 @@
 package mil.nga.giat.mage.map.cache;
 
 import android.os.AsyncTask;
+import android.support.annotation.NonNull;
 import android.support.annotation.UiThread;
 import android.support.annotation.WorkerThread;
 import android.util.Log;
-import android.view.View;
 
 import com.google.android.gms.maps.GoogleMap;
-import com.google.android.gms.maps.MapView;
 import com.google.android.gms.maps.model.Circle;
 import com.google.android.gms.maps.model.GroundOverlay;
 import com.google.android.gms.maps.model.LatLng;
@@ -18,58 +17,73 @@ import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.TileOverlay;
 import com.google.android.gms.maps.model.TileProvider;
 
-import java.net.URI;
-import java.util.ArrayList;
+import org.jetbrains.annotations.NotNull;
+
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Map;
-import java.util.SortedSet;
-import java.util.TreeSet;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicReference;
 
+import kotlin.ranges.IntRange;
+import mil.nga.giat.mage.data.Resource;
 import mil.nga.giat.mage.map.BasicMapElementContainer;
+import mil.nga.giat.mage.map.MapCircleSpec;
 import mil.nga.giat.mage.map.MapElementOperation;
 import mil.nga.giat.mage.map.MapElementSpec;
 import mil.nga.giat.mage.map.MapElements;
+import mil.nga.giat.mage.map.MapGroundOverlaySpec;
+import mil.nga.giat.mage.map.MapMarkerSpec;
+import mil.nga.giat.mage.map.MapPolygonSpec;
+import mil.nga.giat.mage.map.MapPolylineSpec;
+import mil.nga.giat.mage.map.MapTileOverlaySpec;
+import mil.nga.giat.mage.map.view.MapLayersViewModel;
+import mil.nga.giat.mage.map.view.MapOwner;
+
+import static java.util.Objects.requireNonNull;
 
 /**
  * A {@code MapLayerManager} binds {@link MapLayerDescriptor layer data} from various
  * {@link MapDataRepository sources} to visual objects on a {@link GoogleMap}.
  */
-public class MapLayerManager implements GoogleMap.OnMarkerClickListener, GoogleMap.OnMapClickListener, GoogleMap.OnCircleClickListener, GoogleMap.OnPolylineClickListener, GoogleMap.OnPolygonClickListener, GoogleMap.OnGroundOverlayClickListener {
+public class MapLayerManager implements
+    GoogleMap.OnCameraIdleListener,
+    GoogleMap.OnMarkerClickListener,
+    GoogleMap.OnMapClickListener,
+    GoogleMap.OnCircleClickListener,
+    GoogleMap.OnPolylineClickListener,
+    GoogleMap.OnPolygonClickListener,
+    GoogleMap.OnGroundOverlayClickListener,
+    MapLayersViewModel.LayerListener {
 
     private static final String LOG_NAME = MapLayerManager.class.getSimpleName();
 
     public interface MapLayerAdapter extends MapElementSpec.MapElementOwner {
 
-        default Callable<String> onClick(Circle x, Object id) { return null; }
-        default Callable<String> onClick(GroundOverlay x, Object id) { return null; }
-        default Callable<String> onClick(Marker x, Object id) { return null; }
-        default Callable<String> onClick(Polygon x, Object id) { return null; }
-        default Callable<String> onClick(Polyline x, Object id) { return null; }
-        default Callable<String> onClick(LatLng pos, View mapView) { return null; }
+        @WorkerThread
+        Iterator<? extends MapElementSpec> elementsInBounds(LatLngBounds bounds);
 
         /**
          * Release resources and prepare for garbage collection.
          */
+        @UiThread
         void onLayerRemoved();
 
-        @WorkerThread
-        Iterator<? extends MapElementSpec> elementsInBounds(LatLngBounds bounds);
-    }
-
-    public interface MapLayerListener {
-
-        /**
-         * Notify the listener that the {@link MapDataManager} has updated the {@link #getLayersInZOrder() cache list}.
-         * {@link MapLayerManager} will not invoke this method as result of its own on-map interactions,
-         * such as adding, removing, showing, and hiding overlays.
-         */
-        void layersChanged();
+        @UiThread
+        default Callable<String> onClick(Circle x, Object id) { return null; }
+        @UiThread
+        default Callable<String> onClick(GroundOverlay x, Object id) { return null; }
+        @UiThread
+        default Callable<String> onClick(Marker x, Object id) { return null; }
+        @UiThread
+        default Callable<String> onClick(Polygon x, Object id) { return null; }
+        @UiThread
+        default Callable<String> onClick(Polyline x, Object id) { return null; }
+        @UiThread
+        default Callable<String> onClick(LatLng pos) { return null; }
     }
 
     /**
@@ -81,50 +95,39 @@ public class MapLayerManager implements GoogleMap.OnMarkerClickListener, GoogleM
      */
     private static class UpdateLayerMapElements extends AsyncTask<Void, MapElementSpec, Void> implements MapElementSpec.MapElementOwner {
 
-        private final MapLayerDescriptor layerDescriptor;
-        private final LatLngBounds bounds;
         private final MapLayerManager layerManager;
+        private final MapLayerDescriptor layerDescriptor;
+        private final MapLayer layer;
         private final Callable<? extends MapLayerAdapter> createLayerAdapter;
-        private final AtomicReference<MapLayerAdapter> layerAdapter = new AtomicReference<>();
-        private final AtomicReference<MapLayer> layer = new AtomicReference<>();
+        private final LatLngBounds bounds;
         private final SetSpecZIndex initZIndex;
 
-        // TODO: this is for later when implementing dynamic culling of layer elements based on bounds and map movement
-        // passing in the already existing MapLayer
-        private UpdateLayerMapElements(MapLayer layer, MapLayerDescriptor layerDescriptor, LatLngBounds bounds, MapLayerManager layerManager) {
-            this.layer.set(layer);
-            this.createLayerAdapter = () -> layer.adapter;
-            this.layerDescriptor = layerDescriptor;
-            this.bounds = bounds;
+        private UpdateLayerMapElements(MapLayerManager layerManager, MapLayerDescriptor layerDescriptor, MapLayer layer) {
             this.layerManager = layerManager;
+            this.layerDescriptor = layerDescriptor;
+            this.layer = layer;
+            if (layer.adapter.get() == null) {
+                createLayerAdapter = layerManager.providers.get(layerDescriptor.getDataType()).createMapLayerAdapter(layerDescriptor, layerManager.mapOwner);
+            }
+            else {
+                createLayerAdapter = null;
+            }
+            bounds = layerManager.mapOwner.getMap().getProjection().getVisibleRegion().latLngBounds;
             initZIndex = new SetSpecZIndex(layer.zIndex);
-        }
-
-        private UpdateLayerMapElements(Callable<? extends MapLayerAdapter> createLayerAdapter, MapLayerDescriptor layerDescriptor, int zIndex, LatLngBounds bounds, MapLayerManager layerManager) {
-            this.createLayerAdapter = createLayerAdapter;
-            this.layerDescriptor = layerDescriptor;
-            this.bounds = bounds;
-            this.layerManager = layerManager;
-            initZIndex = new SetSpecZIndex(zIndex);
-        }
-
-        @Override
-        protected void onPreExecute() {
         }
 
         @Override
         protected Void doInBackground(Void... voids) {
             try {
-                layerAdapter.set(createLayerAdapter.call());
+                if (createLayerAdapter != null) {
+                    layer.adapter.compareAndSet(null, createLayerAdapter.call());
+                }
             }
             catch (Exception e) {
                 Log.e(LOG_NAME, "error creating layer adapter for descriptor " + layerDescriptor.getLayerUri(), e);
                 return null;
             }
-            if (layer.get() == null) {
-                layer.set(layerManager.new MapLayer(layerAdapter.get()));
-            }
-            Iterator<? extends MapElementSpec> specs = layerAdapter.get().elementsInBounds(bounds);
+            Iterator<? extends MapElementSpec> specs = layer.adapter.get().elementsInBounds(bounds);
             while (specs.hasNext() && !isCancelled()) {
                 MapElementSpec spec = specs.next();
                 spec.accept(initZIndex);
@@ -136,53 +139,55 @@ public class MapLayerManager implements GoogleMap.OnMarkerClickListener, GoogleM
         @Override
         protected final void onProgressUpdate(MapElementSpec... values) {
             for (MapElementSpec o : values) {
-                o.createFor(this, layerManager.getMap());
+                if (!layer.mapElements.contains(o)) {
+                    o.createFor(this, layerManager.mapOwner.getMap());
+                }
             }
         }
 
         @Override
-        public void addedToMap(MapElementSpec.MapCircleSpec spec, Circle x) {
-            layer.get().mapElements.add(x, spec.id == null ? x.getId() : spec.id);
-            layer.get().adapter.addedToMap(spec, x);
+        public void addedToMap(@NonNull MapCircleSpec spec, @NonNull Circle x) {
+            layer.mapElements.add(x, spec.getId());
+            layer.adapter.get().addedToMap(spec, x);
         }
 
         @Override
-        public void addedToMap(MapElementSpec.MapGroundOverlaySpec spec, GroundOverlay x) {
-            layer.get().mapElements.add(x, spec.id == null ? x.getId() : spec.id);
-            layer.get().adapter.addedToMap(spec, x);
+        public void addedToMap(@NonNull MapGroundOverlaySpec spec, @NonNull GroundOverlay x) {
+            layer.mapElements.add(x, spec.getId());
+            layer.adapter.get().addedToMap(spec, x);
         }
 
         @Override
-        public void addedToMap(MapElementSpec.MapMarkerSpec spec, Marker x) {
-            layer.get().mapElements.add(x, spec.id == null ? x.getId() : spec.id);
-            layer.get().adapter.addedToMap(spec, x);
+        public void addedToMap(@NonNull MapMarkerSpec spec, @NonNull Marker x) {
+            layer.mapElements.add(x, spec.getId());
+            layer.adapter.get().addedToMap(spec, x);
         }
 
         @Override
-        public void addedToMap(MapElementSpec.MapPolygonSpec spec, Polygon x) {
-            layer.get().mapElements.add(x, spec.id == null ? x.getId() : spec.id);
-            layer.get().adapter.addedToMap(spec, x);
+        public void addedToMap(@NonNull MapPolygonSpec spec, @NonNull Polygon x) {
+            layer.mapElements.add(x, spec.getId());
+            layer.adapter.get().addedToMap(spec, x);
         }
 
         @Override
-        public void addedToMap(MapElementSpec.MapPolylineSpec spec, Polyline x) {
-            layer.get().mapElements.add(x, spec.id == null ? x.getId() : spec.id);
-            layer.get().adapter.addedToMap(spec, x);
+        public void addedToMap(@NonNull MapPolylineSpec spec, @NonNull Polyline x) {
+            layer.mapElements.add(x, spec.getId());
+            layer.adapter.get().addedToMap(spec, x);
         }
 
         @Override
-        public void addedToMap(MapElementSpec.MapTileOverlaySpec spec, TileOverlay x) {
-            layer.get().mapElements.add(x, spec.id == null ? x.getId() : spec.id);
-            layer.get().adapter.addedToMap(spec, x);
+        public void addedToMap(@NonNull MapTileOverlaySpec spec, @NonNull TileOverlay x) {
+            layer.mapElements.add(x, spec.getId());
+            layer.adapter.get().addedToMap(spec, x);
         }
 
         @Override
         protected final void onPostExecute(Void nothing) {
-            layerManager.onLayerComplete(this);
+//            layerManager.onLayerComplete(this);
         }
     }
 
-    private static class SetSpecZIndex implements MapElementSpec.MapElementSpecVisitor {
+    private static class SetSpecZIndex implements MapElementSpec.MapElementSpecVisitor<Void> {
 
         private final int zIndex;
 
@@ -191,34 +196,39 @@ public class MapLayerManager implements GoogleMap.OnMarkerClickListener, GoogleM
         }
 
         @Override
-        public void visit(MapElementSpec.MapCircleSpec x) {
-            x.options.zIndex(zIndex);
+        public Void visit(@NonNull MapCircleSpec x) {
+            x.getOptions().zIndex(zIndex);
+            return null;
         }
 
         @Override
-        public void visit(MapElementSpec.MapGroundOverlaySpec x) {
-            x.options.zIndex(zIndex);
+        public Void visit(@NonNull MapGroundOverlaySpec x) {
+            x.getOptions().zIndex(zIndex);
+            return null;
         }
 
         @Override
-        public void visit(MapElementSpec.MapMarkerSpec x) {
-            x.options.zIndex(zIndex);
-
+        public Void visit(@NonNull MapMarkerSpec x) {
+            x.getOptions().zIndex(zIndex);
+            return null;
         }
 
         @Override
-        public void visit(MapElementSpec.MapPolygonSpec x) {
-            x.options.zIndex(zIndex);
+        public Void visit(@NonNull MapPolygonSpec x) {
+            x.getOptions().zIndex(zIndex);
+            return null;
         }
 
         @Override
-        public void visit(MapElementSpec.MapPolylineSpec x) {
-            x.options.zIndex(zIndex);
+        public Void visit(@NonNull MapPolylineSpec x) {
+            x.getOptions().zIndex(zIndex);
+            return null;
         }
 
         @Override
-        public void visit(MapElementSpec.MapTileOverlaySpec x) {
-            x.options.zIndex(zIndex);
+        public Void visit(@NonNull MapTileOverlaySpec x) {
+            x.getOptions().zIndex(zIndex);
+            return null;
         }
     }
 
@@ -236,46 +246,39 @@ public class MapLayerManager implements GoogleMap.OnMarkerClickListener, GoogleM
     @UiThread
     private class MapLayer {
 
-        private final MapLayerAdapter adapter;
         private final MapElements mapElements = new BasicMapElementContainer();
+        private final AtomicReference<MapLayerAdapter> adapter = new AtomicReference<>();
+        private UpdateLayerMapElements update;
         private boolean visible = true;
         private int zIndex = 0;
-
-        private MapLayer(MapLayerAdapter adapter) {
-            this.adapter = adapter;
-        }
 
         /**
          * Remove this layer's visible and hidden objects from the map.
          * Clear whatever resources this layer might hold such as data source
          * connections or large geometry collections and prepare for garbage collection.
          */
-        protected void removeFromMap() {
+        private void removeFromMap() {
             mapElements.forEach(MapElementOperation.REMOVE);
-            adapter.onLayerRemoved();
+            adapter.get().onLayerRemoved();
         }
 
-        protected void show() {
+        private void show() {
             mapElements.forEach(MapElementOperation.SHOW);
             visible = true;
         }
 
-        protected void hide() {
+        private void hide() {
             mapElements.forEach(MapElementOperation.HIDE);
             visible = false;
         }
 
-        protected void setZIndex(int z) {
+        private void setZIndex(int z) {
             zIndex = z;
             mapElements.forEach(new MapElementOperation.SetZIndex(z));
         }
 
-        protected boolean isVisible() {
+        private boolean isVisible() {
             return visible;
-        }
-
-        protected final GoogleMap getMap() {
-            return MapLayerManager.this.getMap();
         }
 
         private boolean ownsElement(Circle x) {
@@ -299,159 +302,126 @@ public class MapLayerManager implements GoogleMap.OnMarkerClickListener, GoogleM
         }
 
         private void onMarkerClick(Marker x) {
-            Callable<String> getInfo = mapElements.withElement(x, adapter::onClick);
+            Callable<String> getInfo = mapElements.withElement(x, (x1, id) -> adapter.get().onClick(x1 , id));
             // TODO: get the info on background thread and get it on the map popup
         }
 
         private void onCircleClick(Circle x) {
-            Callable<String> getInfo = mapElements.withElement(x, adapter::onClick);
+            Callable<String> getInfo = mapElements.withElement(x, (x1, id) -> adapter.get().onClick(x1, id));
             // TODO: get the info on background thread and get it on the map popup
         }
 
         private void onPolylineClick(Polyline x) {
-            Callable<String> getInfo = mapElements.withElement(x, adapter::onClick);
+            Callable<String> getInfo = mapElements.withElement(x, (x1, id) -> adapter.get().onClick(x1, id));
             // TODO: get the info on background thread and get it on the map popup
         }
 
         private void onPolygonClick(Polygon x) {
-            Callable<String> getInfo = mapElements.withElement(x, adapter::onClick);
+            Callable<String> getInfo = mapElements.withElement(x, (x1, id) -> adapter.get().onClick(x1, id));
             // TODO: get the info on background thread and get it on the map popup
         }
 
         private void onGroundOverlayClick(GroundOverlay x) {
-            Callable<String> getInfo = mapElements.withElement(x, adapter::onClick);
+            Callable<String> getInfo = mapElements.withElement(x, (x1, id) -> adapter.get().onClick(x1, id));
             // TODO: get the info on background thread and get it on the map popup
         }
 
-        protected void onMapClick(LatLng pos) {
+        private void onMapClick(LatLng pos) {
+            adapter.get().onClick(pos);
         }
-
-        // TODO: this is awkward passing the map view and returning a string; probably can do better
-        protected void onMapClick(LatLng latLng, MapView mapView) {
-        }
-    }
-
-    /**
-     * Compute the fractional step necessary to stack {@code count} map objects
-     * within a single integral zoom level.  This is a convenience for {@link MapDataProvider}
-     * implementations of {@link MapLayer} to use when setting the integer
-     * {@link MapLayer#setZIndex(int) z-index}.  The implementation can use the
-     * return value to increment the float z-index of {@code count} {@link GoogleMap} objects
-     * logically contained in a single overlay.  For example, if an overlay contains 5 map
-     * objects, such as {@link TileOverlay tiles} and
-     * {@link Polygon polygons}, and the integer z-index
-     * to set on the overlay is 6, this method will return 1 / (5 + 1), ~= 0.167, and map
-     * objects can have fractional zoom levels (6 + 1 * 0.167), (6 + 2 * 0.167), etc.,
-     * without intruding on the next integral zoom level, 7, which {@link MapLayerManager}
-     * will assign to the next {@link MapLayerDescriptor}/{@link MapLayer} in the
-     * {@link #getLayersInZOrder() z-order}.
-     */
-    public static float zIndexStepForObjectCount(int count) {
-        return 1.0f / (count + 1.0f);
     }
 
     private static final LatLngBounds ANYWHERE = new LatLngBounds(new LatLng(-90f, -180f), new LatLng(90f, 180f));
 
-    private final MapDataManager mapDataManager;
-    private final GoogleMap map;
-    private final Map<Class<? extends MapDataProvider>, MapDataProvider> providers = new HashMap<>();
+    private final MapOwner mapOwner;
+    private final MapLayersViewModel layersModel;
+    private final Map<Class<? extends MapDataProvider>, MapDataProvider> providers;
     private final Map<MapLayerDescriptor, MapLayer> layersOnMap = new HashMap<>();
-    private final List<MapLayerListener> listeners = new ArrayList<>();
-    private final Comparator<MapLayerDescriptor> DEFAULT_LAYER_ORDER = (a, b) -> {
-        if (a.equals(b)) {
-            return 0;
-        }
-        if (a.getResourceUri().equals(b.getResourceUri())) {
-            return a.getLayerTitle().compareTo(b.getLayerTitle());
-        }
-        return a.getResourceUri().compareTo(b.getResourceUri());
-    };
-    private List<MapLayerDescriptor> overlaysInZOrder = new ArrayList<>();
 
-    public MapLayerManager(MapDataManager mapDataManager, List<MapDataProvider> providers, GoogleMap map) {
-        this.mapDataManager = mapDataManager;
-        this.map = map;
-        for (MapDataProvider provider : providers) {
-            this.providers.put(provider.getClass(), provider);
-        }
-        overlaysInZOrder.addAll(mapDataManager.getLayers().values());
-        Collections.sort(overlaysInZOrder, DEFAULT_LAYER_ORDER);
-        // TODO: observe MapDataManager
-//        mapDataManager.addUpdateListener(this);
-    }
-
-    public void onMapDataChanged() {
-        int position = 0;
-        Iterator<MapLayerDescriptor> orderIterator = overlaysInZOrder.iterator();
-        Map<URI, MapLayerDescriptor> allLayers = mapDataManager.getLayers();
-        while (orderIterator.hasNext()) {
-            MapLayerDescriptor existingLayer = orderIterator.next();
-            MapLayerDescriptor updatedLayer = allLayers.remove(existingLayer.getLayerUri());
-            if (updatedLayer == null) {
-                removeFromMapReturningVisibility(existingLayer);
-                orderIterator.remove();
-                position--;
-            }
-            else {
-                refreshOverlayAtPositionFromUpdatedResource(position, updatedLayer);
-            }
-            position++;
-        }
-        SortedSet<MapLayerDescriptor> addedLayersSorted = new TreeSet<>(DEFAULT_LAYER_ORDER);
-        addedLayersSorted.addAll(allLayers.values());
-        overlaysInZOrder.addAll(addedLayersSorted);
-        for (MapLayerListener listener : listeners) {
-            listener.layersChanged();
-        }
-    }
-
-    public void addListener(MapLayerListener x) {
-        listeners.add(x);
-    }
-
-    public void removeListener(MapLayerListener x) {
-        listeners.remove(x);
+    public MapLayerManager(MapOwner mapOwner, MapLayersViewModel layersModel, MapDataManager mapDataManager) {
+        this.mapOwner = mapOwner;
+        this.layersModel = layersModel;
+        this.providers = mapDataManager.getProviders();
+        layersModel.getLayersInZOrder().observe(mapOwner, this::onMapLayersChanged);
+        layersModel.getLayerEvents().listen(mapOwner, this);
     }
 
     public GoogleMap getMap() {
-        return map;
-    }
-
-    public MapDataManager getMapDataManager() {
-        return mapDataManager;
-    }
-
-    /**
-     * Return a modifiable copy of the overlay list in z-order.  The last element
-     * (index {@code size() - 1}) in the list is the top-most element.
-     */
-    public List<MapLayerDescriptor> getLayersInZOrder() {
-        return new ArrayList<>(overlaysInZOrder);
-    }
-
-    public void showLayer(MapLayerDescriptor layerDesc) {
-        addOverlayToMap(layerDesc);
-    }
-
-    public void hideLayer(MapLayerDescriptor layerDesc) {
-        MapLayer onMap = layersOnMap.get(layerDesc);
-        if (onMap == null || !onMap.isVisible()) {
-            return;
-        }
-        onMap.hide();
-    }
-
-    public boolean isLayerVisible(MapLayerDescriptor layerDesc) {
-        MapLayer onMap = layersOnMap.get(layerDesc);
-        return onMap != null && onMap.isVisible();
+        return mapOwner.getMap();
     }
 
     @Override
-    public void onMapClick(LatLng latLng) {
-        for (MapLayerDescriptor layerDesc : getLayersInZOrder()) {
-            MapLayer layer = layersOnMap.get(layerDesc);
+    public void layerVisibilityChanged(@NotNull MapLayersViewModel.Layer modelLayer, int position) {
+        MapLayer viewLayer = layersOnMap.get(modelLayer.getDesc());
+        if (modelLayer.isVisible()) {
+            if (viewLayer == null) {
+                // load layer elements for bounds
+                MapLayer mapLayer = new MapLayer();
+                mapLayer.update = new UpdateLayerMapElements(this, modelLayer.getDesc(), mapLayer);
+                mapLayer.update.executeOnExecutor(AsyncTask.SERIAL_EXECUTOR);
+            }
+            else {
+                viewLayer.show();
+            }
+        }
+        else if (viewLayer != null) {
+            viewLayer.hide();
+        }
+    }
+
+    @Override
+    public void zOrderShift(@NotNull IntRange range) {
+        for (int z : range) {
+            MapLayersViewModel.Layer modelLayer = layersModel.layerAt(z);
+            MapLayer mapLayer = layersOnMap.get(modelLayer.getDesc());
+            if (mapLayer != null) {
+                mapLayer.setZIndex(z);
+            }
+        }
+    }
+
+    @Override
+    public void layerElementsChanged(@NotNull MapLayersViewModel.Layer layer, @NotNull Map<Object, ? extends MapElementSpec> added, @NotNull Map<Object, ? extends MapElementSpec> removed) {
+
+    }
+
+    @Override
+    public void onCameraIdle() {
+        Resource<List<MapLayersViewModel.Layer>> modelLayersResource = layersModel.getLayersInZOrder().getValue();
+        if (modelLayersResource == null) {
+            return;
+        }
+        List<MapLayersViewModel.Layer> modelLayers = modelLayersResource.getContent();
+        if (modelLayers == null) {
+            return;
+        }
+        ListIterator<MapLayersViewModel.Layer> cursor = modelLayers.listIterator(modelLayers.size());
+        while (cursor.hasPrevious()) {
+            MapLayersViewModel.Layer modelLayer = cursor.previous();
+            MapLayer layer = layersOnMap.get(modelLayer.getDesc());
             if (layer != null) {
-                layer.onMapClick(latLng);
+                // load layer elements for bounds
+                layer.update = new UpdateLayerMapElements(this, modelLayer.getDesc(), layer);
+            }
+        }
+    }
+
+    @Override
+    public void onMapClick(LatLng pos) {
+        Resource<List<MapLayersViewModel.Layer>> modelLayersResource = layersModel.getLayersInZOrder().getValue();
+        if (modelLayersResource == null) {
+            return;
+        }
+        List<MapLayersViewModel.Layer> modelLayers = modelLayersResource.getContent();
+        if (modelLayers == null) {
+            return;
+        }
+        ListIterator<MapLayersViewModel.Layer> cursor = modelLayers.listIterator(modelLayers.size());
+        while (cursor.hasPrevious()) {
+            MapLayersViewModel.Layer modelLayer = cursor.previous();
+            MapLayer layer = layersOnMap.get(modelLayer.getDesc());
+            if (layer != null) {
+                layer.onMapClick(pos);
             }
         }
     }
@@ -507,47 +477,12 @@ public class MapLayerManager implements GoogleMap.OnMarkerClickListener, GoogleM
         }
     }
 
-    public boolean setZOrder(List<MapLayerDescriptor> order) {
-        if (order.size() != overlaysInZOrder.size()) {
-            return false;
-        }
-        Map<MapLayerDescriptor, MapLayerDescriptor> index = new HashMap<>(overlaysInZOrder.size());
-        for (MapLayerDescriptor overlay : overlaysInZOrder) {
-            index.put(overlay, overlay);
-        }
-        List<MapLayerDescriptor> targetOrder = new ArrayList<>(overlaysInZOrder.size());
-        for (MapLayerDescriptor overlayToMove : order) {
-            MapLayerDescriptor target = index.remove(overlayToMove);
-            if (target == null) {
-                return false;
-            }
-            targetOrder.add(target);
-        }
-        if (index.size() > 0) {
-            return false;
-        }
-        overlaysInZOrder = targetOrder;
-        int zIndex = 0;
-        for (MapLayerDescriptor overlay : overlaysInZOrder) {
-            MapLayer onMap = layersOnMap.get(overlay);
-            if (onMap != null) {
-                onMap.setZIndex(zIndex);
-            }
-            zIndex += 1;
-        }
-        return true;
-    }
+    private void onMapLayersChanged(Resource<List<MapLayersViewModel.Layer>> change) {
 
-    public boolean moveZIndex(int fromPosition, int toPosition) {
-        List<MapLayerDescriptor> order = getLayersInZOrder();
-        MapLayerDescriptor target = order.remove(fromPosition);
-        order.add(toPosition, target);
-        return setZOrder(order);
     }
 
     public void dispose() {
         // TODO: remove and dispose all overlays/notify providers
-//        mapDataManager.removeUpdateListener(this);
         Iterator<Map.Entry<MapLayerDescriptor, MapLayer>> entries = layersOnMap.entrySet().iterator();
         while (entries.hasNext()) {
             MapLayer onMap = entries.next().getValue();
@@ -566,66 +501,66 @@ public class MapLayerManager implements GoogleMap.OnMarkerClickListener, GoogleM
         return wasVisible;
     }
 
-    private void refreshOverlayAtPositionFromUpdatedResource(int position, MapLayerDescriptor updatedOverlay) {
-        MapLayerDescriptor currentOverlay = overlaysInZOrder.get(position);
-        if (currentOverlay == updatedOverlay) {
-            return;
-        }
-        overlaysInZOrder.set(position, updatedOverlay);
-        if (removeFromMapReturningVisibility(currentOverlay)) {
-            addOverlayToMapAtPosition(position);
-        }
-    }
-
-    private void addOverlayToMap(MapLayerDescriptor overlay) {
-        int position = overlaysInZOrder.indexOf(overlay);
-        if (position > -1) {
-            addOverlayToMapAtPosition(position);
-        }
-    }
-
-    private void addOverlayToMapAtPosition(int position) {
-        MapLayerDescriptor layerDesc = overlaysInZOrder.get(position);
-        MapLayer layer = layersOnMap.get(layerDesc);
-        if (layer == null) {
-            Class<? extends MapDataProvider> resourceType = layerDesc.getDataType();
-            MapDataProvider provider = providers.get(resourceType);
-            Callable<? extends MapLayerAdapter> createLayerAdapter = provider.createMapLayerAdapter(layerDesc, getMap());
-            UpdateLayerMapElements loadLayerElements = (UpdateLayerMapElements) new UpdateLayerMapElements(
-                createLayerAdapter, layerDesc, position, ANYWHERE, this).executeOnExecutor(AsyncTask.SERIAL_EXECUTOR);
-            layersOnMap.put(layerDesc, new PendingLayer(loadLayerElements));
-        }
-        else {
-            layer.show();
-        }
-    }
-
-    private void onLayerComplete(UpdateLayerMapElements updateLayerTask) {
-        PendingLayer pending = (PendingLayer) layersOnMap.put(updateLayerTask.layerDescriptor, updateLayerTask.layer.get());
-        if (pending.addLayer != updateLayerTask) {
-            throw new IllegalStateException("layer task for descriptor " + updateLayerTask.layerDescriptor + " did not match expected pending layer task");
-        }
-    }
-
-    // TODO: finish and use this
-    private class PendingLayer extends MapLayer {
-
-        private final UpdateLayerMapElements addLayer;
-
-        private PendingLayer(UpdateLayerMapElements addLayer) {
-            super(PENDING_LAYER_ADAPTER);
-            this.addLayer = addLayer;
-        }
-    }
-
-    private static final MapLayerAdapter PENDING_LAYER_ADAPTER = new MapLayerAdapter() {
-
-        @Override
-        public void onLayerRemoved() {}
-
-        @Override
-        public Iterator<? extends MapElementSpec> elementsInBounds(LatLngBounds bounds) {
-            return Collections.emptyIterator();
-        }
-    };
+//    private void refreshOverlayAtPositionFromUpdatedResource(int position, MapLayerDescriptor updatedOverlay) {
+//        MapLayerDescriptor currentOverlay = overlaysInZOrder.get(position);
+//        if (currentOverlay == updatedOverlay) {
+//            return;
+//        }
+//        overlaysInZOrder.set(position, updatedOverlay);
+//        if (removeFromMapReturningVisibility(currentOverlay)) {
+//            addOverlayToMapAtPosition(position);
+//        }
+//    }
+//
+//    private void addOverlayToMap(MapLayerDescriptor overlay) {
+//        int position = overlaysInZOrder.indexOf(overlay);
+//        if (position > -1) {
+//            addOverlayToMapAtPosition(position);
+//        }
+//    }
+//
+//    private void addOverlayToMapAtPosition(int position) {
+//        MapLayerDescriptor layerDesc = overlaysInZOrder.get(position);
+//        MapLayer layer = layersOnMap.get(layerDesc);
+//        if (layer == null) {
+//            Class<? extends MapDataProvider> resourceType = layerDesc.getDataType();
+//            MapDataProvider provider = providers.get(resourceType);
+//            Callable<? extends MapLayerAdapter> createLayerAdapter = provider.createMapLayerAdapter(layerDesc, mapOwner);
+//            UpdateLayerMapElements loadLayerElements = (UpdateLayerMapElements) new UpdateLayerMapElements(
+//                ANYWHERE, layerDesc, createLayerAdapter).executeOnExecutor(AsyncTask.SERIAL_EXECUTOR);
+//            layersOnMap.put(layerDesc, new PendingLayer(loadLayerElements));
+//        }
+//        else {
+//            layer.show();
+//        }
+//    }
+//
+//    private void onLayerComplete(UpdateLayerMapElements updateLayerTask) {
+//        PendingLayer pending = (PendingLayer) layersOnMap.put(updateLayerTask.layerDescriptor, updateLayerTask.layer.get());
+//        if (pending.addLayer != updateLayerTask) {
+//            throw new IllegalStateException("layer task for descriptor " + updateLayerTask.layerDescriptor + " did not match expected pending layer task");
+//        }
+//    }
+//
+//    // TODO: finish and use this
+//    private class PendingLayer extends MapLayer {
+//
+//        private final UpdateLayerMapElements addLayer;
+//
+//        private PendingLayer(UpdateLayerMapElements addLayer) {
+//            super(PENDING_LAYER_ADAPTER);
+//            this.addLayer = addLayer;
+//        }
+//    }
+//
+//    private static final MapLayerAdapter PENDING_LAYER_ADAPTER = new MapLayerAdapter() {
+//
+//        @Override
+//        public void onLayerRemoved() {}
+//
+//        @Override
+//        public Iterator<? extends MapElementSpec> elementsInBounds(LatLngBounds bounds) {
+//            return Collections.emptyIterator();
+//        }
+//    };
 }

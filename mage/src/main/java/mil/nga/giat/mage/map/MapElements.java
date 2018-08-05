@@ -1,5 +1,6 @@
 package mil.nga.giat.mage.map;
 
+import android.support.annotation.NonNull;
 import android.support.annotation.UiThread;
 
 import com.google.android.gms.maps.model.Circle;
@@ -42,13 +43,13 @@ public interface MapElements {
         R visit(TileOverlay x, Object id);
     }
 
-    interface ComprehensiveMapElementVisitor {
-        default boolean visit(Circle x, Object id) { return true; }
-        default boolean visit(GroundOverlay x, Object id) { return true; }
-        default boolean visit(Marker x, Object id) { return true; }
-        default boolean visit(Polygon x, Object id) { return true; }
-        default boolean visit(Polyline x, Object id) { return true; }
-        default boolean visit(TileOverlay x, Object id) { return true; }
+    interface ComprehensiveMapElementVisitor<T> {
+        default T visit(Circle x, Object id) { return null; }
+        default T visit(GroundOverlay x, Object id) { return null; }
+        default T visit(Marker x, Object id) { return null; }
+        default T visit(Polygon x, Object id) { return null; }
+        default T visit(Polyline x, Object id) { return null; }
+        default T visit(TileOverlay x, Object id) { return null; }
     }
 
     MapElements add(Circle x, Object id);
@@ -64,6 +65,7 @@ public interface MapElements {
     boolean contains(Polygon x);
     boolean contains(Polyline x);
     boolean contains(TileOverlay x);
+    boolean contains(@NonNull MapElementSpec spec);
 
     <T> T withElement(Circle x, CircleVisitor<T> action);
     <T> T withElement(GroundOverlay x, GroundOverlayVisitor<T> action);
@@ -78,6 +80,7 @@ public interface MapElements {
     <T> T withElementForId(Object id, PolygonVisitor<T> action);
     <T> T withElementForId(Object id, PolylineVisitor<T> action);
     <T> T withElementForId(Object id, TileOverlayVisitor<T> action);
+    <T> T withElementForId(Object id, ComprehensiveMapElementVisitor<T> action);
 
     void remove(Circle x);
     void remove(GroundOverlay x);
@@ -86,7 +89,7 @@ public interface MapElements {
     void remove(Polyline x);
     void remove(TileOverlay x);
 
-    void forEach(ComprehensiveMapElementVisitor... v);
+    void forEach(ComprehensiveMapElementVisitor<Boolean> v);
 
     int count();
 }

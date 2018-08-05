@@ -42,59 +42,59 @@ public final class WKBGeometryTransforms {
         return tx.toElementSpecs(geom, id, data);
     }
 
-    public MapElementSpec.MapMarkerSpec transform(Point geom, Object id, Object data) {
-        return new MapElementSpec.MapMarkerSpec(id, data, new MarkerOptions().position(converter.toLatLng(geom)));
+    public MapMarkerSpec transform(Point geom, Object id, Object data) {
+        return new MapMarkerSpec(id, data, new MarkerOptions().position(converter.toLatLng(geom)));
     }
 
-    public MapElementSpec.MapPolylineSpec transform(LineString geom, Object id, Object data) {
+    public MapPolylineSpec transform(LineString geom, Object id, Object data) {
         PolylineOptions options = converter.toPolyline(geom);
-        return new MapElementSpec.MapPolylineSpec(id, data, options);
+        return new MapPolylineSpec(id, data, options);
     }
 
-    public MapElementSpec.MapPolygonSpec transform(CurvePolygon geom, Object id, Object data) {
+    public MapPolygonSpec transform(CurvePolygon geom, Object id, Object data) {
         PolygonOptions options = converter.toCurvePolygon(geom);
-        return new MapElementSpec.MapPolygonSpec(id, data, options);
+        return new MapPolygonSpec(id, data, options);
     }
 
-    public MapElementSpec.MapPolygonSpec transform(Polygon geom, Object id, Object data) {
+    public MapPolygonSpec transform(Polygon geom, Object id, Object data) {
         PolygonOptions options = converter.toPolygon(geom);
-        return new MapElementSpec.MapPolygonSpec(id, data, options);
+        return new MapPolygonSpec(id, data, options);
     }
 
-    public Collection<MapElementSpec.MapMarkerSpec> transform(MultiPoint geom, Object id, Object data) {
-        List<MapElementSpec.MapMarkerSpec> specs = new ArrayList<>(geom.numGeometries());
+    public Collection<MapMarkerSpec> transform(MultiPoint geom, Object id, Object data) {
+        List<MapMarkerSpec> specs = new ArrayList<>(geom.numGeometries());
         for (Point x : geom.getGeometries()) {
             specs.add(transform(x, id, data));
         }
         return specs;
     }
 
-    public Collection<MapElementSpec.MapPolylineSpec> transform(MultiLineString geom, Object id, Object data) {
-        List<MapElementSpec.MapPolylineSpec> specs = new ArrayList<>(geom.numGeometries());
+    public Collection<MapPolylineSpec> transform(MultiLineString geom, Object id, Object data) {
+        List<MapPolylineSpec> specs = new ArrayList<>(geom.numGeometries());
         for (LineString x : geom.getGeometries()) {
             specs.add(transform(x, id, data));
         }
         return specs;
     }
 
-    public Collection<MapElementSpec.MapPolygonSpec> transform(MultiPolygon geom, Object id, Object data) {
-        List<MapElementSpec.MapPolygonSpec> specs = new ArrayList<>(geom.numGeometries());
+    public Collection<MapPolygonSpec> transform(MultiPolygon geom, Object id, Object data) {
+        List<MapPolygonSpec> specs = new ArrayList<>(geom.numGeometries());
         for (Polygon x : geom.getGeometries()) {
             specs.add(transform(x, id, data));
         }
         return specs;
     }
 
-    public Collection<MapElementSpec.MapPolygonSpec> transform(PolyhedralSurface geom, Object id, Object data) {
-        List<MapElementSpec.MapPolygonSpec> specs = new ArrayList<>(geom.numPolygons());
+    public Collection<MapPolygonSpec> transform(PolyhedralSurface geom, Object id, Object data) {
+        List<MapPolygonSpec> specs = new ArrayList<>(geom.numPolygons());
         for (PolygonOptions options : converter.toPolygons(geom).getPolygonOptions()) {
-            specs.add(new MapElementSpec.MapPolygonSpec(id, data, options));
+            specs.add(new MapPolygonSpec(id, data, options));
         }
         return specs;
     }
 
-    public Collection<MapElementSpec.MapPolylineSpec> transform(CompoundCurve geom, Object id, Object data) {
-        List<MapElementSpec.MapPolylineSpec> specs = new ArrayList<>(geom.numLineStrings());
+    public Collection<MapPolylineSpec> transform(CompoundCurve geom, Object id, Object data) {
+        List<MapPolylineSpec> specs = new ArrayList<>(geom.numLineStrings());
         for (LineString x : geom.getLineStrings()) {
             specs.add(transform(x, id, data));
         }
@@ -134,76 +134,76 @@ public final class WKBGeometryTransforms {
         Collection<? extends S> toElementSpecs(G geom, Object id, Object data);
     }
 
-    public class WKBPointTransform implements WKBGeometryTransform<Point, MapElementSpec.MapMarkerSpec> {
+    public class WKBPointTransform implements WKBGeometryTransform<Point, MapMarkerSpec> {
 
         @Override
-        public Collection<MapElementSpec.MapMarkerSpec> toElementSpecs(Point geom, Object id, Object data) {
+        public Collection<MapMarkerSpec> toElementSpecs(Point geom, Object id, Object data) {
             return Collections.singleton(transform(geom, id, data));
         }
     }
 
-    public class WKBLineStringTransform implements WKBGeometryTransform<LineString, MapElementSpec.MapPolylineSpec> {
+    public class WKBLineStringTransform implements WKBGeometryTransform<LineString, MapPolylineSpec> {
 
         @Override
-        public Collection<MapElementSpec.MapPolylineSpec> toElementSpecs(LineString geom, Object id, Object data) {
+        public Collection<MapPolylineSpec> toElementSpecs(LineString geom, Object id, Object data) {
             return Collections.singleton(transform(geom, id, data));
         }
     }
 
-    public class WKBPolygonTransform implements WKBGeometryTransform<Polygon, MapElementSpec.MapPolygonSpec> {
+    public class WKBPolygonTransform implements WKBGeometryTransform<Polygon, MapPolygonSpec> {
 
         @Override
-        public Collection<MapElementSpec.MapPolygonSpec> toElementSpecs(Polygon geom, Object id, Object data) {
+        public Collection<MapPolygonSpec> toElementSpecs(Polygon geom, Object id, Object data) {
             return Collections.singleton(transform(geom, id, data));
         }
     }
 
 
-    public class WKBMultiPointTransform implements WKBGeometryTransform<MultiPoint, MapElementSpec.MapMarkerSpec> {
+    public class WKBMultiPointTransform implements WKBGeometryTransform<MultiPoint, MapMarkerSpec> {
 
         @Override
-        public Collection<MapElementSpec.MapMarkerSpec> toElementSpecs(MultiPoint geom, Object id, Object data) {
+        public Collection<MapMarkerSpec> toElementSpecs(MultiPoint geom, Object id, Object data) {
             return transform(geom, id, data);
         }
     }
 
 
-    public class WKBMultiLineStringTransform implements WKBGeometryTransform<MultiLineString, MapElementSpec.MapPolylineSpec> {
+    public class WKBMultiLineStringTransform implements WKBGeometryTransform<MultiLineString, MapPolylineSpec> {
 
         @Override
-        public Collection<MapElementSpec.MapPolylineSpec> toElementSpecs(MultiLineString geom, Object id, Object data) {
+        public Collection<MapPolylineSpec> toElementSpecs(MultiLineString geom, Object id, Object data) {
             return transform(geom, id, data);
         }
     }
 
-    public class WKBMultiPolygonTransform implements WKBGeometryTransform<MultiPolygon, MapElementSpec.MapPolygonSpec> {
+    public class WKBMultiPolygonTransform implements WKBGeometryTransform<MultiPolygon, MapPolygonSpec> {
 
         @Override
-        public Collection<MapElementSpec.MapPolygonSpec> toElementSpecs(MultiPolygon geom, Object id, Object data) {
+        public Collection<MapPolygonSpec> toElementSpecs(MultiPolygon geom, Object id, Object data) {
             return transform(geom, id, data);
         }
     }
 
-    public class WKBCompoundCurveTransform implements WKBGeometryTransform<CompoundCurve, MapElementSpec.MapPolylineSpec> {
+    public class WKBCompoundCurveTransform implements WKBGeometryTransform<CompoundCurve, MapPolylineSpec> {
 
         @Override
-        public Collection<MapElementSpec.MapPolylineSpec> toElementSpecs(CompoundCurve geom, Object id, Object data) {
+        public Collection<MapPolylineSpec> toElementSpecs(CompoundCurve geom, Object id, Object data) {
             return transform(geom, id, data);
         }
     }
 
-    public class WKBCurvePolygonTransform implements WKBGeometryTransform<CurvePolygon, MapElementSpec.MapPolygonSpec> {
+    public class WKBCurvePolygonTransform implements WKBGeometryTransform<CurvePolygon, MapPolygonSpec> {
 
         @Override
-        public Collection<MapElementSpec.MapPolygonSpec> toElementSpecs(CurvePolygon geom, Object id, Object data) {
+        public Collection<MapPolygonSpec> toElementSpecs(CurvePolygon geom, Object id, Object data) {
             return Collections.singleton(transform(geom, id, data));
         }
     }
 
-    public class WKBPolyhedralSurfaceTransform implements WKBGeometryTransform<PolyhedralSurface, MapElementSpec.MapPolygonSpec> {
+    public class WKBPolyhedralSurfaceTransform implements WKBGeometryTransform<PolyhedralSurface, MapPolygonSpec> {
 
         @Override
-        public Collection<MapElementSpec.MapPolygonSpec> toElementSpecs(PolyhedralSurface geom, Object id, Object data) {
+        public Collection<MapPolygonSpec> toElementSpecs(PolyhedralSurface geom, Object id, Object data) {
             return transform(geom, id, data);
         }
     }

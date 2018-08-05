@@ -23,7 +23,6 @@ import java.util.concurrent.Executor;
 import mil.nga.geopackage.GeoPackageConstants;
 import mil.nga.geopackage.validate.GeoPackageValidate;
 import mil.nga.giat.mage.R;
-import mil.nga.giat.mage.data.BasicResource;
 import mil.nga.giat.mage.data.Resource;
 import mil.nga.giat.mage.sdk.utils.MediaUtility;
 import mil.nga.giat.mage.sdk.utils.StorageUtility;
@@ -68,7 +67,7 @@ public class LocalStorageMapDataRepository extends MapDataRepository {
 
     @Override
     public void refreshAvailableMapData(@NonNull Map<URI, MapDataResource> resolvedResources, @NonNull Executor executor) {
-        setValue(BasicResource.loading());
+        setValue(Resource.loading());
         new RefreshTask(resolvedResources).executeOnExecutor(executor);
     }
 
@@ -161,7 +160,7 @@ public class LocalStorageMapDataRepository extends MapDataRepository {
                 newAndUpdatedResources.addAll(existing);
             }
         }
-        setValue(new BasicResource<>(existing, Resource.Status.Success));
+        setValue(Resource.success(existing));
     }
 
     private void onResourceCopyComplete(File file) {
@@ -172,7 +171,7 @@ public class LocalStorageMapDataRepository extends MapDataRepository {
         }
         Set<MapDataResource> updated = new HashSet<>(existing);
         updated.add(newResource);
-        setValue(new BasicResource<>(Collections.unmodifiableSet(updated), Resource.Status.Success));
+        setValue(Resource.success(Collections.unmodifiableSet(updated)));
     }
 
     @SuppressLint("StaticFieldLeak")

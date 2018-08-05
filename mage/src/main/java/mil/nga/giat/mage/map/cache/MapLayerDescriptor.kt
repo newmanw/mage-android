@@ -42,11 +42,11 @@ abstract class MapLayerDescriptor protected constructor(
     open var layerTitle: String = layerName
     protected set
 
-            /**
-             * Return the icon image resource ID for this layer.
-             * @return a [Android resource][android.content.res.Resources] ID or null
-             */
-            open val iconImageResourceId: Int?
+    /**
+     * Return the icon image resource ID for this layer.
+     * @return a [Android resource][android.content.res.Resources] ID or null
+     */
+    open val iconImageResourceId: Int?
     get() = null
 
     /**

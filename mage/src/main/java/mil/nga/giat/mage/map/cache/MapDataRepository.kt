@@ -2,7 +2,6 @@ package mil.nga.giat.mage.map.cache
 
 import android.arch.lifecycle.LiveData
 import android.support.annotation.MainThread
-import mil.nga.giat.mage.data.BasicResource
 import mil.nga.giat.mage.data.Resource
 import java.net.URI
 import java.util.concurrent.Executor
@@ -42,7 +41,7 @@ abstract class MapDataRepository : LiveData<Resource<Set<MapDataResource>>>() {
         val merged = HashSet(resources)
         merged.retainAll(content)
         merged.addAll(content)
-        postValue(BasicResource(merged, Resource.Status.Success))
+        postValue(Resource(merged, Resource.Status.Success))
     }
 
     @MainThread

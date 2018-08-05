@@ -3,6 +3,9 @@ package mil.nga.giat.mage.map;
 import android.Manifest;
 import android.app.Activity;
 import android.app.Dialog;
+import android.arch.lifecycle.ViewModel;
+import android.arch.lifecycle.ViewModelProvider;
+import android.arch.lifecycle.ViewModelProviders;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -18,6 +21,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.preference.PreferenceManager;
+import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.constraint.ConstraintLayout;
 import android.support.constraint.ConstraintSet;
@@ -67,6 +71,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
 import org.apache.commons.lang3.StringUtils;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -90,6 +95,7 @@ import mil.nga.giat.mage.map.marker.PointCollection;
 import mil.nga.giat.mage.map.marker.StaticGeometryCollection;
 import mil.nga.giat.mage.map.view.MapDataFragment;
 import mil.nga.giat.mage.map.view.MapLayersViewModel;
+import mil.nga.giat.mage.map.view.MapOwner;
 import mil.nga.giat.mage.map.view.MapViewModel;
 import mil.nga.giat.mage.observation.ObservationEditActivity;
 import mil.nga.giat.mage.observation.ObservationFormPickerActivity;
@@ -115,22 +121,23 @@ import mil.nga.mgrs.gzd.MGRSTileProvider;
 import mil.nga.wkb.geom.Geometry;
 
 public class MapFragment extends Fragment implements
-        OnMapReadyCallback,
-        OnMapClickListener,
-        OnMapLongClickListener,
-        OnMarkerClickListener,
-        GoogleMap.OnCameraMoveStartedListener,
-        GoogleMap.OnCameraIdleListener,
-        OnInfoWindowClickListener,
-        OnMyLocationButtonClickListener,
-        OnClickListener,
-        LocationSource,
-        LocationListener,
-        SearchView.OnQueryTextListener,
-        IObservationEventListener,
-        ILocationEventListener,
-        IUserEventListener,
-		MapDataFragment.MapDataListener
+	OnMapReadyCallback,
+	OnMapClickListener,
+	OnMapLongClickListener,
+	OnMarkerClickListener,
+	GoogleMap.OnCameraMoveStartedListener,
+	GoogleMap.OnCameraIdleListener,
+	OnInfoWindowClickListener,
+	OnMyLocationButtonClickListener,
+	OnClickListener,
+	LocationSource,
+	LocationListener,
+	SearchView.OnQueryTextListener,
+	IObservationEventListener,
+	ILocationEventListener,
+	IUserEventListener,
+	MapDataFragment.MapDataListener,
+	MapOwner
 {
 
 	private static final String LOG_NAME = MapFragment.class.getName();
@@ -175,7 +182,7 @@ public class MapFragment extends Fragment implements
 	private ConstraintLayout constraintLayout;
 	private ConstraintSet layoutOverlaysCollapsed = new ConstraintSet();
 	private ConstraintSet layoutOverlaysExpanded = new ConstraintSet();
-	private MapLayerManager mapOverlayManager;
+	private MapLayerManager mapLayerManager;
 
 	private boolean layersPanelVisible = false;
 	private boolean searchInputVisible = false;
@@ -201,7 +208,7 @@ public class MapFragment extends Fragment implements
 	public void onCreate(@Nullable Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 
-		mage = (MAGE) getContext().getApplicationContext();
+		mage = (MAGE) requireContext().getApplicationContext();
 		preferences = PreferenceManager.getDefaultSharedPreferences(mage);
 		locationService = mage.getLocationService();
 
@@ -222,8 +229,8 @@ public class MapFragment extends Fragment implements
 	}
 
 	@Override
-	public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-		this.container = new FrameLayout(getContext());
+	public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+		this.container = new FrameLayout(requireContext());
 		this.container.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 		loadLayoutToContainer(inflater);
 		return this.container;
@@ -356,7 +363,7 @@ public class MapFragment extends Fragment implements
 			mgrsTileOverlay = null;
 		}
 
-		mapOverlayManager.dispose();
+		mapLayerManager.dispose();
 
 		currentUser = null;
 		map = null;
@@ -365,13 +372,23 @@ public class MapFragment extends Fragment implements
 	}
 
 	@Override
-	public void onSaveInstanceState(Bundle outState) {
+	public void onSaveInstanceState(@NonNull Bundle outState) {
 		super.onSaveInstanceState(outState);
 	}
 
 	@Override
 	public void onDestroy() {
 		super.onDestroy();
+	}
+
+	@Override
+	public GoogleMap getMap() {
+		return map;
+	}
+
+	@Override
+	public View getMapView() {
+		return mapView;
 	}
 
 	private void cleanUpForLayoutChange() {
@@ -389,7 +406,7 @@ public class MapFragment extends Fragment implements
 	private View loadLayoutToContainer(LayoutInflater inflater) {
 		constraintLayout = (ConstraintLayout) inflater.inflate(R.layout.fragment_map, container, false);
 		layoutOverlaysCollapsed.clone(constraintLayout);
-		layoutOverlaysExpanded.load(getContext(), R.layout.fragment_map_expanded_layers_panel);
+		layoutOverlaysExpanded.load(requireContext(), R.layout.fragment_map_expanded_layers_panel);
 
 		staticGeometryCollection = new StaticGeometryCollection();
 
@@ -399,7 +416,7 @@ public class MapFragment extends Fragment implements
 		searchButton = (FloatingActionButton) constraintLayout.findViewById(R.id.map_search_button);
 		Drawable drawable = DrawableCompat.wrap(searchButton.getDrawable());
 		searchButton.setImageDrawable(drawable);
-		DrawableCompat.setTintList(drawable, AppCompatResources.getColorStateList(getContext(), R.color.toggle_button_selected));
+		DrawableCompat.setTintList(drawable, AppCompatResources.getColorStateList(requireContext(), R.color.toggle_button_selected));
 		searchButton.setOnClickListener(this);
 
 		overlaysButton = (FloatingActionButton) constraintLayout.findViewById(R.id.map_layer_button);
@@ -474,7 +491,19 @@ public class MapFragment extends Fragment implements
 			map.setOnCameraIdleListener(this);
 
 			// TODO: can't wait for dagger
-			mapOverlayManager = MapDataManager.getInstance().createMapLayerManager(map);
+			// TODO: maybe make MapLayerManager a LifecycleObserver for auto-cleanup
+			// TODO: ensure same map instance and proper state of loaded layer elements
+
+			MapLayersViewModel layerModel = ViewModelProviders.of(this, new ViewModelProvider.Factory() {
+				@SuppressWarnings("unchecked")
+				@NonNull
+				@Override
+				public <T extends ViewModel> T create(@NonNull Class<T> modelClass) {
+					return (T) new MapLayersViewModel(MapDataManager.getInstance());
+				}
+			}).get(MapLayersViewModel.class);
+
+			mapLayerManager = new MapLayerManager(this, layerModel, MapDataManager.getInstance());
 			MapDataManager.getInstance().refreshMapData();
 
 			observations = new ObservationMarkerCollection(mage, map);
@@ -641,7 +670,7 @@ public class MapFragment extends Fragment implements
 			.locationsVisible(locations.isVisible())
 			.mgrsVisible(mgrsVisible)
 			.finish();
-		mapDataFragment.setDataSources(intrinsicMapDataControls, mapOverlayManager);
+		mapDataFragment.setDataSources(intrinsicMapDataControls, mapLayerManager);
 		mapDataFragment.setMapDataListener(this);
 		FragmentManager fragmentManager = getChildFragmentManager();
 		fragmentManager.beginTransaction().replace(R.id.map_data_panel, mapDataFragment).commit();
@@ -752,7 +781,7 @@ public class MapFragment extends Fragment implements
 	}
 
 	@Override
-	public void onRequestPermissionsResult(int requestCode, String permissions[], int[] grantResults) {
+	public void onRequestPermissionsResult(int requestCode, @NonNull String permissions[], @NonNull int[] grantResults) {
 		switch (requestCode) {
 			case PERMISSIONS_REQUEST_ACCESS_FINE_LOCATION: {
 				// If request is cancelled, the result arrays are empty.
@@ -939,7 +968,7 @@ public class MapFragment extends Fragment implements
 		staticGeometryCollection.onMapClick(map, latLng, getActivity());
 
 		// TODO: handle overlay clicks
-		mapOverlayManager.onMapClick(latLng);
+		mapLayerManager.onMapClick(latLng);
 //		if(!overlays.isEmpty()) {
 //			StringBuilder clickMessage = new StringBuilder();
 //			for (MapLayerDescriptor cacheOverlay : overlays.values()) {
@@ -1051,6 +1080,7 @@ public class MapFragment extends Fragment implements
 	@Override
 	public void onCameraIdle() {
 		updateMgrs();
+		mapLayerManager.onCameraIdle();
 	}
 
 	@Override
@@ -1107,7 +1137,7 @@ public class MapFragment extends Fragment implements
 //		}
 //		MapDataResource explicitlyRequestedCache = update.getAdded().values().iterator().next();
 //		for (MapLayerDescriptor layerDesc : explicitlyRequestedCache.getLayers().values()) {
-//			mapOverlayManager.showLayer(layerDesc);
+//			mapLayerManager.showLayer(layerDesc);
 //		}
 //		LatLngBounds cacheBounds = explicitlyRequestedCache.getBounds();
 //		if (cacheBounds != null) {

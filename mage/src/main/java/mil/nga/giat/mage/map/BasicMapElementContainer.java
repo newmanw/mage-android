@@ -1,5 +1,7 @@
 package mil.nga.giat.mage.map;
 
+import android.support.annotation.NonNull;
+
 import com.google.android.gms.maps.model.Circle;
 import com.google.android.gms.maps.model.GroundOverlay;
 import com.google.android.gms.maps.model.Marker;
@@ -48,6 +50,45 @@ public class BasicMapElementContainer implements MapElements {
     private final Map<Object, Polygon> polygonForId = new HashMap<>();
     private final Map<Object, Polyline> polylineForId = new HashMap<>();
     private final Map<Object, TileOverlay> tileOverlayForId = new HashMap<>();
+
+    private MapElementSpec.MapElementSpecVisitor<Boolean> CONTAINS_ELEMENT_SPEC = new MapElementSpec.MapElementSpecVisitor<Boolean>() {
+
+        @Override
+        @NonNull
+        public Boolean visit(MapCircleSpec x) {
+            return circleForId.containsKey(x.getId());
+        }
+
+        @Override
+        @NonNull
+        public Boolean visit(MapGroundOverlaySpec x) {
+            return groundOverlayForId.containsKey(x.getId());
+        }
+
+        @Override
+        @NonNull
+        public Boolean visit(MapMarkerSpec x) {
+            return markerForId.containsKey(x.getId());
+        }
+
+        @Override
+        @NonNull
+        public Boolean visit(MapPolygonSpec x) {
+            return polygonForId.containsKey(x.getId());
+        }
+
+        @Override
+        @NonNull
+        public Boolean visit(MapPolylineSpec x) {
+            return polylineForId.containsKey(x.getId());
+        }
+
+        @Override
+        @NonNull
+        public Boolean visit(@NonNull MapTileOverlaySpec x) {
+            return tileOverlayForId.containsKey(x);
+        }
+    };
 
     @Override
     public MapElements add(Circle x, Object id) {
@@ -121,6 +162,12 @@ public class BasicMapElementContainer implements MapElements {
         return tileOverlays.containsKey(x);
     }
 
+    @SuppressWarnings("ConstantConditions")
+    @Override
+    public boolean contains(@NonNull MapElementSpec spec) {
+        return spec.accept(CONTAINS_ELEMENT_SPEC);
+    }
+
     @Override
     public <R> R withElement(Circle x, CircleVisitor<R> action) {
         return action.visit(x, circles.get(x));
@@ -182,6 +229,11 @@ public class BasicMapElementContainer implements MapElements {
     }
 
     @Override
+    public <T> T withElementForId(Object id, ComprehensiveMapElementVisitor<T> action) {
+        return null;
+    }
+
+    @Override
     public void remove(Circle x) {
         circleForId.remove(circles.remove(x));
     }
@@ -212,47 +264,35 @@ public class BasicMapElementContainer implements MapElements {
     }
 
     @Override
-    public void forEach(ComprehensiveMapElementVisitor... visitors) {
+    public void forEach(ComprehensiveMapElementVisitor<Boolean> action) {
         for (Map.Entry<Marker, Object> e : markers.entrySet()) {
-            for (ComprehensiveMapElementVisitor v : visitors) {
-                if (!v.visit(e.getKey(), e.getValue())) {
-                    return;
-                }
+            if (!action.visit(e.getKey(), e.getValue())) {
+                return;
             }
         }
         for (Map.Entry<Circle, Object> e : circles.entrySet()) {
-            for (ComprehensiveMapElementVisitor v : visitors) {
-                if (!v.visit(e.getKey(), e.getValue())) {
-                    return;
-                }
+            if (!action.visit(e.getKey(), e.getValue())) {
+                return;
             }
         }
         for (Map.Entry<Polygon, Object> e : polygons.entrySet()) {
-            for (ComprehensiveMapElementVisitor v : visitors) {
-                if (!v.visit(e.getKey(), e.getValue())) {
-                    return;
-                }
+            if (!action.visit(e.getKey(), e.getValue())) {
+                return;
             }
         }
         for (Map.Entry<Polyline, Object> e : polylines.entrySet()) {
-            for (ComprehensiveMapElementVisitor v : visitors) {
-                if (!v.visit(e.getKey(), e.getValue())) {
-                    return;
-                }
+            if (!action.visit(e.getKey(), e.getValue())) {
+                return;
             }
         }
         for (Map.Entry<GroundOverlay, Object> e : groundOverlays.entrySet()) {
-            for (ComprehensiveMapElementVisitor v : visitors) {
-                if (!v.visit(e.getKey(), e.getValue())) {
-                    return;
-                }
+            if (!action.visit(e.getKey(), e.getValue())) {
+                return;
             }
         }
         for (Map.Entry<TileOverlay, Object> e : tileOverlays.entrySet()) {
-            for (ComprehensiveMapElementVisitor v : visitors) {
-                if (!v.visit(e.getKey(), e.getValue())) {
-                    return;
-                }
+            if (!action.visit(e.getKey(), e.getValue())) {
+                return;
             }
         }
     }

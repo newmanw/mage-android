@@ -28,7 +28,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executor;
 
-import mil.nga.giat.mage.data.BasicResource;
 import mil.nga.giat.mage.data.Resource;
 import mil.nga.giat.mage.sdk.connectivity.ConnectivityUtility;
 import mil.nga.giat.mage.sdk.datastore.layer.Layer;
@@ -127,7 +126,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements I
             return;
         }
         if (getValue() == null || getValue().getStatus() != Loading) {
-            setValue(BasicResource.loading());
+            setValue(Resource.loading());
         }
         pendingRefresh = new RefreshCurrentEventLayers(executor, currentEvent);
         if (refreshInProgress != null) {
@@ -262,7 +261,7 @@ public class StaticFeatureLayerRepository extends MapDataRepository implements I
             message.append(messagePart);
         }
         if (pendingRefresh == null) {
-            setValue(new BasicResource<>(Collections.singleton(sync.result.mapData), refresh.status, refresh.status.ordinal(), message.toString()));
+            setValue(new Resource<>(Collections.singleton(sync.result.mapData), refresh.status, refresh.status.ordinal(), message.toString()));
         }
         else {
             beginPendingRefresh();

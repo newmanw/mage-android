@@ -19,46 +19,46 @@ public class MapElementOperation {
     public static final MapElements.PolylineVisitor<Polyline> GET_POLYLINE = (Polyline x, Object id) -> x;
     public static final MapElements.TileOverlayVisitor<TileOverlay> GET_TILE_OVERLAY = (TileOverlay x, Object id) -> x;
 
-    public static class Remove implements MapElements.ComprehensiveMapElementVisitor {
+    public static class Remove implements MapElements.ComprehensiveMapElementVisitor<Boolean> {
 
         @Override
-        public boolean visit(Circle x, Object id) {
+        public Boolean visit(Circle x, Object id) {
             x.remove();
             return true;
         }
 
         @Override
-        public boolean visit(GroundOverlay x, Object id) {
+        public Boolean visit(GroundOverlay x, Object id) {
             x.remove();
             return true;
         }
 
         @Override
-        public boolean visit(Marker x, Object id) {
+        public Boolean visit(Marker x, Object id) {
             x.remove();
             return true;
         }
 
         @Override
-        public boolean visit(Polygon x, Object id) {
+        public Boolean visit(Polygon x, Object id) {
             x.remove();
             return true;
         }
 
         @Override
-        public boolean visit(Polyline x, Object id) {
+        public Boolean visit(Polyline x, Object id) {
             x.remove();
             return true;
         }
 
         @Override
-        public boolean visit(TileOverlay x, Object id) {
+        public Boolean visit(TileOverlay x, Object id) {
             x.remove();
             return true;
         }
     }
 
-    public static class SetVisibility implements MapElements.ComprehensiveMapElementVisitor {
+    public static class SetVisibility implements MapElements.ComprehensiveMapElementVisitor<Boolean> {
 
         private final boolean visible;
 
@@ -67,43 +67,43 @@ public class MapElementOperation {
         }
 
         @Override
-        public boolean visit(Circle x, Object id) {
+        public Boolean visit(Circle x, Object id) {
             x.setVisible(visible);
             return true;
         }
 
         @Override
-        public boolean visit(GroundOverlay x, Object id) {
+        public Boolean visit(GroundOverlay x, Object id) {
             x.setVisible(visible);
             return true;
         }
 
         @Override
-        public boolean visit(Marker x, Object id) {
+        public Boolean visit(Marker x, Object id) {
             x.setVisible(visible);
             return true;
         }
 
         @Override
-        public boolean visit(Polygon x, Object id) {
+        public Boolean visit(Polygon x, Object id) {
             x.setVisible(visible);
             return true;
         }
 
         @Override
-        public boolean visit(Polyline x, Object id) {
+        public Boolean visit(Polyline x, Object id) {
             x.setVisible(visible);
             return true;
         }
 
         @Override
-        public boolean visit(TileOverlay x, Object id) {
+        public Boolean visit(TileOverlay x, Object id) {
             x.setVisible(visible);
             return true;
         }
     }
 
-    public static class SetZIndex implements MapElements.ComprehensiveMapElementVisitor {
+    public static class SetZIndex implements MapElements.ComprehensiveMapElementVisitor<Boolean> {
 
         private final int z;
 
@@ -112,37 +112,37 @@ public class MapElementOperation {
         }
 
         @Override
-        public boolean visit(Circle x, Object id) {
+        public Boolean visit(Circle x, Object id) {
             x.setZIndex(z);
             return true;
         }
 
         @Override
-        public boolean visit(GroundOverlay x, Object id) {
+        public Boolean visit(GroundOverlay x, Object id) {
             x.setZIndex(z);
             return true;
         }
 
         @Override
-        public boolean visit(Marker x, Object id) {
+        public Boolean visit(Marker x, Object id) {
             x.setZIndex(z);
             return true;
         }
 
         @Override
-        public boolean visit(Polygon x, Object id) {
+        public Boolean visit(Polygon x, Object id) {
             x.setZIndex(z);
             return true;
         }
 
         @Override
-        public boolean visit(Polyline x, Object id) {
+        public Boolean visit(Polyline x, Object id) {
             x.setZIndex(z);
             return true;
         }
 
         @Override
-        public boolean visit(TileOverlay x, Object id) {
+        public Boolean visit(TileOverlay x, Object id) {
             x.setZIndex(z);
             return true;
         }

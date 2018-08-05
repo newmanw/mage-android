@@ -6,8 +6,6 @@ import android.arch.lifecycle.*
 import android.arch.lifecycle.Observer
 import android.os.AsyncTask
 import android.support.annotation.MainThread
-import com.google.android.gms.maps.GoogleMap
-import mil.nga.giat.mage.data.BasicResource
 import mil.nga.giat.mage.data.Resource
 import mil.nga.giat.mage.data.Resource.Status.Loading
 import mil.nga.giat.mage.data.Resource.Status.Success
@@ -15,9 +13,9 @@ import java.io.File
 import java.net.URI
 import java.util.*
 import java.util.concurrent.Executor
-import kotlin.collections.ArrayList
 import kotlin.collections.HashMap
 import kotlin.collections.HashSet
+import kotlin.collections.LinkedHashMap
 
 
 /**
@@ -42,16 +40,20 @@ fun <K, V> Map<K, V>.removeIf(predicate: (K, V) -> Boolean, removeTo: MutableMap
 
 
 @MainThread
-class MapDataManager(config: Config) : LifecycleOwner, LiveData<Resource<Map<URI, MapDataResource>>>() {
+class MapDataManager(config: Config) : LifecycleOwner {
 
+    val providers: Map<Class<out MapDataProvider>, MapDataProvider>
+    // TODO: this will probably become public eventually
+    private val repositories: List<MapDataRepository>
     private val executor: Executor
-    private val repositories: Array<out MapDataRepository>
-    private val providers: Array<out MapDataProvider>
     private val lifecycle = LifecycleRegistry(this)
     private val nextChangeForRepository = HashMap<String, ResolveRepositoryChangeTask>()
     private val changeInProgressForRepository = HashMap<String, ResolveRepositoryChangeTask>()
+    private val mutableMapData = MutableLiveData<Resource<Map<URI, MapDataResource>>>()
 
-    fun requireValue(): Resource<Map<URI, MapDataResource>> { return value!! }
+    val mapData: LiveData<Resource<Map<URI, MapDataResource>>> = mutableMapData
+
+    fun requireMapData(): Resource<Map<URI, MapDataResource>> { return mutableMapData.value!! }
     /**
      * Return a non-null map of resources, keyed by their [URIs][MapDataResource.uri].
      */
@@ -64,11 +66,11 @@ class MapDataManager(config: Config) : LifecycleOwner, LiveData<Resource<Map<URI
     val layers: MutableMap<URI, MapLayerDescriptor> get() = resources.values.flatMap({ it.layers.values }).associateBy({ it.layerUri }).toMutableMap()
 
     init {
-        repositories = config.repositories!!
-        providers = config.providers!!
+        providers = Collections.unmodifiableMap(config.providers!!.associateByTo(LinkedHashMap(), { it::class.java }))
+        repositories = config.repositories!!.asList()
         executor = config.executor!!
         lifecycle.markState(Lifecycle.State.RESUMED)
-        value = BasicResource.success(emptyMap())
+        mutableMapData.value = Resource.success(emptyMap())
         for (repo in repositories) {
             repo.observe(this, RepositoryObserver(repo))
         }
@@ -111,23 +113,19 @@ class MapDataManager(config: Config) : LifecycleOwner, LiveData<Resource<Map<URI
         }
     }
 
-    fun createMapLayerManager(map: GoogleMap): MapLayerManager {
-        return MapLayerManager(this, Arrays.asList(*providers), map)
-    }
-
     private fun resourcesForRepo(repo: MapDataRepository): Map<URI, MapDataResource> {
         return resources.filter { it.value.repositoryId == repo.id }
     }
 
     private fun onMapDataChanged(resource: Resource<Set<MapDataResource>>?, source: MapDataRepository) {
-        val preChangeSize = requireValue().content!!.size
-        val preChangeStatus = requireValue().status
+        val preChangeSize = requireMapData().content!!.size
+        val preChangeStatus = requireMapData().status
         if (resource?.status == Loading) {
             resources = resources.removeIf({ _, res ->
                 res.repositoryId == source.id
             })
             if (resources.size < preChangeSize || preChangeStatus != Loading) {
-                value = BasicResource.loading(resources)
+                mutableMapData.value = Resource.loading(resources)
             }
             return
         }
@@ -173,7 +171,7 @@ class MapDataManager(config: Config) : LifecycleOwner, LiveData<Resource<Map<URI
         resources -= remove.keys
         resources += resolved
 
-        value = BasicResource(resources, nextStatus)
+        mutableMapData.value = Resource(resources, nextStatus)
     }
 
     private fun beginNextChangeForRepository(source: MapDataRepository, changeInProgress: ResolveRepositoryChangeTask? = null) {
@@ -210,7 +208,7 @@ class MapDataManager(config: Config) : LifecycleOwner, LiveData<Resource<Map<URI
         resources += result.resolved
         val status = if (repositories.any({ it.value?.status == Loading })) Loading else Success
         // TODO: check failed and error state
-        value = BasicResource(resources, status)
+        mutableMapData.value = Resource(resources, status)
     }
 
     class Config {
@@ -286,7 +284,7 @@ class MapDataManager(config: Config) : LifecycleOwner, LiveData<Resource<Map<URI
             if (existing != null && existing.contentTimestamp >= resource.contentTimestamp) {
                 return resource.resolve(existing.resolved!!)
             }
-            for (provider in providers) {
+            for (provider in providers.values) {
                 if (provider.canHandleResource(resource)) {
                     val resolvedResource = provider.resolveResource(resource)
                     if (resolvedResource != null) {
@@ -362,7 +360,6 @@ class MapDataManager(config: Config) : LifecycleOwner, LiveData<Resource<Map<URI
     }
 
 
-
     private class ResolveRepositoryChangeResult {
 
         val resolved = HashMap<URI, MapDataResource>()
@@ -376,8 +373,8 @@ class MapDataManager(config: Config) : LifecycleOwner, LiveData<Resource<Map<URI
         var instance: MapDataManager? = null
             private set
 
-        @Synchronized
         @JvmStatic
+        @Synchronized
         fun initialize(config: Config) {
             if (MapDataManager.instance != null) {
                 throw Error("attempt to initialize " + MapDataManager::class.java + " singleton more than once")

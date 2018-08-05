@@ -51,7 +51,6 @@ import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-import mil.nga.giat.mage.data.BasicResource;
 import mil.nga.giat.mage.data.Resource;
 import mil.nga.giat.mage.test.AsyncTesting;
 
@@ -132,7 +131,7 @@ public class MapDataManagerTest implements LifecycleOwner {
         public void refreshAvailableMapData(@NonNull Map<URI, MapDataResource> existingResolved, @NonNull Executor executor) {
             lastRefreshSeed = existingResolved;
             refreshCount++;
-            setValue(BasicResource.loading());
+            setValue(Resource.loading());
         }
 
         @Override
@@ -223,7 +222,7 @@ public class MapDataManagerTest implements LifecycleOwner {
     }
 
     private static Resource<Set<? extends MapDataResource>> resourceOf(MapDataResource... items) {
-        return new BasicResource<>(setOf(items), Success);
+        return Resource.success(setOf(items));
     }
 
     private static Resource<Set<? extends MapDataResource>> resourceOf(Collection<MapDataResource> items) {
@@ -271,11 +270,11 @@ public class MapDataManagerTest implements LifecycleOwner {
     @Mock
     private DogProvider dogProvider;
     @Mock
-    private Observer<Resource<Map<URI, ? extends MapDataResource>>> observer;
+    private Observer<Resource<Map<URI, MapDataResource>>> observer;
     @Mock
     private Application context;
     @Captor
-    private ArgumentCaptor<Resource<Map<URI, ? extends MapDataResource>>> changeCaptor;
+    private ArgumentCaptor<Resource<Map<URI, MapDataResource>>> changeCaptor;
 
     private MapDataManager.Config config;
     private MapDataManager manager;
@@ -322,7 +321,7 @@ public class MapDataManagerTest implements LifecycleOwner {
     private void initializeManager(MapDataManager.Config config) {
         waitForMainThreadToRun(() -> {
             manager = new MapDataManager(config);
-            manager.observe(this, observer);
+            manager.getMapData().observe(this, observer);
             // clear the initial change event that LiveData fires after adding the observer
             //noinspection unchecked
             Mockito.reset(observer);
@@ -414,18 +413,18 @@ public class MapDataManagerTest implements LifecycleOwner {
     @UiThreadTest
     public void initialValueIsEmptyNonNullWhenRepositoriesHaveNoValues() {
 
-        assertThat(manager.getValue(), notNullValue());
-        assertThat(manager.requireValue().getContent(), is(emptyMap()));
-        assertThat(manager.requireValue().getStatus(), is(Success));
+        assertThat(manager.getMapData().getValue(), notNullValue());
+        assertThat(manager.requireMapData().getContent(), is(emptyMap()));
+        assertThat(manager.requireMapData().getStatus(), is(Success));
         assertThat(manager.getResources(), is(emptyMap()));
         assertThat(manager.getLayers(), is(emptyMap()));
 
-        manager.removeObserver(observer);
-        manager.observe(this, observer);
+        manager.getMapData().removeObserver(observer);
+        manager.getMapData().observe(this, observer);
 
         verify(observer).onChanged(changeCaptor.capture());
 
-        Resource<Map<URI, ? extends MapDataResource>> data = changeCaptor.getValue();
+        Resource<Map<URI, MapDataResource>> data = changeCaptor.getValue();
 
         assertThat(data, notNullValue());
         assertThat(data.getContent(), is(emptyMap()));
@@ -439,12 +438,12 @@ public class MapDataManagerTest implements LifecycleOwner {
         MapDataResource resource1 = repo1.buildResource("test.dog", dogProvider).layers("layer1").finish();
         MapDataResource resource2 = repo2.buildResource("test.cat", catProvider).layers("layer2").finish();
         MapDataResource resource3 = repo2.buildResource("other.dog", dogProvider).layers("layer3", "layer4").finish();
-        repo1.setValue(BasicResource.success(setOf(resource1)));
-        repo2.setValue(BasicResource.success(setOf(resource2, resource3)));
+        repo1.setValue(Resource.success(setOf(resource1)));
+        repo2.setValue(Resource.success(setOf(resource2, resource3)));
         initializeManager();
 
-        assertThat(manager.requireValue().getContent(), is(mapOf(resource1, resource2, resource3)));
-        assertThat(manager.requireValue().getStatus(), is(Success));
+        assertThat(manager.requireMapData().getContent(), is(mapOf(resource1, resource2, resource3)));
+        assertThat(manager.requireMapData().getStatus(), is(Success));
         assertThat(manager.getResources(), is(mapOf(resource1, resource2, resource3)));
         assertThat(manager.getLayers(), is(mapOfLayers(resource1, resource2, resource3)));
     }
@@ -454,11 +453,11 @@ public class MapDataManagerTest implements LifecycleOwner {
     public void initialStatusIsLoadingIfARepositoryIsLoading() {
 
         MapDataResource resource = repo1.buildResource("test.dog", dogProvider).layers("layer1").finish();
-        repo1.setValue(BasicResource.loading(setOf(resource)));
+        repo1.setValue(Resource.loading(setOf(resource)));
         initializeManager();
 
-        assertThat(manager.requireValue().getContent(), is(emptyMap()));
-        assertThat(manager.requireValue().getStatus(), is(Loading));
+        assertThat(manager.requireMapData().getContent(), is(emptyMap()));
+        assertThat(manager.requireMapData().getStatus(), is(Loading));
         assertThat(manager.getResources(), is(emptyMap()));
         assertThat(manager.getLayers(), is(emptyMap()));
     }
@@ -469,19 +468,19 @@ public class MapDataManagerTest implements LifecycleOwner {
 
         MapDataResource res1 = repo1.buildResource("test1.dog", dogProvider).layers("layer1", "layer2").finish();
         MapDataResource res2 = repo1.buildResource("test2.dog", dogProvider).layers("layer1").finish();
-        repo1.setValue(BasicResource.success(setOf(res1, res2)));
+        repo1.setValue(Resource.success(setOf(res1, res2)));
 
-        assertThat(manager.requireValue().getStatus(), is(Success));
-        assertThat(manager.requireValue().getContent(), is(mapOf(res1, res2)));
+        assertThat(manager.requireMapData().getStatus(), is(Success));
+        assertThat(manager.requireMapData().getContent(), is(mapOf(res1, res2)));
         assertThat(manager.getResources(), is(mapOf(res1, res2)));
         assertThat(manager.getLayers(), is(mapOfLayers(res1, res2)));
-        verify(observer).onChanged(manager.getValue());
+        verify(observer).onChanged(manager.getMapData().getValue());
 
         MapDataResource res3 = repo2.buildResource("test3.cat", catProvider).finish();
-        repo2.setValue(BasicResource.success(setOf(res3)));
+        repo2.setValue(Resource.success(setOf(res3)));
 
-        assertThat(manager.requireValue().getStatus(), is(Success));
-        assertThat(manager.requireValue().getContent(), is(mapOf(res1, res2, res3)));
+        assertThat(manager.requireMapData().getStatus(), is(Success));
+        assertThat(manager.requireMapData().getContent(), is(mapOf(res1, res2, res3)));
         assertThat(manager.getResources(), is(mapOf(res1, res2, res3)));
         assertThat(manager.getLayers(), is(mapOfLayers(res1, res2, res3)));
 
@@ -496,19 +495,19 @@ public class MapDataManagerTest implements LifecycleOwner {
 
         MapDataResource res1 = repo1.buildResource("test1.dog", dogProvider).layers("layer1", "layer2").finish();
         MapDataResource res2 = repo1.buildResource("test2.dog", dogProvider).layers("layer1").finish();
-        repo1.setValue(BasicResource.success(setOf(res1, res2)));
+        repo1.setValue(Resource.success(setOf(res1, res2)));
 
-        assertThat(manager.requireValue().getStatus(), is(Success));
-        assertThat(manager.requireValue().getContent(), is(mapOf(res1, res2)));
+        assertThat(manager.requireMapData().getStatus(), is(Success));
+        assertThat(manager.requireMapData().getContent(), is(mapOf(res1, res2)));
         assertThat(manager.getResources(), is(mapOf(res1, res2)));
         assertThat(manager.getLayers(), is(mapOfLayers(res1, res2)));
-        verify(observer).onChanged(manager.getValue());
+        verify(observer).onChanged(manager.getMapData().getValue());
 
         MapDataResource res1Updated = repo1.updateContentTimestampAndLayers(res1, "layer1", "layer2", "layer3");
-        repo1.setValue(BasicResource.success(setOf(res1Updated, res2)));
+        repo1.setValue(Resource.success(setOf(res1Updated, res2)));
 
-        assertThat(manager.requireValue().getStatus(), is(Success));
-        assertThat(manager.requireValue().getContent(), allOf(
+        assertThat(manager.requireMapData().getStatus(), is(Success));
+        assertThat(manager.requireMapData().getContent(), allOf(
             is(mapOf(res1, res2)),
             hasEntry(is(res1.getUri()), sameInstance(res1Updated))));
         assertThat(manager.getLayers(), is(mapOfLayers(res1Updated, res2)));
@@ -524,18 +523,18 @@ public class MapDataManagerTest implements LifecycleOwner {
 
         MapDataResource res1 = repo1.buildResource("test1.dog", dogProvider).layers("layer1", "layer2").finish();
         MapDataResource res2 = repo1.buildResource("test2.dog", dogProvider).layers("layer1").finish();
-        repo1.setValue(BasicResource.success(setOf(res1, res2)));
+        repo1.setValue(Resource.success(setOf(res1, res2)));
 
-        assertThat(manager.requireValue().getStatus(), is(Success));
-        assertThat(manager.requireValue().getContent(), is(mapOf(res1, res2)));
+        assertThat(manager.requireMapData().getStatus(), is(Success));
+        assertThat(manager.requireMapData().getContent(), is(mapOf(res1, res2)));
         assertThat(manager.getResources(), is(mapOf(res1, res2)));
         assertThat(manager.getLayers(), is(mapOfLayers(res1, res2)));
-        verify(observer).onChanged(manager.getValue());
+        verify(observer).onChanged(manager.getMapData().getValue());
 
-        repo1.setValue(BasicResource.success(setOf(res2)));
+        repo1.setValue(Resource.success(setOf(res2)));
 
-        assertThat(manager.requireValue().getStatus(), is(Success));
-        assertThat(manager.requireValue().getContent(), is(mapOf(res2)));
+        assertThat(manager.requireMapData().getStatus(), is(Success));
+        assertThat(manager.requireMapData().getContent(), is(mapOf(res2)));
         assertThat(manager.getLayers(), is(mapOfLayers(res2)));
         verify(observer, times(2)).onChanged(changeCaptor.capture());
         assertThat(changeCaptor.getValue().getContent(), is(mapOf(res2)));
@@ -547,18 +546,18 @@ public class MapDataManagerTest implements LifecycleOwner {
 
         MapDataResource res1 = repo1.buildResource("test1.dog", dogProvider).layers("layer1", "layer2").finish();
         MapDataResource res2 = repo1.buildResource("test2.dog", dogProvider).layers("layer1").finish();
-        repo1.setValue(BasicResource.success(setOf(res1, res2)));
+        repo1.setValue(Resource.success(setOf(res1, res2)));
 
-        assertThat(manager.requireValue().getStatus(), is(Success));
-        assertThat(manager.requireValue().getContent(), is(mapOf(res1, res2)));
+        assertThat(manager.requireMapData().getStatus(), is(Success));
+        assertThat(manager.requireMapData().getContent(), is(mapOf(res1, res2)));
         assertThat(manager.getResources(), is(mapOf(res1, res2)));
         assertThat(manager.getLayers(), is(mapOfLayers(res1, res2)));
-        verify(observer).onChanged(manager.getValue());
+        verify(observer).onChanged(manager.getMapData().getValue());
 
         repo1.setValue(null);
 
-        assertThat(manager.requireValue().getStatus(), is(Success));
-        assertThat(manager.requireValue().getContent(), is(emptyMap()));
+        assertThat(manager.requireMapData().getStatus(), is(Success));
+        assertThat(manager.requireMapData().getContent(), is(emptyMap()));
         assertThat(manager.getLayers(), is(emptyMap()));
         verify(observer, times(2)).onChanged(changeCaptor.capture());
         assertThat(changeCaptor.getValue().getContent(), is(emptyMap()));
@@ -570,18 +569,18 @@ public class MapDataManagerTest implements LifecycleOwner {
 
         MapDataResource res1 = repo1.buildResource("test1.dog", dogProvider).layers("layer1", "layer2").finish();
         MapDataResource res2 = repo1.buildResource("test2.dog", dogProvider).layers("layer1").finish();
-        repo1.setValue(BasicResource.success(setOf(res1, res2)));
+        repo1.setValue(Resource.success(setOf(res1, res2)));
 
-        assertThat(manager.requireValue().getStatus(), is(Success));
-        assertThat(manager.requireValue().getContent(), is(mapOf(res1, res2)));
+        assertThat(manager.requireMapData().getStatus(), is(Success));
+        assertThat(manager.requireMapData().getContent(), is(mapOf(res1, res2)));
         assertThat(manager.getResources(), is(mapOf(res1, res2)));
         assertThat(manager.getLayers(), is(mapOfLayers(res1, res2)));
-        verify(observer).onChanged(manager.getValue());
+        verify(observer).onChanged(manager.getMapData().getValue());
 
-        repo1.setValue(BasicResource.success());
+        repo1.setValue(Resource.success());
 
-        assertThat(manager.requireValue().getStatus(), is(Success));
-        assertThat(manager.requireValue().getContent(), is(emptyMap()));
+        assertThat(manager.requireMapData().getStatus(), is(Success));
+        assertThat(manager.requireMapData().getContent(), is(emptyMap()));
         assertThat(manager.getLayers(), is(emptyMap()));
         verify(observer, times(2)).onChanged(changeCaptor.capture());
         assertThat(changeCaptor.getValue().getContent(), is(emptyMap()));
@@ -593,18 +592,18 @@ public class MapDataManagerTest implements LifecycleOwner {
 
         MapDataResource res1 = repo1.buildResource("test1.dog", dogProvider).layers("layer1", "layer2").finish();
         MapDataResource res2 = repo1.buildResource("test2.dog", dogProvider).layers("layer1").finish();
-        repo1.setValue(BasicResource.success(setOf(res1, res2)));
+        repo1.setValue(Resource.success(setOf(res1, res2)));
 
-        assertThat(manager.requireValue().getStatus(), is(Success));
-        assertThat(manager.requireValue().getContent(), is(mapOf(res1, res2)));
+        assertThat(manager.requireMapData().getStatus(), is(Success));
+        assertThat(manager.requireMapData().getContent(), is(mapOf(res1, res2)));
         assertThat(manager.getResources(), is(mapOf(res1, res2)));
         assertThat(manager.getLayers(), is(mapOfLayers(res1, res2)));
-        verify(observer).onChanged(manager.getValue());
+        verify(observer).onChanged(manager.getMapData().getValue());
 
-        repo1.setValue(BasicResource.success(emptySet()));
+        repo1.setValue(Resource.success(emptySet()));
 
-        assertThat(manager.requireValue().getStatus(), is(Success));
-        assertThat(manager.requireValue().getContent(), is(emptyMap()));
+        assertThat(manager.requireMapData().getStatus(), is(Success));
+        assertThat(manager.requireMapData().getContent(), is(emptyMap()));
         assertThat(manager.getLayers(), is(emptyMap()));
         verify(observer, times(2)).onChanged(changeCaptor.capture());
         assertThat(changeCaptor.getValue().getContent(), is(emptyMap()));
@@ -616,19 +615,19 @@ public class MapDataManagerTest implements LifecycleOwner {
 
         MapDataResource res1 = repo1.buildResource("test1.dog", dogProvider).layers("layer1", "layer2").finish();
         MapDataResource res2 = repo1.buildResource("test2.dog", dogProvider).layers("layer1").finish();
-        repo1.setValue(BasicResource.success(setOf(res1, res2)));
+        repo1.setValue(Resource.success(setOf(res1, res2)));
 
-        assertThat(manager.requireValue().getStatus(), is(Success));
-        assertThat(manager.requireValue().getContent(), is(mapOf(res1, res2)));
+        assertThat(manager.requireMapData().getStatus(), is(Success));
+        assertThat(manager.requireMapData().getContent(), is(mapOf(res1, res2)));
         assertThat(manager.getResources(), is(mapOf(res1, res2)));
         assertThat(manager.getLayers(), is(mapOfLayers(res1, res2)));
-        verify(observer).onChanged(manager.getValue());
+        verify(observer).onChanged(manager.getMapData().getValue());
 
         MapDataResource res1Copy = new MapDataResource(res1.getUri(), repo1, res1.getContentTimestamp(), res1.requireResolved());
-        repo1.setValue(BasicResource.success(setOf(res1Copy, res2)));
+        repo1.setValue(Resource.success(setOf(res1Copy, res2)));
 
-        assertThat(manager.requireValue().getStatus(), is(Success));
-        assertThat(manager.requireValue().getContent(), allOf(
+        assertThat(manager.requireMapData().getStatus(), is(Success));
+        assertThat(manager.requireMapData().getContent(), allOf(
             is(mapOf(res1, res2)),
             hasEntry(is(res1.getUri()), sameInstance(res1Copy))));
         assertThat(manager.getLayers(), is(mapOfLayers(res1Copy, res2)));
@@ -644,18 +643,18 @@ public class MapDataManagerTest implements LifecycleOwner {
 
         MapDataResource res1 = repo1.buildResource("test1.dog", dogProvider).layers("layer1", "layer2").finish();
         MapDataResource res2 = repo1.buildResource("test2.dog", dogProvider).layers("layer1").finish();
-        repo1.setValue(BasicResource.success(setOf(res1, res2)));
+        repo1.setValue(Resource.success(setOf(res1, res2)));
 
-        assertThat(manager.requireValue().getStatus(), is(Success));
-        assertThat(manager.requireValue().getContent(), is(mapOf(res1, res2)));
+        assertThat(manager.requireMapData().getStatus(), is(Success));
+        assertThat(manager.requireMapData().getContent(), is(mapOf(res1, res2)));
         assertThat(manager.getResources(), is(mapOf(res1, res2)));
         assertThat(manager.getLayers(), is(mapOfLayers(res1, res2)));
-        verify(observer).onChanged(manager.getValue());
+        verify(observer).onChanged(manager.getMapData().getValue());
 
-        repo1.setValue(BasicResource.success(setOf(res1, res2)));
+        repo1.setValue(Resource.success(setOf(res1, res2)));
 
-        assertThat(manager.requireValue().getStatus(), is(Success));
-        assertThat(manager.requireValue().getContent(), is(mapOf(res1, res2)));
+        assertThat(manager.requireMapData().getStatus(), is(Success));
+        assertThat(manager.requireMapData().getContent(), is(mapOf(res1, res2)));
         assertThat(manager.getLayers(), is(mapOfLayers(res1, res2)));
         verify(observer, times(1)).onChanged(changeCaptor.capture());
         assertThat(changeCaptor.getValue().getContent(), is(mapOf(res1, res2)));
@@ -666,8 +665,8 @@ public class MapDataManagerTest implements LifecycleOwner {
     public void doesNotChangeValueIfRepositoryChangesFromNullToEmptyData() {
 
         repo1.setValue(null);
-        repo1.setValue(BasicResource.success());
-        repo1.setValue(BasicResource.success(emptySet()));
+        repo1.setValue(Resource.success());
+        repo1.setValue(Resource.success(emptySet()));
 
         verify(observer, never()).onChanged(any());
     }
@@ -677,13 +676,13 @@ public class MapDataManagerTest implements LifecycleOwner {
     public void statusChangesToLoadingWhenRepositoryChangesToLoading() {
 
         MapDataResource resource = repo1.buildResource("test.dog", dogProvider).layers("layer1").finish();
-        repo1.setValue(BasicResource.success(setOf(resource)));
+        repo1.setValue(Resource.success(setOf(resource)));
 
-        assertThat(manager.requireValue().getStatus(), is(Success));
+        assertThat(manager.requireMapData().getStatus(), is(Success));
 
-        repo1.setValue(BasicResource.loading(setOf(resource)));
+        repo1.setValue(Resource.loading(setOf(resource)));
 
-        assertThat(manager.requireValue().getStatus(), is(Loading));
+        assertThat(manager.requireMapData().getStatus(), is(Loading));
     }
 
     @Test
@@ -691,17 +690,17 @@ public class MapDataManagerTest implements LifecycleOwner {
     public void removesResourcesForRepositoryWhenStatusChangesToLoading() {
 
         MapDataResource resource = repo1.buildResource("test.dog", dogProvider).layers("layer1").finish();
-        repo1.setValue(BasicResource.success(setOf(resource)));
+        repo1.setValue(Resource.success(setOf(resource)));
 
-        assertThat(manager.requireValue().getContent(), is(mapOf(resource)));
-        assertThat(manager.requireValue().getStatus(), is(Success));
+        assertThat(manager.requireMapData().getContent(), is(mapOf(resource)));
+        assertThat(manager.requireMapData().getStatus(), is(Success));
         assertThat(manager.getResources(), is(mapOf(resource)));
         assertThat(manager.getLayers(), is(resource.getLayers()));
 
-        repo1.setValue(BasicResource.loading(setOf(resource)));
+        repo1.setValue(Resource.loading(setOf(resource)));
 
-        assertThat(manager.requireValue().getContent(), is(emptyMap()));
-        assertThat(manager.requireValue().getStatus(), is(Loading));
+        assertThat(manager.requireMapData().getContent(), is(emptyMap()));
+        assertThat(manager.requireMapData().getStatus(), is(Loading));
         assertThat(manager.getResources(), is(emptyMap()));
         assertThat(manager.getLayers(), is(emptyMap()));
     }
@@ -710,18 +709,18 @@ public class MapDataManagerTest implements LifecycleOwner {
     @UiThreadTest
     public void statusRemainsLoadingWhenRepositoryChangesToSuccessButOthersAreStillLoading() {
 
-        repo1.setValue(BasicResource.loading());
-        repo2.setValue(BasicResource.loading());
+        repo1.setValue(Resource.loading());
+        repo2.setValue(Resource.loading());
 
-        assertThat(manager.requireValue().getStatus(), is(Loading));
+        assertThat(manager.requireMapData().getStatus(), is(Loading));
 
-        repo1.setValue(BasicResource.success());
+        repo1.setValue(Resource.success());
 
-        assertThat(manager.requireValue().getStatus(), is(Loading));
+        assertThat(manager.requireMapData().getStatus(), is(Loading));
 
-        repo2.setValue(BasicResource.success());
+        repo2.setValue(Resource.success());
 
-        assertThat(manager.requireValue().getStatus(), is(Success));
+        assertThat(manager.requireMapData().getStatus(), is(Success));
     }
 
     @Test
@@ -731,34 +730,34 @@ public class MapDataManagerTest implements LifecycleOwner {
         MapDataResource res1 = repo1.buildResource("1.dog", null).finish();
         MapDataResource res2 = repo2.buildResource("2.dog", null).finish();
 
-        repo1.setValue(BasicResource.loading());
-        repo2.setValue(BasicResource.loading());
+        repo1.setValue(Resource.loading());
+        repo2.setValue(Resource.loading());
 
-        assertThat(manager.requireValue().getStatus(), is(Loading));
+        assertThat(manager.requireMapData().getStatus(), is(Loading));
 
-        repo1.setValue(BasicResource.success(setOf(res1)));
+        repo1.setValue(Resource.success(setOf(res1)));
 
-        assertThat(manager.requireValue().getStatus(), is(Loading));
+        assertThat(manager.requireMapData().getStatus(), is(Loading));
 
-        repo2.setValue(BasicResource.success(setOf(res2)));
+        repo2.setValue(Resource.success(setOf(res2)));
 
-        assertThat(manager.requireValue().getStatus(), is(Loading));
+        assertThat(manager.requireMapData().getStatus(), is(Loading));
     }
 
     @Test
     @UiThreadTest
     public void doesNotChangeValueWhenStatusIsLoadingAndRepositoryChangesFromEmptyToAllUnresolvedResources() {
 
-        repo2.setValue(BasicResource.loading());
+        repo2.setValue(Resource.loading());
 
-        assertThat(manager.requireValue().getStatus(), is(Loading));
+        assertThat(manager.requireMapData().getStatus(), is(Loading));
         verify(observer).onChanged(any());
 
         MapDataResource unresolved = repo1.buildResource("unresolved.dog", null).finish();
         repo1.setValue(resourceOf(unresolved));
 
-        assertThat(manager.requireValue().getStatus(), is(Loading));
-        assertThat(manager.requireValue().getContent(), is(emptyMap()));
+        assertThat(manager.requireMapData().getStatus(), is(Loading));
+        assertThat(manager.requireMapData().getContent(), is(emptyMap()));
         assertThat(manager.getResources(), equalTo(emptyMap()));
         assertThat(manager.getLayers(), equalTo(emptyMap()));
         verifyNoMoreInteractions(observer);
@@ -768,8 +767,8 @@ public class MapDataManagerTest implements LifecycleOwner {
     @UiThreadTest
     public void refreshChangesValueToLoadingOnlyOnceInsteadOfOneForEachRepositoryChange() {
 
-        repo1.setValue(BasicResource.loading());
-        repo2.setValue(BasicResource.loading());
+        repo1.setValue(Resource.loading());
+        repo2.setValue(Resource.loading());
 
         verify(observer, times(1)).onChanged(any());
     }
@@ -836,7 +835,7 @@ public class MapDataManagerTest implements LifecycleOwner {
         repo1.setValue(resourceOf(res1, res2));
         repo2.setValue(resourceOf(res3));
 
-        assertThat(manager.requireValue().getContent(), is(mapOf(res1, res2, res3)));
+        assertThat(manager.requireMapData().getContent(), is(mapOf(res1, res2, res3)));
 
         manager.refreshMapData();
 
@@ -853,15 +852,15 @@ public class MapDataManagerTest implements LifecycleOwner {
     @UiThreadTest
     public void doesNotRefreshRepositoryThatIsLoading() {
 
-        repo1.setValue(BasicResource.loading());
+        repo1.setValue(Resource.loading());
 
         manager.refreshMapData();
 
         assertThat(repo1.refreshCount, is(0));
         assertThat(repo2.refreshCount, is(1));
 
-        repo1.setValue(BasicResource.success());
-        repo2.setValue(BasicResource.loading());
+        repo1.setValue(Resource.success());
+        repo2.setValue(Resource.loading());
 
         manager.refreshMapData();
 
@@ -986,11 +985,11 @@ public class MapDataManagerTest implements LifecycleOwner {
         MapDataResource res2 = repo1.buildResource("res2.cat", catProvider).finish();
         repo1.setValue(resourceOf(res1, res2));
 
-        assertThat(requireNonNull(manager.getValue()).getContent(), is(mapOf(res1, res2)));
+        assertThat(requireNonNull(manager.getMapData().getValue()).getContent(), is(mapOf(res1, res2)));
         assertThat(manager.getResources(), hasEntry(is(res1.getUri()), sameInstance(res1)));
         assertThat(manager.getResources(), hasEntry(is(res2.getUri()), sameInstance(res2)));
         verify(observer).onChanged(changeCaptor.capture());
-        assertThat(changeCaptor.getValue(), sameInstance(manager.getValue()));
+        assertThat(changeCaptor.getValue(), sameInstance(manager.getMapData().getValue()));
         verify(executor, never()).execute(any());
         verify(catProvider, never()).resolveResource(any());
         verify(dogProvider, never()).resolveResource(any());
@@ -1012,7 +1011,7 @@ public class MapDataManagerTest implements LifecycleOwner {
         res1 = repo1.updateContentTimestampAndLayers(res1, "layer1", "layer2");
         repo1.setValue(resourceOf(res1, res2));
 
-        assertThat(manager.requireValue().getContent(), allOf(
+        assertThat(manager.requireMapData().getContent(), allOf(
             is(mapOf(res1, res2)),
             hasEntry(is(res1.getUri()), sameInstance(res1)),
             hasEntry(is(res2.getUri()), sameInstance(res2))));
@@ -1022,7 +1021,7 @@ public class MapDataManagerTest implements LifecycleOwner {
         verify(dogProvider, never()).resolveResource(any());
         verify(observer, times(2)).onChanged(changeCaptor.capture());
         Resource<? extends Map<URI, ? extends MapDataResource>> change = changeCaptor.getValue();
-        assertThat(change, sameInstance(manager.getValue()));
+        assertThat(change, sameInstance(manager.getMapData().getValue()));
     }
 
     @Test
@@ -1031,11 +1030,11 @@ public class MapDataManagerTest implements LifecycleOwner {
         MapDataResource res1 = repo1.buildResource("res1.dog", null).finish();
         MapDataResource res2 = repo1.buildResource("res2.cat", null).finish();
 
-        waitForMainThreadToRun(() -> repo1.setValue(BasicResource.loading(setOf(res1))));
+        waitForMainThreadToRun(() -> repo1.setValue(Resource.loading(setOf(res1))));
 
         verify(executor, never()).execute(any());
 
-        waitForMainThreadToRun(() -> repo1.setValue(BasicResource.loading(setOf(res2))));
+        waitForMainThreadToRun(() -> repo1.setValue(Resource.loading(setOf(res2))));
 
         verify(executor, never()).execute(any());
         verify(catProvider, never()).resolveResource(any());
@@ -1047,9 +1046,9 @@ public class MapDataManagerTest implements LifecycleOwner {
         when(catProvider.resolveResource(res2)).then(answer -> repo1.resolveResource(res2, catProvider));
 
         waitForMainThreadToRun(() -> {
-            repo1.setValue(BasicResource.success(setOf(res1, res2)));
+            repo1.setValue(Resource.success(setOf(res1, res2)));
 
-            assertThat(manager.requireValue().getStatus(), is(Loading));
+            assertThat(manager.requireMapData().getStatus(), is(Loading));
         });
 
         verify(executor, atLeastOnce()).execute(any());
@@ -1067,11 +1066,11 @@ public class MapDataManagerTest implements LifecycleOwner {
 
         activateExecutor();
         repo1.postValue(resourceOf(res1));
-        repo2.postValue(BasicResource.loading());
+        repo2.postValue(Resource.loading());
 
         onMainLooper.assertThatWithin(testTimeout(), manager::getResources, is(mapOf(res1)));
 
-        waitForMainThreadToRun(() -> assertThat(manager.requireValue().getStatus(), is(Loading)));
+        waitForMainThreadToRun(() -> assertThat(manager.requireMapData().getStatus(), is(Loading)));
     }
 
     @Test
@@ -1087,14 +1086,14 @@ public class MapDataManagerTest implements LifecycleOwner {
 
         activateExecutor();
         repo1.postValue(resourceOf(res1));
-        repo2.postValue(BasicResource.loading());
+        repo2.postValue(Resource.loading());
 
         onMainLooper.assertThatWithin(testTimeout(), manager::getResources, allOf(is(mapOf(res1)), hasEntry(is(res1.getUri()), sameInstance(res1Resolved))));
 
         waitForMainThreadToRun(() -> {
-            assertThat(manager.requireValue().getStatus(), is(Loading));
+            assertThat(manager.requireMapData().getStatus(), is(Loading));
             repo2.setValue(resourceOf(res2));
-            assertThat(manager.requireValue().getStatus(), is(Loading));
+            assertThat(manager.requireMapData().getStatus(), is(Loading));
         });
 
         onMainLooper.assertThatWithin(testTimeout(), manager::getResources, allOf(
@@ -1102,7 +1101,7 @@ public class MapDataManagerTest implements LifecycleOwner {
             hasEntry(is(res1.getUri()), sameInstance(res1Resolved)),
             hasEntry(is(res2.getUri()), sameInstance(res2Resolved))));
 
-        assertThat(manager.requireValue().getStatus(), is(Success));
+        assertThat(manager.requireMapData().getStatus(), is(Success));
     }
 
     @Test
@@ -1176,20 +1175,20 @@ public class MapDataManagerTest implements LifecycleOwner {
 
         repo1.postValue(resourceOf(res1Updated, res2Updated));
 
-        onMainLooper.assertThatWithin(testTimeout(), () -> manager.requireValue().getStatus(), is(Success));
+        onMainLooper.assertThatWithin(testTimeout(), () -> manager.requireMapData().getStatus(), is(Success));
 
         verify(dogProvider).resolveResource(same(res1Updated));
         verify(catProvider).resolveResource(same(res2Updated));
         verify(observer, times(3)).onChanged(changeCaptor.capture());
 
         waitForMainThreadToRun(() -> {
-            Map<URI, MapDataResource> resources = manager.requireValue().getContent();
+            Map<URI, MapDataResource> resources = manager.requireMapData().getContent();
             assertThat(resources, allOf(
                 is(mapOf(res1, res2)),
                 hasEntry(is(res1.getUri()), sameInstance(res1UpdatedResolved)),
                 hasEntry(is(res2.getUri()), sameInstance(res2UpdatedResolved))));
             assertThat(manager.getLayers(), is(mapOfLayers(res1UpdatedResolved, res2UpdatedResolved)));
-            List<Resource<Map<URI, ? extends MapDataResource>>> changes = changeCaptor.getAllValues();
+            List<Resource<Map<URI, MapDataResource>>> changes = changeCaptor.getAllValues();
             assertThat(changes.get(0).getContent(), allOf(
                 is(mapOf(res1, res2)),
                 hasEntry(is(res1.getUri()), sameInstance(res1Resolved)),
@@ -1275,9 +1274,9 @@ public class MapDataManagerTest implements LifecycleOwner {
 
         activateExecutor();
 
-        waitForMainThreadToRun(() -> repo1.setValue(new BasicResource<>(resources, Success)));
+        waitForMainThreadToRun(() -> repo1.setValue(Resource.success(resources)));
 
-        onMainLooper.assertThatWithin(testTimeout(), () -> manager.requireValue().getStatus(), is(Success));
+        onMainLooper.assertThatWithin(testTimeout(), () -> manager.requireMapData().getStatus(), is(Success));
 
         deactivateExecutorAndWait();
 
@@ -1309,7 +1308,7 @@ public class MapDataManagerTest implements LifecycleOwner {
 
         waitForMainThreadToRun(() -> repo1.setValue(resourceOf(res1)));
 
-        onMainLooper.assertThatWithin(testTimeout(), manager::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+        onMainLooper.assertThatWithin(testTimeout(), manager::requireMapData, valueSuppliedBy(Resource::getStatus, is(Success)));
 
         InOrder changeOrder = inOrder(repoObserver, observer);
         changeOrder.verify(repoObserver, times(2)).onChanged(repoCaptor.capture());
@@ -1374,7 +1373,7 @@ public class MapDataManagerTest implements LifecycleOwner {
 
         waitForMainThreadToRun(() -> {
             manager.refreshMapData();
-            repo2.setValue(BasicResource.success());
+            repo2.setValue(Resource.success());
 
             assertThat(repo1.requireValue().getStatus(), not(Resource.Status.Loading));
             assertThat(repo1.refreshCount, is(0));
@@ -1436,15 +1435,15 @@ public class MapDataManagerTest implements LifecycleOwner {
         resolveCondition.signal();
         resolveLock.unlock();
 
-        onMainLooper.assertThatWithin(testTimeout(), () -> manager.requireValue().getStatus(), is(Success));
+        onMainLooper.assertThatWithin(testTimeout(), () -> manager.requireMapData().getStatus(), is(Success));
 
         deactivateExecutorAndWait();
 
         waitForMainThreadToRun(() -> {
             verify(observer, times(2)).onChanged(changeCaptor.capture());
             Resource<? extends Map<URI, ? extends MapDataResource>> change = changeCaptor.getValue();
-            assertThat(change, sameInstance(manager.getValue()));
-            assertThat(manager.requireValue().getContent(), allOf(
+            assertThat(change, sameInstance(manager.getMapData().getValue()));
+            assertThat(manager.requireMapData().getContent(), allOf(
                 is(mapOf(res1Resolved, res2Resolved)),
                 hasEntry(is(res1.getUri()), valueSuppliedBy(MapDataResource::getResolved, sameInstance(res1Resolved.getResolved()))),
                 hasEntry(is(res2.getUri()), valueSuppliedBy(MapDataResource::getResolved, sameInstance(res2Resolved.getResolved())))));
@@ -1573,15 +1572,15 @@ public class MapDataManagerTest implements LifecycleOwner {
         resolveCondition.signal();
         resolveLock.unlock();
 
-        onMainLooper.assertThatWithin(testTimeout(), () -> manager.requireValue().getStatus(), is(Success));
+        onMainLooper.assertThatWithin(testTimeout(), () -> manager.requireMapData().getStatus(), is(Success));
 
         deactivateExecutorAndWait();
 
         verify(catProvider, times(1)).resolveResource(res1);
         verify(catProvider, never()).resolveResource(same(res1Again));
         verify(observer, times(2)).onChanged(changeCaptor.capture());
-        assertThat(manager.requireValue().getContent(), is(mapOf(res1Resolved)));
-        assertThat(manager.requireValue().getContent(), hasEntry(is(res1.getUri()),
+        assertThat(manager.requireMapData().getContent(), is(mapOf(res1Resolved)));
+        assertThat(manager.requireMapData().getContent(), hasEntry(is(res1.getUri()),
             valueSuppliedBy(MapDataResource::getResolved, sameInstance(res1Resolved.getResolved()))));
     }
 
@@ -1632,8 +1631,8 @@ public class MapDataManagerTest implements LifecycleOwner {
         verify(catProvider, times(1)).resolveResource(res1);
         verify(catProvider, times(1)).resolveResource(res2);
         verify(observer, times(2)).onChanged(changeCaptor.capture());
-        assertThat(manager.requireValue().getContent(), is(mapOf(res2)));
-        assertThat(manager.requireValue().getContent(), hasEntry(is(res2.getUri()), sameInstance(res2Resolved)));
+        assertThat(manager.requireMapData().getContent(), is(mapOf(res2)));
+        assertThat(manager.requireMapData().getContent(), hasEntry(is(res2.getUri()), sameInstance(res2Resolved)));
     }
 
     @Test
@@ -1681,8 +1680,8 @@ public class MapDataManagerTest implements LifecycleOwner {
         verify(catProvider, times(1)).resolveResource(res1);
         verify(catProvider, never()).resolveResource(res2);
         verify(observer, times(2)).onChanged(changeCaptor.capture());
-        assertThat(manager.requireValue().getContent(), is(mapOf(res1)));
-        assertThat(manager.requireValue().getContent(), hasEntry(is(res1.getUri()), valueSuppliedBy(MapDataResource::getResolved, sameInstance(res1Resolved.getResolved()))));
+        assertThat(manager.requireMapData().getContent(), is(mapOf(res1)));
+        assertThat(manager.requireMapData().getContent(), hasEntry(is(res1.getUri()), valueSuppliedBy(MapDataResource::getResolved, sameInstance(res1Resolved.getResolved()))));
     }
 
     @Test
@@ -1716,7 +1715,7 @@ public class MapDataManagerTest implements LifecycleOwner {
         }
         resolveLock.unlock();
 
-        waitForMainThreadToRun(() -> repo1.setValue(BasicResource.success()));
+        waitForMainThreadToRun(() -> repo1.setValue(Resource.success()));
 
         resolveLock.lock();
         resolveBlocked.set(false);
@@ -1725,7 +1724,7 @@ public class MapDataManagerTest implements LifecycleOwner {
 
         deactivateExecutorAndWait();
 
-        assertThat(manager.requireValue().getContent(), is(emptyMap()));
+        assertThat(manager.requireMapData().getContent(), is(emptyMap()));
         verify(catProvider).resolveResource(res1);
         verify(catProvider, never()).resolveResource(res2);
         verify(observer, times(2)).onChanged(changeCaptor.capture());
@@ -1802,7 +1801,7 @@ public class MapDataManagerTest implements LifecycleOwner {
         resolveLock.unlock();
 
         // change 4: Success with res1RepoResolved, res2RepoResolved
-        onMainLooper.assertThatWithin(testTimeout(), manager::getValue, valueSuppliedBy(Resource::getStatus, is(Success)));
+        onMainLooper.assertThatWithin(testTimeout(), manager::requireMapData, valueSuppliedBy(Resource::getStatus, is(Success)));
 
         deactivateExecutorAndWait();
 
@@ -1814,8 +1813,8 @@ public class MapDataManagerTest implements LifecycleOwner {
         verify(catProvider).resolveResource(res1);
         verify(dogProvider).resolveResource(res2);
         verify(observer, times(4)).onChanged(changeCaptor.capture());
-        List<Resource<Map<URI, ? extends MapDataResource>>> changes = changeCaptor.getAllValues();
-        Resource<Map<URI, ? extends MapDataResource>> change = changes.get(0);
+        List<Resource<Map<URI, MapDataResource>>> changes = changeCaptor.getAllValues();
+        Resource<Map<URI, MapDataResource>> change = changes.get(0);
         assertThat(change.getStatus(), is(Loading));
         assertThat(change.getContent(), is(emptyMap()));
         change = changes.get(1);
@@ -1831,7 +1830,7 @@ public class MapDataManagerTest implements LifecycleOwner {
             hasEntry(is(res2.getUri()), sameInstance(res2RepoResolved))));
         change = changes.get(3);
         assertThat(change.getStatus(), is(Success));
-        assertThat(change.getContent(), sameInstance(manager.requireValue().getContent()));
+        assertThat(change.getContent(), sameInstance(manager.requireMapData().getContent()));
     }
 
     @Test
@@ -1892,11 +1891,11 @@ public class MapDataManagerTest implements LifecycleOwner {
         verify(catProvider).resolveResource(res1);
         verify(catProvider).resolveResource(res3);
         verify(catProvider, never()).resolveResource(res2);
-        assertThat(manager.requireValue().getContent(), is(mapOf(res3)));
+        assertThat(manager.requireMapData().getContent(), is(mapOf(res3)));
         verify(observer, times(2)).onChanged(changeCaptor.capture());
         assertThat(changeCaptor.getAllValues().get(0).getStatus(), is(Loading));
         assertThat(changeCaptor.getAllValues().get(0).getContent(), is(emptyMap()));
         assertThat(changeCaptor.getAllValues().get(1).getStatus(), is(Success));
-        assertThat(changeCaptor.getAllValues().get(1).getContent(), sameInstance(manager.requireValue().getContent()));
+        assertThat(changeCaptor.getAllValues().get(1).getContent(), sameInstance(manager.requireMapData().getContent()));
     }
 }
