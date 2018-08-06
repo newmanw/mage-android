@@ -233,6 +233,7 @@ dependencies {
     androidTestImplementation 'com.github.tmurakami:dexopener:0.12.1'
     androidTestImplementation 'org.hamcrest:hamcrest-library:1.3'
     androidTestImplementation "org.mockito:mockito-android:$mockito_version"
+    androidTestImplementation "com.nhaarman.mockitokotlin2:mockito-kotlin:2.0.0-RC1"
     androidTestUtil 'com.android.support.test:orchestrator:1.0.2'
 }
 
