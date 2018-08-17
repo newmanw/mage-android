@@ -96,6 +96,13 @@ android {
     }
 }
 
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).all {
+    kotlinOptions {
+        jvmTarget = '1.8'
+        freeCompilerArgs = ['-Xjvm-default=enable']
+    }
+}
+
 def configurePom(pom) {
     pom.withXml {
         // for dependencies and exclusions
