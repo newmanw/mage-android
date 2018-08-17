@@ -8,6 +8,7 @@ import org.hamcrest.Matcher;
 import org.junit.Assert;
 import org.junit.rules.ExternalResource;
 
+import java.util.concurrent.Callable;
 import java.util.concurrent.FutureTask;
 import java.util.function.Supplier;
 
@@ -19,14 +20,25 @@ public class AsyncTesting {
      * @param task a {@link Runnable} task
      */
     public static void waitForMainThreadToRun(Runnable task) {
-        if (Looper.myLooper() == Looper.getMainLooper()) {
+        waitForMainThreadToCall((Callable<Void>) () -> {
             task.run();
-            return;
+            return null;
+        });
+    }
+
+    public static <R> R waitForMainThreadToCall(Callable<R> task) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            try {
+                return task.call();
+            }
+            catch (Exception e) {
+                throw new Error("callable threw exception", e);
+            }
         }
-        FutureTask<Void> blockUntilRun = new FutureTask<>(task, null);
+        FutureTask<R> blockUntilRun = new FutureTask<>(task);
         new Handler(Looper.getMainLooper()).post(blockUntilRun);
         try {
-            blockUntilRun.get();
+            return blockUntilRun.get();
         }
         catch (Throwable t) {
             throw new Error("error waiting for main thread task to complete", t);
