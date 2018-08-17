@@ -1,10 +1,9 @@
 package mil.nga.giat.mage.data
 
 import android.os.AsyncTask
+import android.os.Looper
 import android.support.annotation.MainThread
-import java.util.concurrent.CancellationException
 import java.util.concurrent.Executor
-import java.util.concurrent.Future
 import java.util.concurrent.RunnableFuture
 
 @MainThread
@@ -14,6 +13,9 @@ class UniqueAsyncTaskManager<Key, Result>(private val listener: TaskListener<Key
     private var disposed: Boolean = false
 
     fun execute(key: Key, task: RunnableFuture<Result>) {
+        if (Looper.getMainLooper() !== Looper.myLooper()) {
+            throw Error("task was submitted from non-main thread: $key")
+        }
         if (disposed) {
             throw IllegalStateException("$this is disposed but attempted to execute task for key $key")
         }
