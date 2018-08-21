@@ -48,26 +48,32 @@ sealed class MapElementSpec(val id: Any, val data: Any?) {
 
     interface MapElementSpecVisitor<out R> {
 
+        @JvmDefault
         fun visit(x: MapCircleSpec): R? {
             return null
         }
 
+        @JvmDefault
         fun visit(x: MapGroundOverlaySpec): R? {
             return null
         }
 
+        @JvmDefault
         fun visit(x: MapMarkerSpec): R? {
             return null
         }
 
+        @JvmDefault
         fun visit(x: MapPolygonSpec): R? {
             return null
         }
 
+        @JvmDefault
         fun visit(x: MapPolylineSpec): R? {
             return null
         }
 
+        @JvmDefault
         fun visit(x: MapTileOverlaySpec): R? {
             return null
         }
