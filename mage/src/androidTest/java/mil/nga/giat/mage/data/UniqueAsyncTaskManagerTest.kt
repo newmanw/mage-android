@@ -6,7 +6,7 @@ import com.nhaarman.mockitokotlin2.*
 import mil.nga.giat.mage.data.UniqueAsyncTaskManager.Task
 import mil.nga.giat.mage.test.AsyncTesting
 import mil.nga.giat.mage.test.AsyncTesting.waitForMainThreadToRun
-import org.hamcrest.Matchers.equalTo
+import org.hamcrest.Matchers.*
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -18,6 +18,7 @@ import java.util.concurrent.*
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.ReentrantLock
+import kotlin.math.exp
 
 class UniqueAsyncTaskManagerTest {
 
@@ -400,5 +401,192 @@ class UniqueAsyncTaskManagerTest {
 
         verify(listener, timeout(testTimeout)).taskFinished(testName.methodName, task, testName.methodName.reversed())
         assertThat(progressOnMainThread.get(), equalTo((1..5).sum()))
+    }
+
+    @Test
+    fun reflectsCorrectRunningAndPendingTasks() {
+
+        val taskLock = ReentrantLock(true)
+        val taskBlocked = AtomicBoolean(false)
+        val taskCondition = taskLock.newCondition()
+        val manager = UniqueAsyncTaskManager(listener, executor)
+        val task1 = object : Task<Int, String> {
+            override fun run(support: UniqueAsyncTaskManager.TaskSupport<Int>): String? {
+                return testName.methodName
+            }
+        }
+        val task2 = object :Task<Int, String> {
+            override fun run(support: UniqueAsyncTaskManager.TaskSupport<Int>): String? {
+                taskLock.lock()
+                taskBlocked.set(true)
+                while (taskBlocked.get()){
+                    taskCondition.signalAll()
+                    taskCondition.await()
+                }
+                taskLock.unlock()
+                return testName.methodName.reversed()
+            }
+        }
+
+        waitForMainThreadToRun {
+            manager.execute(testName.methodName, task1)
+
+            assertTrue(manager.isRunningTaskForKey(testName.methodName))
+            assertThat(manager.currentTaskForKey(testName.methodName)!!, sameInstance<Task<Int, String>>(task1))
+            assertThat(manager.pendingTaskForKey(testName.methodName), nullValue())
+
+            manager.execute(testName.methodName, task2)
+
+            assertTrue(manager.isRunningTaskForKey(testName.methodName))
+            assertThat(manager.currentTaskForKey(testName.methodName), sameInstance<Task<Int, String>>(task1))
+            assertThat(manager.pendingTaskForKey(testName.methodName), sameInstance<Task<Int, String>>(task2))
+        }
+
+        verify(listener, timeout(testTimeout)).taskCancelled(testName.methodName, task1)
+
+        taskLock.lock()
+        while (!taskBlocked.get()) {
+            taskCondition.await()
+        }
+        taskLock.unlock()
+
+        assertTrue(manager.isRunningTaskForKey(testName.methodName))
+        assertThat(manager.currentTaskForKey(testName.methodName), sameInstance<Task<Int, String>>(task2))
+        assertThat(manager.pendingTaskForKey(testName.methodName), nullValue())
+
+        taskLock.lock()
+        taskBlocked.set(false)
+        taskCondition.signalAll()
+        taskLock.unlock()
+
+        onMainThread.assertThatWithin(testTimeout, { manager.currentTaskForKey(testName.methodName) }, nullValue())
+
+        assertFalse(manager.isRunningTaskForKey(testName.methodName))
+        assertThat(manager.pendingTaskForKey(testName.methodName), nullValue())
+    }
+
+    @Test
+    fun cancelledTaskIsCurrentTaskInCancelNotification() {
+
+        val manager = UniqueAsyncTaskManager(listener, executor)
+        val task1 = object : Task<Int, String> {
+            override fun run(support: UniqueAsyncTaskManager.TaskSupport<Int>): String? {
+                return testName.methodName
+            }
+        }
+        val task2 = object : Task<Int, String> {
+            override fun run(support: UniqueAsyncTaskManager.TaskSupport<Int>): String? {
+                return testName.methodName.reversed()
+            }
+        }
+        whenever(listener.taskCancelled(testName.methodName, task1)).then {
+            assertThat(manager.currentTaskForKey(testName.methodName), sameInstance<Task<Int, String>>(task1))
+        }
+
+        waitForMainThreadToRun {
+            manager.execute(testName.methodName, task1)
+            manager.execute(testName.methodName, task2)
+        }
+
+        onMainThread.assertThatWithin(testTimeout, { manager.isRunningTaskForKey(testName.methodName) }, equalTo(false))
+
+        verify(listener, timeout(testTimeout)).taskFinished(testName.methodName, task2, testName.methodName.reversed())
+    }
+
+    @Test
+    fun finishedTaskIsCurrentTaskInFinishNotification() {
+
+        val manager = UniqueAsyncTaskManager(listener, executor)
+        val task1 = object : Task<Int, String> {
+            override fun run(support: UniqueAsyncTaskManager.TaskSupport<Int>): String? {
+                return testName.methodName.reversed()
+            }
+        }
+        val finishedWasCurrent = AtomicBoolean(false)
+        whenever(listener.taskFinished(testName.methodName, task1, testName.methodName.reversed())).then {
+            finishedWasCurrent.set(manager.currentTaskForKey(testName.methodName) === task1)
+        }
+
+        waitForMainThreadToRun { manager.execute(testName.methodName, task1) }
+
+        onMainThread.assertThatWithin(testTimeout, finishedWasCurrent::get, equalTo(true))
+
+        verify(listener, timeout(testTimeout)).taskFinished(testName.methodName, task1, testName.methodName.reversed())
+    }
+
+    @Test
+    fun preemptingTaskIsPendingTaskInPreemptNotification() {
+
+        val manager = UniqueAsyncTaskManager(listener, executor)
+        val taskLock = ReentrantLock(true)
+        val taskBlocked = AtomicBoolean(false)
+        val taskCondition = taskLock.newCondition()
+        val task1 = object : Task<Int, String> {
+            override fun run(support: UniqueAsyncTaskManager.TaskSupport<Int>): String? {
+                taskLock.lock()
+                taskBlocked.set(true)
+                while (taskBlocked.get()) {
+                    taskCondition.signalAll()
+                    taskCondition.await()
+                }
+                taskLock.unlock()
+                return testName.methodName
+            }
+        }
+        val task2 = object : Task<Int, String> {
+            override fun run(support: UniqueAsyncTaskManager.TaskSupport<Int>): String? {
+                throw Error("preempted task should not run")
+            }
+        }
+        val task3 = object : Task<Int, String> {
+            override fun run(support: UniqueAsyncTaskManager.TaskSupport<Int>): String? {
+                return testName.methodName.reversed()
+            }
+        }
+        val preemptingWasPending = AtomicBoolean(false)
+        whenever(listener.taskPreempted(testName.methodName, task2)).then {
+            preemptingWasPending.set(manager.pendingTaskForKey(testName.methodName) === task3)
+        }
+
+        waitForMainThreadToRun { manager.execute(testName.methodName, task1) }
+
+        taskLock.lock()
+        while (!taskBlocked.get()) {
+            taskCondition.await()
+        }
+        taskLock.unlock()
+
+        waitForMainThreadToRun {
+            manager.execute(testName.methodName, task2)
+            manager.execute(testName.methodName, task3)
+        }
+
+        taskLock.lock()
+        taskBlocked.set(false)
+        taskCondition.signalAll()
+        taskLock.unlock()
+
+        onMainThread.assertThatWithin(testTimeout, { manager.isRunningTaskForKey(testName.methodName) }, equalTo(false))
+
+        val order = inOrder(listener)
+        order.verify(listener).taskPreempted(testName.methodName, task2)
+        order.verify(listener).taskCancelled(testName.methodName, task1)
+        order.verify(listener).taskFinished(testName.methodName, task3, testName.methodName.reversed())
+        assertTrue(preemptingWasPending.get())
+    }
+
+    @Test
+    fun submittingTaskInsideCancelNotification() {
+        fail("unimplemented")
+    }
+
+    @Test
+    fun submittingTaskInsidePreemptNotification() {
+        fail("unimplemented")
+    }
+
+    @Test
+    fun submittingTaskInsideFinishNotification() {
+        fail("unimplemented")
     }
 }

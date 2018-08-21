@@ -29,11 +29,9 @@ class UniqueAsyncTaskManager<Key, Progress, Result>(private val listener: TaskLi
             return
         }
         val (current, pending) = taskPair
-        if (pending != null) {
-            cancel(pending)
-        }
         tasks[key] = TaskPair(current, managedTask)
         current.cancel(false)
+        pending?.cancel(false)
     }
 
     fun execute(key: Key, task: (support: TaskSupport<Progress>) -> Result) {
@@ -49,15 +47,11 @@ class UniqueAsyncTaskManager<Key, Progress, Result>(private val listener: TaskLi
         val keys = tasks.keys.toList()
         for (key in keys) {
             val taskPair = tasks.remove(key)!!
-            cancel(taskPair.current)
+            taskPair.current.cancel(false)
             if (taskPair.pending != null) {
-                cancel(taskPair.pending)
+                taskPair.pending.cancel(false)
             }
         }
-    }
-
-    private fun cancel(task: UniqueAsyncTask<Key, Progress, Result>) {
-        task.cancel(false)
     }
 
     private fun onTaskFinished(finished: UniqueAsyncTask<Key, Progress, Result>, result: Result?) {
@@ -65,27 +59,40 @@ class UniqueAsyncTaskManager<Key, Progress, Result>(private val listener: TaskLi
             return
         }
         val key = finished.key
-        var taskPair = tasks.remove(key)!!
-        if (finished === taskPair.current) {
+        val (current, pending) = tasks[key]!!
+        if (finished === current) {
             if (finished.isCancelled) {
                 listener.taskCancelled(key, finished.delegate)
             }
             else {
                 listener.taskFinished(key, finished.delegate, result)
             }
-            if (taskPair.pending != null) {
-                taskPair = TaskPair(taskPair.pending!!, null)
-                tasks[key] = taskPair
-                taskPair.current.executeOnExecutor(executor)
+            if (pending == null) {
+                tasks.remove(key)
+            }
+            else {
+                tasks[key] = TaskPair(pending, null)
+                pending.executeOnExecutor(executor)
             }
         }
         else if (finished.isCancelled) {
             listener.taskPreempted(finished.key, finished.delegate)
-            tasks[key] = taskPair
         }
         else {
             throw IllegalStateException("finished task was not cancelled but matched pending task for key ${finished.key}")
         }
+    }
+
+    fun isRunningTaskForKey(key: Key): Boolean {
+        return currentTaskForKey(key) != null
+    }
+
+    fun currentTaskForKey(key: Key): Task<Progress, Result>? {
+        return tasks[key]?.current?.delegate
+    }
+
+    fun pendingTaskForKey(key: Key): Task<Progress, Result>? {
+        return tasks[key]?.pending?.delegate
     }
 
     interface TaskSupport<Progress> {
