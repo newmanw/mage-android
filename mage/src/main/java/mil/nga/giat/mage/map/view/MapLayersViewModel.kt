@@ -1,15 +1,14 @@
 package mil.nga.giat.mage.map.view
 
-import android.annotation.SuppressLint
 import android.arch.lifecycle.LiveData
 import android.arch.lifecycle.MediatorLiveData
 import android.arch.lifecycle.MutableLiveData
 import android.arch.lifecycle.ViewModel
-import android.os.AsyncTask
 import android.support.annotation.UiThread
 import com.google.android.gms.maps.model.LatLngBounds
 import mil.nga.giat.mage.data.Resource
 import mil.nga.giat.mage.data.Resource.Status.Loading
+import mil.nga.giat.mage.data.UniqueAsyncTaskManager
 import mil.nga.giat.mage.map.*
 import mil.nga.giat.mage.map.cache.MapDataManager
 import mil.nga.giat.mage.map.cache.MapDataProvider
@@ -17,9 +16,9 @@ import mil.nga.giat.mage.map.cache.MapLayerDescriptor
 import mil.nga.giat.mage.utils.EnumLiveEvents
 import mil.nga.giat.mage.utils.LiveEvents
 import java.util.*
+import java.util.concurrent.Executor
 import kotlin.Comparator
 import kotlin.collections.HashMap
-import kotlin.collections.HashSet
 
 
 private val defaultLayerOrder = Comparator<MapLayersViewModel.Layer> { a, b ->
@@ -37,13 +36,17 @@ private val defaultLayerOrder = Comparator<MapLayersViewModel.Layer> { a, b ->
 }
 
 @UiThread
-class MapLayersViewModel(private val mapDataManager: MapDataManager) : ViewModel() {
+class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: Executor) : ViewModel() {
 
     private val layerOrder = ArrayList<Layer>()
     private val mediatedLayers = MediatorLiveData<Resource<List<Layer>>>()
     private val queryForLayer = HashMap<Layer, MapDataProvider.LayerQuery>()
-    private val fetchForLayer = HashMap<Layer, FetchLayerElements>()
     private val elementsForLayer = HashMap<Layer, MutableLiveData<Resource<Map<Any, MapElementSpec>>>>()
+    private val elementLoadTasks = UniqueAsyncTaskManager(object: UniqueAsyncTaskManager.TaskListener<Layer, Void, Map<Any, MapElementSpec>> {
+        override fun taskFinished(key: Layer, task: UniqueAsyncTaskManager.Task<Void, Map<Any, MapElementSpec>>, result: Map<Any, MapElementSpec>?) {
+            elementsForLayer[key]?.value = Resource.success(result!!)
+        }
+    }, executor)
     private val triggerLayerEvent = object: EnumLiveEvents<LayerEventType, LayerListener>(LayerEventType::class.java) {
 
         fun zOrderShift(range: IntRange) {
@@ -53,11 +56,8 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager) : ViewModel
         fun layerVisibility(layer: Layer, position: Int) {
             super.trigger(LayerEventType.Visibility, Pair(layer, position))
         }
-
-        fun elementsChanged(layer: Layer, elements: Map<Any, MapElementSpec>) {
-
-        }
     }
+
     private var currentBounds: LatLngBounds? = null
 
     val layersInZOrder: LiveData<Resource<List<Layer>>> = mediatedLayers
@@ -70,23 +70,45 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager) : ViewModel
                 return@addSource
             }
             val mutableLayers = mapDataManager.layers
-            val cursor = layerOrder.iterator()
+            var cursor = layerOrder.listIterator()
+            // TODO: track z-indexes and emit events so visible layers get updated
+            var firstZIndexChange = -1
+            var cursorPos = 0
             while (cursor.hasNext()) {
                 val layer = cursor.next()
                 if (mutableLayers.remove(layer.desc.layerUri) == null) {
                     val elements = elementsForLayer.remove(layer)
+                    // TODO: post value or keep serial here, collect and do all at once in another loop below?
                     elements?.value = null
                     cursor.remove()
+                    if (firstZIndexChange < 0) {
+                        firstZIndexChange = cursorPos
+                    }
                     // TODO: layer removed notification, or suffice to set elements live data value to null?
                 }
+                else {
+                    // TODO: handle updated layers that might need to reload elements
+                    cursorPos++
+                }
             }
-            var zIndex = layerOrder.size
+            if (firstZIndexChange < 0) {
+                firstZIndexChange = layerOrder.size
+            }
+            // TODO: z-index shift event or just the live data change?
+            cursorPos = firstZIndexChange
+            cursor = layerOrder.listIterator(cursorPos)
+            while (cursor.hasNext()) {
+                val layer = cursor.next()
+                cursor.set(layer.copy(zIndex = cursorPos++))
+            }
             mutableLayers.values.asSequence()
-                    .map { Layer(it, mapDataManager.resourceForLayer(it)!!.requireResolved().name, false) }
+                    .map { Layer(it, mapDataManager.resourceForLayer(it)!!.requireResolved().name, false, cursorPos++) }
                     .sortedWith(defaultLayerOrder)
                     .forEach {
                         layerOrder.add(it)
-                        elementsForLayer[it] = MutableLiveData()
+                        val elements = MutableLiveData<Resource<Map<Any, MapElementSpec>>>()
+                        elements.value = Resource.success(emptyMap())
+                        elementsForLayer[it] = elements
                     }
             mediatedLayers.value = Resource.success(layerOrder)
         }
@@ -102,23 +124,10 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager) : ViewModel
         }
         val pos = layerOrder.indexOf(layer)
         layerOrder[pos] = layerOrder[pos].copy(isVisible = true)
-        var layerQuery = queryForLayer[layer]
-        val provider = mapDataManager.providers[layer.desc.dataType]!!
-        if (layerQuery == null) {
-            layerQuery = provider.createQueryForLayer(layer.desc)
-            if (layerQuery.hasDynamicElements()) {
-                if (!layerQuery.supportsDynamicFetch()) {
-                    // TODO: on bg thread get all the elements and add to an in-memory spatial index
-                    // wrap in own layer query impl that will cull the full set of elements
-                    // maybe also use some spatial LRU cache
-                }
-            }
-            queryForLayer[layer] = layerQuery
-            if (currentBounds != null) {
-                FetchLayerElements(layer, layerQuery, currentBounds!!).executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR)
-            }
-        }
         triggerLayerEvent.layerVisibility(layer, pos)
+        val elements = elementsForLayer[layer]!!
+        elements.value = Resource.loading(elements.value!!.content!!)
+        elementLoadTasks.execute(layer, LoadLayerElements(layer, currentBounds!!, queryForLayer[layer], mapDataManager.providers[layer.desc.dataType]!!))
     }
 
     fun moveZIndex(from: Int, to: Int): Boolean {
@@ -127,8 +136,8 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager) : ViewModel
         val low = Math.min(from, to)
         val shiftRange = low..(from + to - low)
         for (z in shiftRange) {
-            val layer = layerOrder[z]
-            layerOrder[z] = layer.copy(zIndex = z)
+            val shiftedLayer = layerOrder[z]
+            layerOrder[z] = shiftedLayer.copy(zIndex = z)
         }
         triggerLayerEvent.zOrderShift(low..(from + to - low))
         return true
@@ -158,21 +167,7 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager) : ViewModel
     }
 
     override fun onCleared() {
-        val fetchLayers= ArrayList(fetchForLayer.keys)
-        for (layer in fetchLayers) {
-            fetchForLayer.remove(layer)!!.cancel(false)
-        }
-    }
-
-    private fun onLayerFetchFinished(fetch: FetchLayerElements, elements: Map<Any, MapElementSpec>? = null, removed: Map<Any, MapElementSpec>? = null) {
-        val expectedFetch = fetchForLayer[fetch.layer]
-        if (fetch === expectedFetch) {
-            fetchForLayer.remove(fetch.layer)
-            if (fetch.isCancelled) {
-                return
-            }
-        }
-        elementsForLayer[fetch.layer]
+        elementLoadTasks.dispose()
     }
 
     data class Layer(
@@ -207,8 +202,8 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager) : ViewModel
             }
         },
         Visibility {
-            override fun deliver(listener: LayerListener, pair: Any?) {
-                val item = pair as Pair<Layer, Int>
+            override fun deliver(listener: LayerListener, data: Any?) {
+                val pair = data as Pair<Layer, Int>
                 listener.layerVisibilityChanged(pair.first, pair.second)
             }
         },
@@ -218,40 +213,6 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager) : ViewModel
                 listener.layerElementsChanged(triple.first, triple.second, triple.third)
             }
         },
-    }
-
-    @SuppressLint("StaticFieldLeak")
-    private inner class FetchLayerElements(val layer: Layer, val layerQuery: MapDataProvider.LayerQuery, val bounds: LatLngBounds) : AsyncTask<Void?, Void?, Map<Any, MapElementSpec>>() {
-
-        override fun doInBackground(vararg params: Void?): Map<Any, MapElementSpec> {
-            return layerQuery.fetchMapElements(bounds)
-        }
-
-        override fun onPostExecute(result: Map<Any, MapElementSpec>?) {
-            onLayerFetchFinished(this, result)
-        }
-
-        override fun onCancelled() {
-            onLayerFetchFinished(this)
-        }
-    }
-
-    private inner class PendingLayerQuery : MapDataProvider.LayerQuery {
-
-        override fun hasDynamicElements(): Boolean {
-            return false
-        }
-
-        override fun supportsDynamicFetch(): Boolean {
-            return false
-        }
-
-        override fun fetchMapElements(bounds: LatLngBounds): Map<Any, MapElementSpec> {
-            return emptyMap()
-        }
-
-        override fun close() {
-        }
     }
 
     private class SetSpecZIndex private constructor(private val zIndex: Int) : MapElementSpec.MapElementSpecVisitor<Void> {
@@ -284,6 +245,23 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager) : ViewModel
         override fun visit(x: MapTileOverlaySpec): Void? {
             x.options.zIndex(zIndex.toFloat())
             return null
+        }
+    }
+
+    private class LoadLayerElements
+        @UiThread
+        constructor(
+            val layer: Layer,
+            val bounds: LatLngBounds,
+            var query: MapDataProvider.LayerQuery?,
+            var provider: MapDataProvider?)
+        : UniqueAsyncTaskManager.Task<Void, Map<Any, MapElementSpec>> {
+
+        override fun run(support: UniqueAsyncTaskManager.TaskSupport<Void>): Map<Any, MapElementSpec> {
+            if (query == null) {
+                query = provider!!.createQueryForLayer(layer.desc)
+            }
+            return query!!.fetchMapElements(bounds)
         }
     }
 }
