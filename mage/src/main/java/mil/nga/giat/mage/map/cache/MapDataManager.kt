@@ -51,6 +51,7 @@ class MapDataManager(config: Config) : LifecycleOwner {
     private val changeInProgressForRepository = HashMap<String, ResolveRepositoryChangeTask>()
     private val mutableMapData = MutableLiveData<Resource<Map<URI, MapDataResource>>>()
 
+
     val mapData: LiveData<Resource<Map<URI, MapDataResource>>> = mutableMapData
 
     fun requireMapData(): Resource<Map<URI, MapDataResource>> { return mutableMapData.value!! }
@@ -63,10 +64,10 @@ class MapDataManager(config: Config) : LifecycleOwner {
      * Return a non-null, mutable map of all layers from every [resource][resources], keyed by [layer URI][MapLayerDescriptor.layerUri].
      * Changes to the returned mutable map have no effect on this [MapDataManager]'s layers and resources.
      */
-    val layers: MutableMap<URI, MapLayerDescriptor> get() = resources.values.flatMap({ it.layers.values }).associateBy({ it.layerUri }).toMutableMap()
+    val layers: MutableMap<URI, MapLayerDescriptor> get() = resources.values.flatMap { it.layers.values }.associateBy { it.layerUri }.toMutableMap()
 
     init {
-        providers = Collections.unmodifiableMap(config.providers!!.associateByTo(LinkedHashMap(), { it::class.java }))
+        providers = Collections.unmodifiableMap(config.providers!!.associateByTo(LinkedHashMap()) { it.javaClass })
         repositories = config.repositories!!.asList()
         executor = config.executor!!
         lifecycle.markState(Lifecycle.State.RESUMED)
@@ -102,7 +103,7 @@ class MapDataManager(config: Config) : LifecycleOwner {
 
     /**
      * Discover new resources available in known [locations][MapDataRepository], then remove defunct resources.
-     * One or more asynchronous notifications to [observers][observe] will result as data from the various
+     * One or more asynchronous notifications to [observers][mapData] will result as data from the various
      * [repositories][MapDataRepository] loads and [resolves][MapDataProvider.resolveResource].
      */
     fun refreshMapData() {
@@ -206,7 +207,7 @@ class MapDataManager(config: Config) : LifecycleOwner {
         val change = changeInProgressForRepository.remove(repo.id)!!
         val result = change.result
         resources += result.resolved
-        val status = if (repositories.any({ it.value?.status == Loading })) Loading else Success
+        val status = if (repositories.any { it.value?.status == Loading }) Loading else Success
         // TODO: check failed and error state
         mutableMapData.value = Resource(resources, status)
     }
@@ -257,7 +258,7 @@ class MapDataManager(config: Config) : LifecycleOwner {
     ): AsyncTask<Void, Pair<MapDataResource, MapDataResolveException?>, MapDataResource?>() {
 
         val existingResolved = resourcesForRepo(repository)
-        val unresolvedRemaining: SortedSet<MapDataResource> = TreeSet({ a, b -> a.uri.compareTo(b.uri) })
+        val unresolvedRemaining: SortedSet<MapDataResource> = TreeSet { a, b -> a.uri.compareTo(b.uri) }
         val result = ResolveRepositoryChangeResult()
         val stringValue: String
         var backgroundUnresolved: Array<MapDataResource>
@@ -286,10 +287,7 @@ class MapDataManager(config: Config) : LifecycleOwner {
             }
             for (provider in providers.values) {
                 if (provider.canHandleResource(resource)) {
-                    val resolvedResource = provider.resolveResource(resource)
-                    if (resolvedResource != null) {
-                        return resolvedResource
-                    }
+                    return provider.resolveResource(resource)
                 }
             }
             throw MapDataResolveException(uri, "no cache provider could handle resource $resource")
