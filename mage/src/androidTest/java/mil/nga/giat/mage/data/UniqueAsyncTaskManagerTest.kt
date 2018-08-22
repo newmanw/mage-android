@@ -420,7 +420,7 @@ class UniqueAsyncTaskManagerTest {
                 taskBlocked.set(true)
                 while (taskBlocked.get()){
                     taskCondition.signalAll()
-                    taskCondition.await()
+                    taskCondition.await(testTimeout, TimeUnit.MILLISECONDS)
                 }
                 taskLock.unlock()
                 return testName.methodName.reversed()
@@ -445,7 +445,7 @@ class UniqueAsyncTaskManagerTest {
 
         taskLock.lock()
         while (!taskBlocked.get()) {
-            taskCondition.await()
+            taskCondition.await(testTimeout, TimeUnit.MILLISECONDS)
         }
         taskLock.unlock()
 
@@ -526,7 +526,7 @@ class UniqueAsyncTaskManagerTest {
                 taskBlocked.set(true)
                 while (taskBlocked.get()) {
                     taskCondition.signalAll()
-                    taskCondition.await()
+                    taskCondition.await(testTimeout, TimeUnit.MILLISECONDS)
                 }
                 taskLock.unlock()
                 return "cancelled"
@@ -551,7 +551,7 @@ class UniqueAsyncTaskManagerTest {
 
         taskLock.lock()
         while (!taskBlocked.get()) {
-            taskCondition.await()
+            taskCondition.await(testTimeout, TimeUnit.MILLISECONDS)
         }
         taskLock.unlock()
 
@@ -597,7 +597,7 @@ class UniqueAsyncTaskManagerTest {
                 taskBlocked.set(true)
                 while (taskBlocked.get()) {
                     taskCondition.signalAll()
-                    taskCondition.await()
+                    taskCondition.await(testTimeout, TimeUnit.MILLISECONDS)
                 }
                 taskLock.unlock()
                 val support = invoc.arguments[0] as UniqueAsyncTaskManager.TaskSupport<Int>
@@ -611,7 +611,7 @@ class UniqueAsyncTaskManagerTest {
 
         taskLock.lock()
         while (!taskBlocked.get()) {
-            taskCondition.await()
+            taskCondition.await(testTimeout, TimeUnit.MILLISECONDS)
         }
         taskLock.unlock()
 
@@ -642,7 +642,7 @@ class UniqueAsyncTaskManagerTest {
                 taskBlocked.set(true)
                 while (taskBlocked.get()) {
                     taskCondition.signalAll()
-                    taskCondition.await()
+                    taskCondition.await(testTimeout, TimeUnit.MILLISECONDS)
                 }
                 taskLock.unlock()
                 val support = invoc.arguments[0] as UniqueAsyncTaskManager.TaskSupport<Int>
@@ -658,7 +658,7 @@ class UniqueAsyncTaskManagerTest {
 
         taskLock.lock()
         while (!taskBlocked.get()) {
-            taskCondition.await()
+            taskCondition.await(testTimeout, TimeUnit.MILLISECONDS)
         }
         taskLock.unlock()
 
@@ -682,8 +682,48 @@ class UniqueAsyncTaskManagerTest {
     }
 
     @Test
-    fun deliversProgressFromCancelledBeforeCancellationAndBeforePendingTaskRuns() {
-        fail("unimplemented")
+    fun deliversProgressFromCancelledTaskBeforeCancellationAndBeforePendingTaskRuns() {
+
+        val manager = UniqueAsyncTaskManager(listener, executor)
+        val taskLock = ReentrantLock(true)
+        val taskBlocked = AtomicBoolean(false)
+        val taskCondition = taskLock.newCondition()
+        val task = object : Task<Int, String> {
+            override fun run(support: UniqueAsyncTaskManager.TaskSupport<Int>): String? {
+                taskLock.lock()
+                taskBlocked.set(true)
+                while (taskBlocked.get()) {
+                    taskCondition.signalAll()
+                    taskCondition.await(testTimeout, TimeUnit.MILLISECONDS)
+                }
+                taskLock.unlock()
+                support.reportProgressToMainThread(1)
+                support.reportProgressToMainThread(2)
+                return "cancelled"
+            }
+        }
+
+        waitForMainThreadToRun { manager.execute(testName.methodName, task) }
+
+        taskLock.lock()
+        while (!taskBlocked.get()) {
+            taskCondition.await(testTimeout, TimeUnit.MILLISECONDS)
+        }
+        taskLock.unlock()
+
+        waitForMainThreadToRun { manager.cancelTasksForKey(testName.methodName) }
+
+        taskLock.lock()
+        taskBlocked.set(false)
+        taskCondition.signalAll()
+        taskLock.unlock()
+
+        onMainThread.assertThatWithin(testTimeout, { manager.isRunningTaskForKey(testName.methodName) }, equalTo(false))
+
+        val order = inOrder(listener)
+        order.verify(listener).taskProgress(testName.methodName, task, 1)
+        order.verify(listener).taskProgress(testName.methodName, task, 2)
+        order.verify(listener).taskCancelled(testName.methodName, task, "cancelled")
     }
 
     @Test

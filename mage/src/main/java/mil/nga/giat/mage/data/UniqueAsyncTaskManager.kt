@@ -173,6 +173,8 @@ class UniqueAsyncTaskManager<Key, Progress, Result>(private val listener: TaskLi
 
         override fun reportProgressToMainThread(progress: Progress) {
             if (isCancelled) {
+                // AsyncTask doesn't deliver progress updates after cancellation, but throwing
+                // away work that's already been done seems a terrible shame
                 val progressMsg = cancelledProgressHandler.obtainMessage(0, progress)
                 cancelledProgressHandler.sendMessage(progressMsg)
             }
