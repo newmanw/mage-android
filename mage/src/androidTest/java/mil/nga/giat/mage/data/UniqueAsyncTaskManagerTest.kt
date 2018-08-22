@@ -13,13 +13,12 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TestName
-import java.lang.Integer.sum
 import java.util.concurrent.*
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.ReentrantLock
-import kotlin.math.exp
 
+@Suppress("UNCHECKED_CAST")
 class UniqueAsyncTaskManagerTest {
 
     private lateinit var listener: UniqueAsyncTaskManager.TaskListener<String, Int, String>
@@ -266,7 +265,7 @@ class UniqueAsyncTaskManagerTest {
                 }
                 taskLock.unlock()
                 cancelledFlag.set(support.isCancelled())
-                return testName.methodName
+                return "cancelled"
             }
         }
         val finishedTask = object : Task<Int, String> {
@@ -276,7 +275,7 @@ class UniqueAsyncTaskManagerTest {
         }
         val cancelledOnMainThread = AtomicBoolean(false)
         val finishedOnMainThread = AtomicBoolean(false)
-        whenever(listener.taskCancelled(testName.methodName, cancelledTask)).then { _ ->
+        whenever(listener.taskCancelled(testName.methodName, cancelledTask, "cancelled")).then { _ ->
             cancelledOnMainThread.set(Looper.getMainLooper() === Looper.myLooper())
         }
         whenever(listener.taskFinished(eq(testName.methodName), same(finishedTask), any())).then { _ ->
@@ -301,7 +300,7 @@ class UniqueAsyncTaskManagerTest {
         onMainThread.assertThatWithin(testTimeout, finishedOnMainThread::get, equalTo(true))
 
         val order = inOrder(listener)
-        order.verify(listener).taskCancelled(testName.methodName, cancelledTask)
+        order.verify(listener).taskCancelled(testName.methodName, cancelledTask, "cancelled")
         order.verify(listener).taskFinished(testName.methodName, finishedTask, testName.methodName.reversed())
         assertTrue(cancelledOnMainThread.get())
         assertTrue(cancelledFlag.get())
@@ -323,7 +322,7 @@ class UniqueAsyncTaskManagerTest {
                     taskCondition.await(testTimeout, TimeUnit.MILLISECONDS)
                 }
                 taskLock.unlock()
-                return testName.methodName
+                return "cancelled"
             }
         }
         val preemptedTask = object : Task<Int, String> {
@@ -339,7 +338,7 @@ class UniqueAsyncTaskManagerTest {
         val cancelledOnMainThread = AtomicBoolean(false)
         val preemptedOnMainThread = AtomicBoolean(false)
         val finishedOnMainThread = AtomicBoolean(false)
-        whenever(listener.taskCancelled(testName.methodName, cancelledTask)).then { _ ->
+        whenever(listener.taskCancelled(testName.methodName, cancelledTask, "cancelled")).then { _ ->
             cancelledOnMainThread.set(Looper.getMainLooper() === Looper.myLooper())
         }
         whenever(listener.taskPreempted(testName.methodName, preemptedTask)).then { _ ->
@@ -370,7 +369,7 @@ class UniqueAsyncTaskManagerTest {
         val order = inOrder(listener)
         // TODO: the order of preempted vs. cancelled is kind of strange but right now it's based on when the underlying async task finishes
         order.verify(listener).taskPreempted(testName.methodName, preemptedTask)
-        order.verify(listener).taskCancelled(testName.methodName, cancelledTask)
+        order.verify(listener).taskCancelled(testName.methodName, cancelledTask, "cancelled")
         order.verify(listener).taskFinished(testName.methodName, finishedTask, testName.methodName.reversed())
         assertTrue(preemptedOnMainThread.get())
         assertTrue(cancelledOnMainThread.get())
@@ -412,7 +411,7 @@ class UniqueAsyncTaskManagerTest {
         val manager = UniqueAsyncTaskManager(listener, executor)
         val task1 = object : Task<Int, String> {
             override fun run(support: UniqueAsyncTaskManager.TaskSupport<Int>): String? {
-                return testName.methodName
+                return "cancelled"
             }
         }
         val task2 = object :Task<Int, String> {
@@ -442,7 +441,7 @@ class UniqueAsyncTaskManagerTest {
             assertThat(manager.pendingTaskForKey(testName.methodName), sameInstance<Task<Int, String>>(task2))
         }
 
-        verify(listener, timeout(testTimeout)).taskCancelled(testName.methodName, task1)
+        verify(listener, timeout(testTimeout)).taskCancelled(testName.methodName, task1, "cancelled")
 
         taskLock.lock()
         while (!taskBlocked.get()) {
@@ -479,7 +478,7 @@ class UniqueAsyncTaskManagerTest {
                 return testName.methodName.reversed()
             }
         }
-        whenever(listener.taskCancelled(testName.methodName, task1)).then {
+        whenever(listener.taskCancelled(testName.methodName, task1, testName.methodName)).then {
             assertThat(manager.currentTaskForKey(testName.methodName), sameInstance<Task<Int, String>>(task1))
         }
 
@@ -530,7 +529,7 @@ class UniqueAsyncTaskManagerTest {
                     taskCondition.await()
                 }
                 taskLock.unlock()
-                return testName.methodName
+                return "cancelled"
             }
         }
         val task2 = object : Task<Int, String> {
@@ -570,9 +569,121 @@ class UniqueAsyncTaskManagerTest {
 
         val order = inOrder(listener)
         order.verify(listener).taskPreempted(testName.methodName, task2)
-        order.verify(listener).taskCancelled(testName.methodName, task1)
+        order.verify(listener).taskCancelled(testName.methodName, task1, "cancelled")
         order.verify(listener).taskFinished(testName.methodName, task3, testName.methodName.reversed())
         assertTrue(preemptingWasPending.get())
+    }
+
+    @Test
+    fun cancellingTaskForKeyWithNoRunningTaskDoesNotCrash() {
+
+        val manager = UniqueAsyncTaskManager(listener, executor)
+        manager.cancelTasksForKey("no_tasks")
+
+        verifyNoMoreInteractions(listener)
+    }
+
+    @Test
+    fun cancelsCurrentTaskForKeyWhenNoTaskIsPending() {
+
+        val manager = UniqueAsyncTaskManager(listener, executor)
+        val taskLock = ReentrantLock(true)
+        val taskBlocked = AtomicBoolean(false)
+        val taskCondition = taskLock.newCondition()
+        val taskCancelled = AtomicBoolean(false)
+        val task1 = mock<Task<Int, String>> {
+            on { run(any()) }.then { invoc ->
+                taskLock.lock()
+                taskBlocked.set(true)
+                while (taskBlocked.get()) {
+                    taskCondition.signalAll()
+                    taskCondition.await()
+                }
+                taskLock.unlock()
+                val support = invoc.arguments[0] as UniqueAsyncTaskManager.TaskSupport<Int>
+                taskCancelled.set(support.isCancelled())
+                "cancelled"
+            }
+        }
+        val task2 = mock<Task<Int, String>>()
+
+        waitForMainThreadToRun { manager.execute(testName.methodName, task1) }
+
+        taskLock.lock()
+        while (!taskBlocked.get()) {
+            taskCondition.await()
+        }
+        taskLock.unlock()
+
+        waitForMainThreadToRun { manager.cancelTasksForKey(testName.methodName) }
+
+        taskLock.lock()
+        taskBlocked.set(false)
+        taskCondition.signalAll()
+        taskLock.unlock()
+
+        onMainThread.assertThatWithin(testTimeout, { manager.isRunningTaskForKey(testName.methodName) }, equalTo(false))
+
+        verify(listener, timeout(testTimeout)).taskCancelled(testName.methodName, task1, "cancelled")
+    }
+
+    @Test
+    fun cancelsPendingTaskForKeyWhenCurrentTaskHasAlreadyBeenCancelled() {
+
+        val manager = UniqueAsyncTaskManager(listener, executor)
+        val taskLock = ReentrantLock(true)
+        val taskBlocked = AtomicBoolean(false)
+        val taskCondition = taskLock.newCondition()
+
+        val taskCancelled = AtomicBoolean(false)
+        val task1 = mock<Task<Int, String>> {
+            on { run(any()) }.then { invoc ->
+                taskLock.lock()
+                taskBlocked.set(true)
+                while (taskBlocked.get()) {
+                    taskCondition.signalAll()
+                    taskCondition.await()
+                }
+                taskLock.unlock()
+                val support = invoc.arguments[0] as UniqueAsyncTaskManager.TaskSupport<Int>
+                taskCancelled.set(support.isCancelled())
+                "cancelled"
+            }
+        }
+        val task2 = mock<Task<Int, String>> {
+            on { run(any()) }.thenReturn(null)
+        }
+
+        waitForMainThreadToRun { manager.execute(testName.methodName, task1) }
+
+        taskLock.lock()
+        while (!taskBlocked.get()) {
+            taskCondition.await()
+        }
+        taskLock.unlock()
+
+        waitForMainThreadToRun {
+            manager.execute(testName.methodName, task2)
+            manager.cancelTasksForKey(testName.methodName)
+        }
+
+        taskLock.lock()
+        taskBlocked.set(false)
+        taskCondition.signalAll()
+        taskLock.unlock()
+
+        onMainThread.assertThatWithin(testTimeout, { manager.isRunningTaskForKey(testName.methodName) }, equalTo(false))
+
+        verify(listener).taskCancelled(testName.methodName, task1, "cancelled")
+        verify(listener).taskPreempted(testName.methodName, task2)
+        verify(listener, never()).taskCancelled(eq(testName.methodName), same(task2), any())
+        verify(task2, never()).run(any())
+        assertTrue(taskCancelled.get())
+    }
+
+    @Test
+    fun deliversProgressFromCancelledBeforeCancellationAndBeforePendingTaskRuns() {
+        fail("unimplemented")
     }
 
     @Test

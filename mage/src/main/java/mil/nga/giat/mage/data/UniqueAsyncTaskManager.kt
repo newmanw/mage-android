@@ -1,7 +1,9 @@
 package mil.nga.giat.mage.data
 
 import android.os.AsyncTask
+import android.os.Handler
 import android.os.Looper
+import android.os.Message
 import android.support.annotation.MainThread
 import android.support.annotation.WorkerThread
 import java.util.*
@@ -59,10 +61,11 @@ class UniqueAsyncTaskManager<Key, Progress, Result>(private val listener: TaskLi
             return
         }
         val key = finished.key
-        val (current, pending) = tasks[key]!!
+        val (current, pending) = tasks[key] ?: throw IllegalStateException("task $key finished but has already been removed")
+
         if (finished === current) {
             if (finished.isCancelled) {
-                listener.taskCancelled(key, finished.delegate)
+                listener.taskCancelled(key, finished.delegate, result)
             }
             else {
                 listener.taskFinished(key, finished.delegate, result)
@@ -77,6 +80,9 @@ class UniqueAsyncTaskManager<Key, Progress, Result>(private val listener: TaskLi
         }
         else if (finished.isCancelled) {
             listener.taskPreempted(finished.key, finished.delegate)
+            if (finished === pending) {
+                tasks[key] = TaskPair(current)
+            }
         }
         else {
             throw IllegalStateException("finished task was not cancelled but matched pending task for key ${finished.key}")
@@ -95,6 +101,16 @@ class UniqueAsyncTaskManager<Key, Progress, Result>(private val listener: TaskLi
         return tasks[key]?.pending?.delegate
     }
 
+    fun cancelTasksForKey(key: Key) {
+        val taskPair = tasks[key] ?: return
+        if (taskPair.pending == null) {
+            taskPair.current.cancel(false)
+        }
+        else {
+            taskPair.pending.cancel(false)
+        }
+    }
+
     interface TaskSupport<Progress> {
         fun isCancelled(): Boolean
         @WorkerThread
@@ -102,8 +118,8 @@ class UniqueAsyncTaskManager<Key, Progress, Result>(private val listener: TaskLi
     }
 
     @FunctionalInterface
-    @WorkerThread
     interface Task<Progress, Result> {
+        @WorkerThread
         fun run(support:TaskSupport<Progress>): Result?
     }
 
@@ -119,10 +135,11 @@ class UniqueAsyncTaskManager<Key, Progress, Result>(private val listener: TaskLi
          * The task was cancelled after it began executing.
          */
         @JvmDefault
-        fun taskCancelled(key: Key, task: Task<Progress, Result>) {}
+        fun taskCancelled(key: Key, task: Task<Progress, Result>, result: Result?) {}
 
         /**
-         * The task was cancelled before it began executing.
+         * The task was cancelled before it began executing, either because another task was [submitted][execute]
+         * while this task was still [pending][pendingTaskForKey] or because it was explicitly [cancelled][cancelTasksForKey].
          */
         @JvmDefault
         fun taskPreempted(key: Key, task: Task<Progress, Result>) {}
@@ -134,6 +151,13 @@ class UniqueAsyncTaskManager<Key, Progress, Result>(private val listener: TaskLi
     private data class TaskPair<K, Progress, Result>(val current: UniqueAsyncTask<K, Progress, Result>, val pending: UniqueAsyncTask<K, Progress, Result>? = null)
 
     private class UniqueAsyncTask<Key, Progress, Result>(val manager: UniqueAsyncTaskManager<Key, Progress, Result>, val key: Key, val delegate: Task<Progress, Result>) : AsyncTask<Void, Progress, Result>(), TaskSupport<Progress> {
+
+        val cancelledProgressHandler = object : Handler(Looper.getMainLooper()) {
+            @Suppress("UNCHECKED_CAST")
+            override fun handleMessage(msg: Message?) {
+                manager.listener.taskProgress(key, delegate, msg!!.obj as Progress)
+            }
+        }
 
         override fun doInBackground(vararg params: Void?): Result? {
             if (isCancelled) {
@@ -148,7 +172,13 @@ class UniqueAsyncTaskManager<Key, Progress, Result>(private val listener: TaskLi
         }
 
         override fun reportProgressToMainThread(progress: Progress) {
-            super.publishProgress(progress)
+            if (isCancelled) {
+                val progressMsg = cancelledProgressHandler.obtainMessage(0, progress)
+                cancelledProgressHandler.sendMessage(progressMsg)
+            }
+            else {
+                super.publishProgress(progress)
+            }
         }
 
         override fun onProgressUpdate(vararg progress: Progress) {
@@ -159,8 +189,8 @@ class UniqueAsyncTaskManager<Key, Progress, Result>(private val listener: TaskLi
             manager.onTaskFinished(this, result)
         }
 
-        override fun onCancelled() {
-            onPostExecute(null)
+        override fun onCancelled(result: Result) {
+            onPostExecute(result)
         }
 
         override fun toString(): String {

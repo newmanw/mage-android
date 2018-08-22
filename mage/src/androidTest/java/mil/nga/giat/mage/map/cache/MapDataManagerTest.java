@@ -1791,7 +1791,8 @@ public class MapDataManagerTest implements LifecycleOwner {
         resolveLock.unlock();
 
         // override second res2 resolve
-        // change 3: Loading with res1RepoResolved, res2RepoResolved (resolve still in progress)
+        // no more updated resources, no more changes to process
+        // change 3: Success with res1RepoResolved, res2RepoResolved (resolve still in progress)
         waitForMainThreadToRun(() -> repo1.setValue(resourceOf(res1RepoResolved, res2RepoResolved)));
 
         // release second res2 resolve
@@ -1800,7 +1801,6 @@ public class MapDataManagerTest implements LifecycleOwner {
         resolveCondition.signal();
         resolveLock.unlock();
 
-        // change 4: Success with res1RepoResolved, res2RepoResolved
         onMainLooper.assertThatWithin(testTimeout(), manager::requireMapData, valueSuppliedBy(Resource::getStatus, is(Success)));
 
         deactivateExecutorAndWait();
@@ -1812,7 +1812,7 @@ public class MapDataManagerTest implements LifecycleOwner {
         assertThat(manager.getLayers(), is(mapOfLayers(res1RepoResolved, res2RepoResolved)));
         verify(catProvider).resolveResource(res1);
         verify(dogProvider).resolveResource(res2);
-        verify(observer, times(4)).onChanged(changeCaptor.capture());
+        verify(observer, times(3)).onChanged(changeCaptor.capture());
         List<Resource<Map<URI, MapDataResource>>> changes = changeCaptor.getAllValues();
         Resource<Map<URI, MapDataResource>> change = changes.get(0);
         assertThat(change.getStatus(), is(Loading));
@@ -1823,14 +1823,12 @@ public class MapDataManagerTest implements LifecycleOwner {
             is(mapOf(res1RepoResolved)),
             hasEntry(is(res1.getUri()), sameInstance(res1RepoResolved))));
         change = changes.get(2);
-        assertThat(change.getStatus(), is(Loading));
+        assertThat(change.getStatus(), is(Success));
         assertThat(change.getContent(), allOf(
             is(mapOf(res1RepoResolved, res2RepoResolved)),
             hasEntry(is(res1.getUri()), sameInstance(res1RepoResolved)),
-            hasEntry(is(res2.getUri()), sameInstance(res2RepoResolved))));
-        change = changes.get(3);
-        assertThat(change.getStatus(), is(Success));
-        assertThat(change.getContent(), sameInstance(manager.requireMapData().getContent()));
+            hasEntry(is(res2.getUri()), sameInstance(res2RepoResolved)),
+            sameInstance(manager.requireMapData().getContent())));
     }
 
     @Test
