@@ -1,7 +1,6 @@
 package mil.nga.giat.mage.map.view
 
 import android.arch.lifecycle.*
-import android.os.Looper
 import android.support.test.annotation.UiThreadTest
 import android.support.test.runner.AndroidJUnit4
 import com.nhaarman.mockitokotlin2.*
@@ -15,7 +14,8 @@ import mil.nga.giat.mage.test.AsyncTesting.waitForMainThreadToRun
 import mil.nga.giat.mage.test.TargetSuppliesPropertyValueMatcher.valueSuppliedBy
 import org.hamcrest.Matchers.*
 import org.junit.After
-import org.junit.Assert.*
+import org.junit.Assert.assertThat
+import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -66,9 +66,10 @@ class MapLayersViewModelTest : LifecycleOwner {
     private lateinit var observed: KArgumentCaptor<Resource<List<MapLayersViewModel.Layer>>>
     private lateinit var lifecycle: LifecycleRegistry
     private lateinit var executor: ThreadPoolExecutor
+    private lateinit var realExecutor: ThreadPoolExecutor
     private lateinit var model: MapLayersViewModel
 
-    val testTimeout = 1000L
+    private val testTimeout = 1000L
 
     override fun getLifecycle(): Lifecycle {
         return lifecycle
@@ -130,7 +131,14 @@ class MapLayersViewModelTest : LifecycleOwner {
                 return TestThread(r, "${MapLayersViewModel@javaClass.simpleName}-${count.incrementAndGet()}")
             }
         }
-        executor = ThreadPoolExecutor(3, 3, 5, TimeUnit.MILLISECONDS, LinkedBlockingQueue(), threadFactory)
+        realExecutor = ThreadPoolExecutor(3, 3, 5, TimeUnit.MILLISECONDS, LinkedBlockingQueue(), threadFactory)
+        executor = mock {
+            on { execute(any()) }.then { invoc ->
+                val target = invoc.arguments[0] as Runnable
+                realExecutor.execute(target)
+                null
+            }
+        }
 
         model = waitForMainThreadToCall {
             val model = MapLayersViewModel(mapDataManager, executor)
@@ -251,11 +259,41 @@ class MapLayersViewModelTest : LifecycleOwner {
     }
 
     @Test
+    @UiThreadTest
+    fun allLayerElementsAreInitiallySuccessNonNullEmpty() {
+
+        mapData.value = Resource.success(allResources)
+        val layers = model.layersInZOrder.value!!.content!!
+
+        assertThat(layers, hasSize(5))
+        for (layer in layers) {
+            val elements = model.elementsForLayer(layer)
+            assertThat(layer.toString(), elements.value!!.content, equalTo(emptyMap()))
+        }
+    }
+
+    @Test
+    @UiThreadTest
+    fun showLayerBeforeBoundsAreSetDoesNotLoadElements() {
+
+        mapData.value = Resource.success(allResources)
+        val layer = model.layerAt(0)
+        val elements = model.elementsForLayer(layer)
+
+        assertThat(elements.value!!.status, equalTo(Success))
+        assertThat(elements.value!!.content, equalTo(emptyMap()))
+
+        model.setLayerVisibility(layer, true)
+
+        verifyNoMoreInteractions(executor)
+        assertThat(elements.value!!.status, equalTo(Success))
+        assertThat(elements.value!!.content, equalTo(emptyMap()))
+    }
+
+    @Test
     fun showLayerForTheFirstTimeCreatesNewLayerQueryOnExecutorThread() {
 
-        waitForMainThreadToRun {
-            mapData.value = Resource.success(allResources)
-        }
+        waitForMainThreadToRun { mapData.value = Resource.success(allResources) }
 
         val createdOnBGThread = AtomicBoolean(false)
         val query = mock<MapDataProvider.LayerQuery> {
@@ -272,11 +310,18 @@ class MapLayersViewModelTest : LifecycleOwner {
     }
 
     @Test
+    @UiThreadTest
     fun showLayerMarksLayerElementStatusLoadingImmediately() {
 
-        val model = waitForMainThreadToCall {
-            val model = MapLayersViewModel(mapDataManager, executor)
-        }
+        mapData.value = Resource.success(allResources)
+        val layer = model.layerAt(0)
+        val elements = model.elementsForLayer(layer)
+
+        assertThat(elements.value!!.status, equalTo(Success))
+
+        model.setLayerVisibility(layer, true)
+
+        assertThat(elements.value!!.status, equalTo(Loading))
     }
 
     @Test

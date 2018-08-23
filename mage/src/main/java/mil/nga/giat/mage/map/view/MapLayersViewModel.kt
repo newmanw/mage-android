@@ -42,12 +42,12 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
     private val mediatedLayers = MediatorLiveData<Resource<List<Layer>>>()
     private val queryForLayer = HashMap<Layer, MapDataProvider.LayerQuery>()
     private val elementsForLayer = HashMap<Layer, MutableLiveData<Resource<Map<Any, MapElementSpec>>>>()
-    private val elementLoadTasks = UniqueAsyncTaskManager(object: UniqueAsyncTaskManager.TaskListener<Layer, Void, Map<Any, MapElementSpec>> {
+    private val elementLoadTasks = UniqueAsyncTaskManager(object : UniqueAsyncTaskManager.TaskListener<Layer, Void, Map<Any, MapElementSpec>> {
         override fun taskFinished(key: Layer, task: UniqueAsyncTaskManager.Task<Void, Map<Any, MapElementSpec>>, result: Map<Any, MapElementSpec>?) {
             elementsForLayer[key]?.value = Resource.success(result!!)
         }
     }, executor)
-    private val triggerLayerEvent = object: EnumLiveEvents<LayerEventType, LayerListener>(LayerEventType::class.java) {
+    private val triggerLayerEvent = object : EnumLiveEvents<LayerEventType, LayerListener>(LayerEventType::class.java) {
 
         fun zOrderShift(range: IntRange) {
             super.trigger(LayerEventType.ZOrderShift, range)
@@ -125,6 +125,9 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
         val pos = layerOrder.indexOf(layer)
         layerOrder[pos] = layerOrder[pos].copy(isVisible = true)
         triggerLayerEvent.layerVisibility(layer, pos)
+        if (currentBounds == null) {
+            return
+        }
         val elements = elementsForLayer[layer]!!
         elements.value = Resource.loading(elements.value!!.content!!)
         elementLoadTasks.execute(layer, LoadLayerElements(layer, currentBounds!!, queryForLayer[layer], mapDataManager.providers[layer.desc.dataType]!!))
@@ -249,17 +252,16 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
     }
 
     private class LoadLayerElements
-        @UiThread
         constructor(
             val layer: Layer,
             val bounds: LatLngBounds,
             var query: MapDataProvider.LayerQuery?,
-            var provider: MapDataProvider?)
+            var provider: MapDataProvider)
         : UniqueAsyncTaskManager.Task<Void, Map<Any, MapElementSpec>> {
 
         override fun run(support: UniqueAsyncTaskManager.TaskSupport<Void>): Map<Any, MapElementSpec> {
             if (query == null) {
-                query = provider!!.createQueryForLayer(layer.desc)
+                query = provider.createQueryForLayer(layer.desc)
             }
             return query!!.fetchMapElements(bounds)
         }
