@@ -147,6 +147,7 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
     }
 
     fun mapBoundsChanged(bounds: LatLngBounds) {
+        currentBounds = bounds
         layerOrder.asSequence().filter(Layer::isVisible).forEach { layer ->
             val layerQuery = queryForLayer[layer]!!
             if (layerQuery.hasDynamicElements()) {

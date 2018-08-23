@@ -3,6 +3,8 @@ package mil.nga.giat.mage.map.view
 import android.arch.lifecycle.*
 import android.support.test.annotation.UiThreadTest
 import android.support.test.runner.AndroidJUnit4
+import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
 import com.nhaarman.mockitokotlin2.*
 import mil.nga.giat.mage.data.Resource
 import mil.nga.giat.mage.data.Resource.Status.Loading
@@ -77,6 +79,10 @@ class MapLayersViewModelTest : LifecycleOwner {
 
     private fun mapOf(vararg resources: MapDataResource): Map<URI, MapDataResource> {
         return resources.associateBy(MapDataResource::uri)
+    }
+
+    private fun bounds(lon: Double, lat: Double, rad: Double): LatLngBounds {
+        return LatLngBounds(LatLng(lat - rad, lon - rad), LatLng(lat + rad, lon + rad))
     }
 
     @Before
@@ -293,7 +299,10 @@ class MapLayersViewModelTest : LifecycleOwner {
     @Test
     fun showLayerForTheFirstTimeCreatesNewLayerQueryOnExecutorThread() {
 
-        waitForMainThreadToRun { mapData.value = Resource.success(allResources) }
+        waitForMainThreadToRun {
+            mapData.value = Resource.success(allResources)
+            model.mapBoundsChanged(bounds(-126.0, 46.0, 3.0))
+        }
 
         val createdOnBGThread = AtomicBoolean(false)
         val query = mock<MapDataProvider.LayerQuery> {
