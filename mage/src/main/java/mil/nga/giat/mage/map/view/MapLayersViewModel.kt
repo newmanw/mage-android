@@ -44,7 +44,7 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
     private val elementsForLayer = HashMap<Layer, MutableLiveData<Resource<Map<Any, MapElementSpec>>>>()
     private val elementLoadTasks = UniqueAsyncTaskManager(object : UniqueAsyncTaskManager.TaskListener<Layer, Void, Map<Any, MapElementSpec>> {
         override fun taskFinished(key: Layer, task: UniqueAsyncTaskManager.Task<Void, Map<Any, MapElementSpec>>, result: Map<Any, MapElementSpec>?) {
-            elementsForLayer[key]?.value = Resource.success(result!!)
+            elementsForLayer[key]!!.value = Resource.success(result!!)
         }
     }, executor)
     private val triggerLayerEvent = object : EnumLiveEvents<LayerEventType, LayerListener>(LayerEventType::class.java) {
@@ -60,6 +60,13 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
 
     private var currentBounds: LatLngBounds? = null
 
+    /**
+     * The order of this list is by descending z-order, the first item, index 0, has z-index [size][List.size],
+     * index 1 has z-index [size][List.size] - 1, ... , index n has z-index [size][List.size] - n.  The last
+     * layer in the list, index [size][List.size] - 1, has the lowest z-index, 1.  This allows the default view
+     * of this model to easily show the top-most layer on the map at the first position of the layer list view,
+     * and so on.
+     */
     val layersInZOrder: LiveData<Resource<List<Layer>>> = mediatedLayers
     val layerEvents: LiveEvents<LayerListener> = triggerLayerEvent
 
@@ -101,8 +108,9 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
                 val layer = cursor.next()
                 cursor.set(layer.copy(zIndex = cursorPos++))
             }
+            val layerCount = mutableLayers.size
             mutableLayers.values.asSequence()
-                    .map { Layer(it, mapDataManager.resourceForLayer(it)!!.requireResolved().name, false, cursorPos++) }
+                    .map { Layer(it, mapDataManager.resourceForLayer(it)!!.requireResolved().name, false, layerCount - cursorPos++) }
                     .sortedWith(defaultLayerOrder)
                     .forEach {
                         layerOrder.add(it)
@@ -133,16 +141,25 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
         elementLoadTasks.execute(layer, LoadLayerElements(layer, currentBounds!!, queryForLayer[layer], mapDataManager.providers[layer.desc.dataType]!!))
     }
 
+    /**
+     * Move the layer at the [given position][from] to the the given [destination][to] position,  Layers at positions
+     * greater than or equal to the desitination position will shift one position higher, similar to [MutableList.add].
+     * Both given positions must be valid list indexes in the range \[0, size).
+     */
     fun moveZIndex(from: Int, to: Int): Boolean {
-        val layer = layerOrder.removeAt(from)
-        layerOrder.add(to, layer)
+        if (from == to) {
+            return false
+        }
         val low = Math.min(from, to)
         val shiftRange = low..(from + to - low)
-        for (z in shiftRange) {
-            val shiftedLayer = layerOrder[z]
-            layerOrder[z] = shiftedLayer.copy(zIndex = z)
+        val layer = layerOrder.removeAt(from)
+        layerOrder.add(to, layer)
+        val layerCount = layerOrder.size
+        for (pos in shiftRange) {
+            val shiftedLayer = layerOrder[pos]
+            layerOrder[pos] = shiftedLayer.copy(zIndex = layerCount - pos)
         }
-        triggerLayerEvent.zOrderShift(low..(from + to - low))
+        triggerLayerEvent.zOrderShift(shiftRange)
         return true
     }
 
@@ -192,6 +209,9 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
 
     interface LayerListener {
 
+        /**
+         * The [layers][layersInZOrder] in the given range, closed/inclusive, changed z-indexes.
+         */
         fun zOrderShift(range: IntRange)
         fun layerVisibilityChanged(layer: Layer, position: Int)
         fun layerElementsChanged(layer: Layer, added: Map<Any, MapElementSpec>, removed: Map<Any, MapElementSpec>)

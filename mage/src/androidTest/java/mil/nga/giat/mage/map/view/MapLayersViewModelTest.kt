@@ -1,6 +1,7 @@
 package mil.nga.giat.mage.map.view
 
 import android.arch.lifecycle.*
+import android.arch.lifecycle.Observer
 import android.support.test.annotation.UiThreadTest
 import android.support.test.runner.AndroidJUnit4
 import com.google.android.gms.maps.model.LatLng
@@ -10,6 +11,7 @@ import mil.nga.giat.mage.data.Resource
 import mil.nga.giat.mage.data.Resource.Status.Loading
 import mil.nga.giat.mage.data.Resource.Status.Success
 import mil.nga.giat.mage.map.cache.*
+import mil.nga.giat.mage.map.view.MapLayersViewModel.Layer
 import mil.nga.giat.mage.test.AsyncTesting
 import mil.nga.giat.mage.test.AsyncTesting.waitForMainThreadToCall
 import mil.nga.giat.mage.test.AsyncTesting.waitForMainThreadToRun
@@ -23,6 +25,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TestName
 import org.junit.runner.RunWith
+import org.mockito.Mockito
 import java.net.URI
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.ThreadFactory
@@ -31,6 +34,10 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
+
+fun <E> List<E>.copy(): List<E> {
+    return asSequence().toList()
+}
 
 @RunWith(AndroidJUnit4::class)
 class MapLayersViewModelTest : LifecycleOwner {
@@ -64,8 +71,9 @@ class MapLayersViewModelTest : LifecycleOwner {
     private lateinit var res3: MapDataResource
     private lateinit var res3Layer1: MapLayerDescriptor
     private lateinit var allResources: Map<URI, MapDataResource>
-    private lateinit var observer: Observer<Resource<List<MapLayersViewModel.Layer>>>
-    private lateinit var observed: KArgumentCaptor<Resource<List<MapLayersViewModel.Layer>>>
+    private lateinit var observer: Observer<Resource<List<Layer>>>
+    private lateinit var observed: KArgumentCaptor<Resource<List<Layer>>>
+    private lateinit var listener: MapLayersViewModel.LayerListener
     private lateinit var lifecycle: LifecycleRegistry
     private lateinit var executor: ThreadPoolExecutor
     private lateinit var realExecutor: ThreadPoolExecutor
@@ -83,6 +91,12 @@ class MapLayersViewModelTest : LifecycleOwner {
 
     private fun bounds(lon: Double, lat: Double, rad: Double): LatLngBounds {
         return LatLngBounds(LatLng(lat - rad, lon - rad), LatLng(lat + rad, lon + rad))
+    }
+
+    private fun assertZIndexesMatchInversePositions(layers: List<Layer>) {
+        layers.forEachIndexed { pos, layer ->
+            assertThat("z-index/position mismatch: ${layer.zIndex}/$pos", layer.zIndex, equalTo(layers.size - pos))
+        }
     }
 
     @Before
@@ -127,6 +141,7 @@ class MapLayersViewModelTest : LifecycleOwner {
 
         observer = mock()
         observed = argumentCaptor()
+        listener = mock()
         lifecycle = LifecycleRegistry(this)
         lifecycle.markState(Lifecycle.State.RESUMED)
         val threadFactory = object : ThreadFactory {
@@ -149,6 +164,7 @@ class MapLayersViewModelTest : LifecycleOwner {
         model = waitForMainThreadToCall {
             val model = MapLayersViewModel(mapDataManager, executor)
             model.layersInZOrder.observe(this, observer)
+            model.layerEvents.listen(this, listener)
             model
         }
     }
@@ -161,12 +177,13 @@ class MapLayersViewModelTest : LifecycleOwner {
 
     @Test
     @UiThreadTest
-    fun startsWithLayersInAlphanumericOrderGroupedByResourceUri() {
+    fun startsWithLayersInDescendingAlphanumericOrderGroupedByResourceUri() {
 
         mapData.value = Resource.success(allResources)
 
-        assertThat(model.layersInZOrder.value!!.content!!.map(MapLayersViewModel.Layer::desc),
+        assertThat(model.layersInZOrder.value!!.content!!.map(Layer::desc),
             contains(res1Layer1, res1Layer2, res2Layer1, res2Layer2, res3Layer1))
+        assertZIndexesMatchInversePositions(model.layersInZOrder.value!!.content!!)
     }
 
     @Test
@@ -196,7 +213,7 @@ class MapLayersViewModelTest : LifecycleOwner {
         mapData.value = Resource.success(allResources)
 
         assertThat(model.layersInZOrder.value!!.status, equalTo(Success))
-        assertThat(model.layersInZOrder.value!!.content!!.map(MapLayersViewModel.Layer::desc),
+        assertThat(model.layersInZOrder.value!!.content!!.map(Layer::desc),
             equalTo(listOf(res1Layer1, res1Layer2, res2Layer1, res2Layer2, res3Layer1)))
     }
 
@@ -206,7 +223,7 @@ class MapLayersViewModelTest : LifecycleOwner {
 
         mapData.value = Resource.success(allResources)
 
-        assertThat(model.layersInZOrder.value!!.content, everyItem(valueSuppliedBy(MapLayersViewModel.Layer::isVisible, equalTo(false))))
+        assertThat(model.layersInZOrder.value!!.content, everyItem(valueSuppliedBy(Layer::isVisible, equalTo(false))))
     }
 
     @Test
@@ -215,8 +232,7 @@ class MapLayersViewModelTest : LifecycleOwner {
 
         mapData.value = Resource.success(allResources)
 
-        model.layersInZOrder.value!!.content!!.forEachIndexed { index, layer ->
-            assertThat(layer.desc.layerUri.toString(), layer.zIndex, equalTo(index)) }
+        assertZIndexesMatchInversePositions(model.layersInZOrder.value!!.content!!)
     }
 
     @Test
@@ -225,11 +241,11 @@ class MapLayersViewModelTest : LifecycleOwner {
 
         mapData.value = Resource.success(mapOf(res1))
 
-        assertThat(model.layersInZOrder.value!!.content!!.map(MapLayersViewModel.Layer::desc), equalTo(listOf(res1Layer1, res1Layer2)))
+        assertThat(model.layersInZOrder.value!!.content!!.map(Layer::desc), equalTo(listOf(res1Layer1, res1Layer2)))
 
         mapData.value = Resource.success(mapOf(res1, res2))
 
-        assertThat(model.layersInZOrder.value!!.content!!.map(MapLayersViewModel.Layer::desc), equalTo(listOf(res1Layer1, res1Layer2, res2Layer1, res2Layer2)))
+        assertThat(model.layersInZOrder.value!!.content!!.map(Layer::desc), equalTo(listOf(res1Layer1, res1Layer2, res2Layer1, res2Layer2)))
     }
 
     @Test
@@ -239,11 +255,11 @@ class MapLayersViewModelTest : LifecycleOwner {
         val res1Mod = res1.resolve(MapDataResource.Resolved(res1.requireResolved().name, res1.requireResolved().type, setOf(res1Layer2)))
         mapData.value = Resource.success(mapOf(res1Mod))
 
-        assertThat(model.layersInZOrder.value!!.content!!.map(MapLayersViewModel.Layer::desc), equalTo(listOf(res1Layer2)))
+        assertThat(model.layersInZOrder.value!!.content!!.map(Layer::desc), equalTo(listOf(res1Layer2)))
 
         mapData.value = Resource.success(mapOf(res1))
 
-        assertThat(model.layersInZOrder.value!!.content!!.map(MapLayersViewModel.Layer::desc), equalTo(listOf(res1Layer2, res1Layer1)))
+        assertThat(model.layersInZOrder.value!!.content!!.map(Layer::desc), equalTo(listOf(res1Layer2, res1Layer1)))
     }
 
     @Test
@@ -252,12 +268,12 @@ class MapLayersViewModelTest : LifecycleOwner {
 
         mapData.value = Resource.success(allResources)
 
-        assertThat(model.layersInZOrder.value!!.content!!.map(MapLayersViewModel.Layer::desc),
+        assertThat(model.layersInZOrder.value!!.content!!.map(Layer::desc),
             equalTo(listOf(res1Layer1, res1Layer2, res2Layer1, res2Layer2, res3Layer1)))
 
         mapData.value = Resource.success(mapOf(res1, res3))
 
-        assertThat(model.layersInZOrder.value!!.content!!.map(MapLayersViewModel.Layer::desc), equalTo(listOf(res1Layer1, res1Layer2, res3Layer1)))
+        assertThat(model.layersInZOrder.value!!.content!!.map(Layer::desc), equalTo(listOf(res1Layer1, res1Layer2, res3Layer1)))
 
         mapData.value = Resource.success(emptyMap())
 
@@ -292,6 +308,7 @@ class MapLayersViewModelTest : LifecycleOwner {
         model.setLayerVisibility(layer, true)
 
         verifyNoMoreInteractions(executor)
+        verify(listener).layerVisibilityChanged(layer, 0)
         assertThat(elements.value!!.status, equalTo(Success))
         assertThat(elements.value!!.content, equalTo(emptyMap()))
     }
@@ -322,15 +339,36 @@ class MapLayersViewModelTest : LifecycleOwner {
     @UiThreadTest
     fun showLayerMarksLayerElementStatusLoadingImmediately() {
 
+        model.mapBoundsChanged(bounds(10.0, 10.0, 1.0))
         mapData.value = Resource.success(allResources)
         val layer = model.layerAt(0)
         val elements = model.elementsForLayer(layer)
 
         assertThat(elements.value!!.status, equalTo(Success))
 
+        val query = mock<MapDataProvider.LayerQuery> {
+            on { fetchMapElements(any()) }.thenReturn(emptyMap())
+        }
+        whenever(providerA.createQueryForLayer(layer.desc)).thenReturn(query)
         model.setLayerVisibility(layer, true)
 
         assertThat(elements.value!!.status, equalTo(Loading))
+    }
+
+    @Test
+    @UiThreadTest
+    fun zOrderShiftNoop() {
+
+        mapData.value = Resource.success(allResources)
+
+        verify(observer).onChanged(model.layersInZOrder.value)
+
+        val layers = model.layersInZOrder.value!!.content!!
+        model.moveZIndex(0, 0)
+
+        verify(listener, never()).zOrderShift(any())
+        verifyNoMoreInteractions(observer)
+        assertThat(layers, sameInstance(model.layersInZOrder.value!!.content!!))
     }
 
     @Test
@@ -339,11 +377,159 @@ class MapLayersViewModelTest : LifecycleOwner {
 
         mapData.value = Resource.success(allResources)
 
-        fail("unimplemented")
+        verify(observer).onChanged(model.layersInZOrder.value)
+
+        val before = model.layersInZOrder.value!!.content!!
+        val beforeCopy = before.copy()
+        model.moveZIndex(0, before.lastIndex)
+
+        verify(listener).zOrderShift(0..before.lastIndex)
+        verifyNoMoreInteractions(observer)
+
+        val after = model.layersInZOrder.value!!.content!!
+        assertThat(before, sameInstance(after))
+        assertThat(after.size, equalTo(beforeCopy.size))
+        assertThat(after.last(), equalTo(beforeCopy.first()))
+        assertThat(after.first(), equalTo(beforeCopy[1]))
+        assertThat(after.subList(0, beforeCopy.lastIndex - 1), equalTo(beforeCopy.subList(1, beforeCopy.lastIndex)))
+        assertZIndexesMatchInversePositions(after)
+    }
+
+    @Test
+    @UiThreadTest
+    fun zOrderShiftBottomToTop() {
+
+        mapData.value = Resource.success(allResources)
+        val before = model.layersInZOrder.value!!.content!!.copy()
+        model.moveZIndex(before.lastIndex, 0)
+
+        verify(listener).zOrderShift(0..before.lastIndex)
+
+        val after = model.layersInZOrder.value!!.content!!
+        assertThat(after.size, equalTo(before.size))
+        assertThat(after.first(), equalTo(before.last()))
+        assertThat(after.last(), equalTo(before[before.lastIndex - 1]))
+        assertThat(after.subList(1, after.lastIndex), equalTo(before.subList(0, before.lastIndex - 1)))
+        assertZIndexesMatchInversePositions(after)
+    }
+
+    @Test
+    @UiThreadTest
+    fun zOrderShiftTopToMiddle() {
+
+        mapData.value = Resource.success(allResources)
+        val before = model.layersInZOrder.value!!.content!!.copy()
+        model.moveZIndex(0, 2)
+
+        verify(listener).zOrderShift(0..2)
+
+        val after = model.layersInZOrder.value!!.content!!
+        assertThat(after.size, equalTo(before.size))
+        assertThat(after[0], equalTo(before[1]))
+        assertThat(after[1], equalTo(before[2]))
+        assertThat(after[2], equalTo(before[0]))
+        assertThat(after.subList(3, before.size), equalTo(before.subList(3, before.size)))
+        assertZIndexesMatchInversePositions(after)
+    }
+
+    @Test
+    @UiThreadTest
+    fun zOrderShiftBottomToMiddle() {
+
+        mapData.value = Resource.success(allResources)
+        val before = model.layersInZOrder.value!!.content!!.copy()
+        model.moveZIndex(4, 2)
+
+        verify(listener).zOrderShift(2..4)
+
+        val after = model.layersInZOrder.value!!.content!!
+        assertThat(after.size, equalTo(before.size))
+        assertThat(after[2], equalTo(before[4]))
+        assertThat(after[3], equalTo(before[2]))
+        assertThat(after[4], equalTo(before[3]))
+        assertThat(after.subList(0, 2), equalTo(before.subList(0, 2)))
+        assertZIndexesMatchInversePositions(after)
+    }
+
+    @Test
+    @UiThreadTest
+    fun zOrderShiftMiddleToTop() {
+
+        mapData.value = Resource.success(allResources)
+        val before = model.layersInZOrder.value!!.content!!.copy()
+        model.moveZIndex(2, 0)
+
+        verify(listener).zOrderShift(0..2)
+
+        val after = model.layersInZOrder.value!!.content!!
+        assertThat(after.size, equalTo(before.size))
+        assertThat(after[0], equalTo(before[2]))
+        assertThat(after[1], equalTo(before[0]))
+        assertThat(after[2], equalTo(before[1]))
+        assertThat(after.subList(3, 5), equalTo(before.subList(3, 5)))
+        assertZIndexesMatchInversePositions(after)
+    }
+
+    @Test
+    @UiThreadTest
+    fun zOrderShiftMiddleToBottom() {
+
+        mapData.value = Resource.success(allResources)
+        val before = model.layersInZOrder.value!!.content!!.copy()
+        model.moveZIndex(2, 4)
+
+        verify(listener).zOrderShift(2..4)
+
+        val after = model.layersInZOrder.value!!.content!!
+        assertThat(after.size, equalTo(before.size))
+        assertThat(after[4], equalTo(before[2]))
+        assertThat(after[3], equalTo(before[4]))
+        assertThat(after[2], equalTo(before[3]))
+        assertThat(after.subList(0, 2), equalTo(before.subList(0, 2)))
+        assertZIndexesMatchInversePositions(after)
+    }
+
+    @Test
+    @UiThreadTest
+    fun zOrderShiftMiddleToLower() {
+
+        mapData.value = Resource.success(allResources)
+        val before = model.layersInZOrder.value!!.content!!.copy()
+        model.moveZIndex(2, 4)
+
+        verify(listener).zOrderShift(2..4)
+
+        val after = model.layersInZOrder.value!!.content!!
+        assertThat(after.size, equalTo(before.size))
+        assertThat(after[4], equalTo(before[2]))
+        assertThat(after[3], equalTo(before[4]))
+        assertThat(after[2], equalTo(before[3]))
+        assertThat(after.subList(0, 2), equalTo(before.subList(0, 2)))
+        assertZIndexesMatchInversePositions(after)
+    }
+
+    @Test
+    @UiThreadTest
+    fun zOrderShiftMiddleToHigher() {
+
+        mapData.value = Resource.success(allResources)
+        val before = model.layersInZOrder.value!!.content!!.copy()
+        model.moveZIndex(4, 2)
+
+        verify(listener).zOrderShift(2..4)
+
+        val after = model.layersInZOrder.value!!.content!!
+        assertThat(after.size, equalTo(before.size))
+        assertThat(after[2], equalTo(before[4]))
+        assertThat(after[3], equalTo(before[2]))
+        assertThat(after[4], equalTo(before[3]))
+        assertThat(after.subList(0, 2), equalTo(before.subList(0, 2)))
+        assertZIndexesMatchInversePositions(after)
     }
 
     @Test
     fun reusesLayerQueryForMapBoundsChange() {
+
         fail("unimplemented")
     }
 
