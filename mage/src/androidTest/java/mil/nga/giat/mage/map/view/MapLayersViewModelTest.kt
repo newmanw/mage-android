@@ -1,7 +1,6 @@
 package mil.nga.giat.mage.map.view
 
 import android.arch.lifecycle.*
-import android.arch.lifecycle.Observer
 import android.support.test.annotation.UiThreadTest
 import android.support.test.runner.AndroidJUnit4
 import com.google.android.gms.maps.model.LatLng
@@ -25,7 +24,6 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TestName
 import org.junit.runner.RunWith
-import org.mockito.Mockito
 import java.net.URI
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.ThreadFactory
@@ -495,16 +493,17 @@ class MapLayersViewModelTest : LifecycleOwner {
 
         mapData.value = Resource.success(allResources)
         val before = model.layersInZOrder.value!!.content!!.copy()
-        model.moveZIndex(2, 4)
+        model.moveZIndex(1, 3)
 
-        verify(listener).zOrderShift(2..4)
+        verify(listener).zOrderShift(1..3)
 
         val after = model.layersInZOrder.value!!.content!!
         assertThat(after.size, equalTo(before.size))
-        assertThat(after[4], equalTo(before[2]))
-        assertThat(after[3], equalTo(before[4]))
-        assertThat(after[2], equalTo(before[3]))
-        assertThat(after.subList(0, 2), equalTo(before.subList(0, 2)))
+        assertThat(after[3], allOf(equalTo(before[1]), not(sameInstance(before[1]))))
+        assertThat(after[2], allOf(equalTo(before[3]), not(sameInstance(before[3]))))
+        assertThat(after[1], allOf(equalTo(before[2]), not(sameInstance(before[2]))))
+        assertThat(after[0], sameInstance(before[0]))
+        assertThat(after[4], sameInstance(before[4]))
         assertZIndexesMatchInversePositions(after)
     }
 
@@ -514,22 +513,22 @@ class MapLayersViewModelTest : LifecycleOwner {
 
         mapData.value = Resource.success(allResources)
         val before = model.layersInZOrder.value!!.content!!.copy()
-        model.moveZIndex(4, 2)
+        model.moveZIndex(3, 1)
 
-        verify(listener).zOrderShift(2..4)
+        verify(listener).zOrderShift(1..3)
 
         val after = model.layersInZOrder.value!!.content!!
         assertThat(after.size, equalTo(before.size))
-        assertThat(after[2], equalTo(before[4]))
-        assertThat(after[3], equalTo(before[2]))
-        assertThat(after[4], equalTo(before[3]))
-        assertThat(after.subList(0, 2), equalTo(before.subList(0, 2)))
+        assertThat(after[1], allOf(equalTo(before[3]), not(sameInstance(before[3]))))
+        assertThat(after[3], allOf(equalTo(before[2]), not(sameInstance(before[2]))))
+        assertThat(after[2], allOf(equalTo(before[1]), not(sameInstance(before[1]))))
+        assertThat(after[0], sameInstance(before[0]))
+        assertThat(after[4], sameInstance(before[4]))
         assertZIndexesMatchInversePositions(after)
     }
 
     @Test
     fun reusesLayerQueryForMapBoundsChange() {
-
         fail("unimplemented")
     }
 
