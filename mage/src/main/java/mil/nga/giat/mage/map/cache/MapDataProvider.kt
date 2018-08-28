@@ -82,6 +82,7 @@ interface MapDataProvider {
          * Fetch the map elements in the given bounds for the [layer][mil.nga.giat.mage.map.cache.MapLayerDescriptor] bound to this query.
          * @param bounds the bounding box area of interest
          * @return a map of [map elements][MapElementSpec] keyed by provider-specific consistent/persistent IDs
+         * @todo add a z-index parameter to return elements with a given z-index, and optimistically assume the z-index will not change between the time the query starts and the elements are drawn on the map
          */
         @WorkerThread
         fun fetchMapElements(bounds: LatLngBounds): Map<Any, MapElementSpec>

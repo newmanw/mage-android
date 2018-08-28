@@ -5,11 +5,15 @@ import android.support.test.annotation.UiThreadTest
 import android.support.test.runner.AndroidJUnit4
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
+import com.google.android.gms.maps.model.MarkerOptions
 import com.nhaarman.mockitokotlin2.*
 import mil.nga.giat.mage.data.Resource
 import mil.nga.giat.mage.data.Resource.Status.Loading
 import mil.nga.giat.mage.data.Resource.Status.Success
+import mil.nga.giat.mage.map.MapElementSpec
+import mil.nga.giat.mage.map.MapMarkerSpec
 import mil.nga.giat.mage.map.cache.*
+import mil.nga.giat.mage.map.cache.MapDataProvider.LayerQuery
 import mil.nga.giat.mage.map.view.MapLayersViewModel.Layer
 import mil.nga.giat.mage.test.AsyncTesting
 import mil.nga.giat.mage.test.AsyncTesting.waitForMainThreadToCall
@@ -69,6 +73,7 @@ class MapLayersViewModelTest : LifecycleOwner {
     private lateinit var res3: MapDataResource
     private lateinit var res3Layer1: MapLayerDescriptor
     private lateinit var allResources: Map<URI, MapDataResource>
+    private lateinit var allLayerDescs: List<MapLayerDescriptor>
     private lateinit var observer: Observer<Resource<List<Layer>>>
     private lateinit var observed: KArgumentCaptor<Resource<List<Layer>>>
     private lateinit var listener: MapLayersViewModel.LayerListener
@@ -87,6 +92,10 @@ class MapLayersViewModelTest : LifecycleOwner {
         return resources.associateBy(MapDataResource::uri)
     }
 
+    private fun mapOf(vararg elements: MapElementSpec): Map<Any, MapElementSpec> {
+        return elements.associateBy(MapElementSpec::id)
+    }
+
     private fun bounds(lon: Double, lat: Double, rad: Double): LatLngBounds {
         return LatLngBounds(LatLng(lat - rad, lon - rad), LatLng(lat + rad, lon + rad))
     }
@@ -94,6 +103,18 @@ class MapLayersViewModelTest : LifecycleOwner {
     private fun assertZIndexesMatchInversePositions(layers: List<Layer>) {
         layers.forEachIndexed { pos, layer ->
             assertThat("z-index/position mismatch: ${layer.zIndex}/$pos", layer.zIndex, equalTo(layers.size - pos))
+        }
+    }
+
+    private fun providerForLayer(layer: Layer): MapDataProvider {
+        return providerForLayer(layer.desc)
+    }
+
+    private fun providerForLayer(layer: MapLayerDescriptor): MapDataProvider {
+        return when {
+            layer.dataType == providerA.javaClass -> providerA
+            layer.dataType == providerB.javaClass -> providerB
+            else -> throw Error("unknown layer data type: ${layer.layerUri}[${layer.dataType}]")
         }
     }
 
@@ -136,6 +157,7 @@ class MapLayersViewModelTest : LifecycleOwner {
         res3Layer1 = TestLayerDesc("layer1", uri3, providerA)
         res3 = MapDataResource(uri3, repo1, 0, MapDataResource.Resolved("Test Resource 3", providerA.javaClass, setOf(res3Layer1)))
         allResources = setOf(res1, res2, res3).associateBy(MapDataResource::uri)
+        allLayerDescs = listOf(res1Layer1, res1Layer2, res2Layer1, res2Layer2, res3Layer1)
 
         observer = mock()
         observed = argumentCaptor()
@@ -280,15 +302,30 @@ class MapLayersViewModelTest : LifecycleOwner {
 
     @Test
     @UiThreadTest
-    fun allLayerElementsAreInitiallySuccessNonNullEmpty() {
+    fun mapDataChangeToLoadingLeavesExistingLayerListIntact() {
+
+        mapData.value = Resource.success(allResources)
+        val layers = model.layersInZOrder.value!!.content
+
+        assertThat(model.layersInZOrder.value!!.content!!.map(Layer::desc),
+            equalTo(listOf(res1Layer1, res1Layer2, res2Layer1, res2Layer2, res3Layer1)))
+
+        mapData.value = Resource.loading()
+
+        assertThat(model.layersInZOrder.value!!.content, equalTo(layers))
+    }
+
+    @Test
+    @UiThreadTest
+    fun allLayerElementsAreInitiallySuccessWithNullValue() {
 
         mapData.value = Resource.success(allResources)
         val layers = model.layersInZOrder.value!!.content!!
 
         assertThat(layers, hasSize(5))
         for (layer in layers) {
-            val elements = model.elementsForLayer(layer)
-            assertThat(layer.toString(), elements.value!!.content, equalTo(emptyMap()))
+            assertThat(layer.toString(), layer.elements.status, equalTo(Success))
+            assertThat(layer.toString(), layer.elements.content, nullValue())
         }
     }
 
@@ -298,17 +335,66 @@ class MapLayersViewModelTest : LifecycleOwner {
 
         mapData.value = Resource.success(allResources)
         val layer = model.layerAt(0)
-        val elements = model.elementsForLayer(layer)
 
-        assertThat(elements.value!!.status, equalTo(Success))
-        assertThat(elements.value!!.content, equalTo(emptyMap()))
+        assertThat(layer.elements.status, equalTo(Success))
+        assertThat(layer.elements.content, nullValue())
 
-        model.setLayerVisibility(layer, true)
+        model.setLayerVisible(layer, true)
 
         verifyNoMoreInteractions(executor)
+        verifyNoMoreInteractions(providerA)
+        verifyNoMoreInteractions(providerB)
         verify(listener).layerVisibilityChanged(layer, 0)
-        assertThat(elements.value!!.status, equalTo(Success))
-        assertThat(elements.value!!.content, equalTo(emptyMap()))
+        verify(listener, never()).layerElementsChanged(any(), any(), any())
+        assertThat(layer.elements.status, equalTo(Success))
+        assertThat(layer.elements.content, nullValue())
+    }
+
+    @Test
+    @UiThreadTest
+    fun showLayerMarksLayerElementStatusLoadingImmediately() {
+
+        model.mapBoundsChanged(bounds(10.0, 10.0, 1.0))
+        mapData.value = Resource.success(allResources)
+        var layer = model.layerAt(0)
+
+        assertThat(layer.elements.status, equalTo(Success))
+        assertThat(layer.elements.content, nullValue())
+
+        val query = mock<LayerQuery> {
+            on { fetchMapElements(any()) }.thenReturn(emptyMap())
+        }
+        whenever(providerA.createQueryForLayer(layer.desc)).thenReturn(query)
+        model.setLayerVisible(layer, true)
+        layer = model.layerAt(0)
+
+        assertThat(layer.elements.status, equalTo(Loading))
+        assertThat(layer.elements.content, nullValue())
+        verify(listener).layerVisibilityChanged(layer, 0)
+        verify(listener, never()).layerElementsChanged(any(), any(), any())
+    }
+
+    @Test
+    @UiThreadTest
+    fun mapBoundsChangeMarksVisibleLayersElementStatusLoadingSerially() {
+
+        val query = mock<LayerQuery> { on { fetchMapElements(any()) }.thenReturn(emptyMap())}
+        whenever(providerA.createQueryForLayer(any())).thenReturn(query)
+        whenever(providerB.createQueryForLayer(any())).thenReturn(query)
+
+        mapData.value = Resource.success(allResources)
+        val layers = model.layersInZOrder.value!!.content!!
+        model.setLayerVisible(layers[1], true)
+        model.setLayerVisible(layers[3], true)
+        model.mapBoundsChanged(bounds(120.0, 13.0, 5.0))
+
+        assertThat(layers[1].elements.status, equalTo(Loading))
+        assertThat(layers[3].elements.status, equalTo(Loading))
+        assertThat(layers[0].elements.status, equalTo(Success))
+        assertThat(layers[2].elements.status, equalTo(Success))
+        assertThat(layers[4].elements.status, equalTo(Success))
+        verify(listener).layerElementsChanged(layers[1], 1, emptyMap())
+        verify(listener).layerElementsChanged(layers[3], 3, emptyMap())
     }
 
     @Test
@@ -320,7 +406,7 @@ class MapLayersViewModelTest : LifecycleOwner {
         }
 
         val createdOnBGThread = AtomicBoolean(false)
-        val query = mock<MapDataProvider.LayerQuery> {
+        val query = mock<LayerQuery> {
             on { fetchMapElements(any()) }.thenReturn(emptyMap())
         }
         whenever(providerA.createQueryForLayer(res3Layer1)).then { _ ->
@@ -328,29 +414,182 @@ class MapLayersViewModelTest : LifecycleOwner {
             query
         }
 
-        waitForMainThreadToRun { model.setLayerVisibility(model.layersInZOrder.value!!.content!!.last(), true) }
+        waitForMainThreadToRun { model.setLayerVisible(model.layersInZOrder.value!!.content!!.last(), true) }
 
         onMainThread.assertThatWithin(testTimeout, createdOnBGThread::get, equalTo(true))
     }
 
     @Test
-    @UiThreadTest
-    fun showLayerMarksLayerElementStatusLoadingImmediately() {
+    fun reusesLayerQueryForMapBoundsChange() {
 
-        model.mapBoundsChanged(bounds(10.0, 10.0, 1.0))
-        mapData.value = Resource.success(allResources)
-        val layer = model.layerAt(0)
-        val elements = model.elementsForLayer(layer)
-
-        assertThat(elements.value!!.status, equalTo(Success))
-
-        val query = mock<MapDataProvider.LayerQuery> {
-            on { fetchMapElements(any()) }.thenReturn(emptyMap())
+        val query = mock<LayerQuery> {
+            on { fetchMapElements(any()) }.thenReturn(mapOf(MapMarkerSpec("point1", null, MarkerOptions())))
+            on { hasDynamicElements() }.thenReturn(true)
         }
-        whenever(providerA.createQueryForLayer(layer.desc)).thenReturn(query)
-        model.setLayerVisibility(layer, true)
+        val provider = providerForLayer(res2Layer1)
+        whenever(provider.createQueryForLayer(res2Layer1)).thenReturn(query)
+        val bounds1 = bounds(120.0, 30.0, 10.0)
+        val bounds2 = bounds(110.0, 30.0, 10.0)
+        val layerPos = allLayerDescs.indexOf(res2Layer1)
 
-        assertThat(elements.value!!.status, equalTo(Loading))
+        waitForMainThreadToRun {
+            mapData.value = Resource.success(allResources)
+            model.setLayerVisible(model.layerAt(layerPos), true)
+            model.mapBoundsChanged(bounds1)
+        }
+
+        onMainThread.assertThatWithin(testTimeout, { model.layerAt(layerPos).elements.status }, equalTo(Success))
+
+        waitForMainThreadToRun {
+            model.mapBoundsChanged(bounds2)
+        }
+
+        onMainThread.assertThatWithin(testTimeout, { model.layerAt(layerPos).elements.status }, equalTo(Success))
+
+        verify(provider).createQueryForLayer(res2Layer1)
+        verify(query).fetchMapElements(bounds1)
+        verify(query).fetchMapElements(bounds2)
+    }
+
+    @Test
+    fun reusesLayerQueryForShowingLayer() {
+
+        val layerDesc = res1Layer2
+        val layerPos = allLayerDescs.indexOf(layerDesc)
+        val query = mock<LayerQuery> {
+            on { fetchMapElements(any()) }.thenReturn(mapOf(MapMarkerSpec("point1", null, MarkerOptions())))
+        }
+        val provider = providerForLayer(layerDesc)
+        whenever(provider.createQueryForLayer(layerDesc)).thenReturn(query)
+        val bounds1 = bounds(120.0, 30.0, 10.0)
+        val bounds2 = bounds(30.0, 120.0, 1.0)
+
+        waitForMainThreadToRun {
+            mapData.value = Resource.success(allResources)
+            model.mapBoundsChanged(bounds1)
+            val layers = model.layersInZOrder.value!!.content!!
+            val layer = layers[layerPos]
+            model.setLayerVisible(layer, true)
+        }
+
+        onMainThread.assertThatWithin(testTimeout, { model.layerAt(layerPos).elements.status }, equalTo(Success))
+
+        waitForMainThreadToRun {
+            model.setLayerVisible(model.layerAt(layerPos), false)
+            model.mapBoundsChanged(bounds2)
+        }
+
+        onMainThread.assertThatWithin(testTimeout, { model.layerAt(layerPos).elements.status }, equalTo(Success))
+
+        waitForMainThreadToRun { model.setLayerVisible(model.layerAt(layerPos), true) }
+
+        verify(provider).createQueryForLayer(layerDesc)
+        verify(query).fetchMapElements(bounds1)
+        verify(query).fetchMapElements(bounds2)
+    }
+
+    @Test
+    fun doesNotReloadElementsWhenShowingLayerIfBoundsDidNotChange() {
+
+        val marker = MapMarkerSpec("point1", null, MarkerOptions())
+        val bounds = bounds(12.0, 15.0, 3.0)
+        val query = mock<LayerQuery> {
+            on { fetchMapElements(bounds) }.thenReturn(mapOf(marker))
+        }
+        val provider = providerForLayer(res2Layer1)
+        whenever(provider.createQueryForLayer(res2Layer1)).thenReturn(query)
+        val layerPos = allLayerDescs.indexOf(res2Layer1)
+
+        waitForMainThreadToRun {
+            mapData.value = Resource.success(allResources)
+            model.mapBoundsChanged(bounds)
+            val layer = model.layerAt(layerPos)
+
+            assertThat(layer.desc, equalTo(res2Layer1))
+
+            model.setLayerVisible(layer, true)
+            val visibleLayer = model.layerAt(layerPos)
+
+            assertThat(visibleLayer.elements.status, equalTo(Loading))
+            verify(listener).layerVisibilityChanged(visibleLayer, layerPos)
+        }
+
+        onMainThread.assertThatWithin(testTimeout, { model.layerAt(layerPos).elements.status }, equalTo(Success))
+
+        val elements = model.layerAt(layerPos).elements
+
+        assertThat(elements.requireContent(), equalTo(mapOf(marker)))
+        verify(provider).createQueryForLayer(model.layerAt(layerPos).desc)
+        verify(query).fetchMapElements(bounds)
+
+        waitForMainThreadToRun {
+            model.setLayerVisible(model.layerAt(layerPos), false)
+            val layer = model.layerAt(layerPos)
+
+            assertThat(layer.elements.status, equalTo(Success))
+            assertThat(layer.elements.content, equalTo(elements.content))
+            verify(listener, times(2)).layerVisibilityChanged(layer, layerPos)
+        }
+
+        waitForMainThreadToRun {
+            model.setLayerVisible(model.layerAt(layerPos), true)
+            val layer = model.layerAt(layerPos)
+
+            assertThat(layer.elements.status, equalTo(Success))
+            assertThat(layer.elements, sameInstance(elements))
+            assertThat(layer.elements.content, equalTo(mapOf(marker)))
+            verify(listener, times(3)).layerVisibilityChanged(layer, layerPos)
+        }
+
+        verifyNoMoreInteractions(provider)
+        verifyNoMoreInteractions(query)
+    }
+
+    @Test
+    fun doesNotReloadElementsForHiddenLayerWhenMapBoundsChange() {
+
+        val bounds = bounds(33.0, 50.0, 2.0)
+        val elements = mapOf(MapMarkerSpec("m1", null, MarkerOptions()))
+        val provider = providerForLayer(allLayerDescs[0])
+        val query = mock<LayerQuery> {
+            on { fetchMapElements(bounds) }.thenReturn(elements)
+        }
+        whenever(provider.createQueryForLayer(allLayerDescs[0])).thenReturn(query)
+
+        waitForMainThreadToRun {
+            model.mapBoundsChanged(bounds)
+            mapData.value = Resource.success(allResources)
+            model.setLayerVisible(model.layerAt(0), true)
+        }
+
+        onMainThread.assertThatWithin(testTimeout, { model.layerAt(0).elements.status }, equalTo(Success))
+
+        assertThat(model.layerAt(0).elements.content, equalTo(elements))
+        verify(provider).createQueryForLayer(allLayerDescs[0])
+        verify(query).fetchMapElements(bounds)
+
+        waitForMainThreadToRun {
+            model.setLayerVisible(model.layerAt(0), false)
+            model.mapBoundsChanged(bounds(0.0, 0.0, 2.0))
+
+            assertThat(model.layerAt(0).elements.status, equalTo(Success))
+            assertThat(model.layerAt(0).elements.content, equalTo(elements))
+        }
+
+        waitForThreadPoolTermination()
+
+        verifyNoMoreInteractions(provider)
+        verifyNoMoreInteractions(query)
+    }
+
+    @Test
+    fun layerRemovedWhileFetchingElementsConcurrently() {
+        fail("unimplemented")
+    }
+
+    @Test
+    fun mapBoundsChangeWhileLayerElementsFetchingConcurrently() {
+        fail("unimplemented")
     }
 
     @Test
@@ -525,15 +764,5 @@ class MapLayersViewModelTest : LifecycleOwner {
         assertThat(after[0], sameInstance(before[0]))
         assertThat(after[4], sameInstance(before[4]))
         assertZIndexesMatchInversePositions(after)
-    }
-
-    @Test
-    fun reusesLayerQueryForMapBoundsChange() {
-        fail("unimplemented")
-    }
-
-    @Test
-    fun reusesLayerQueryForShowingLayer() {
-        fail("unimplemented")
     }
 }

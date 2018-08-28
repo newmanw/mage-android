@@ -7,6 +7,10 @@ data class Resource<T>(
     val statusCode: Int = status.ordinal,
     val statusMessage: String? = status.toString()) {
 
+    fun requireContent(): T {
+        return content!!
+    }
+
     enum class Status {
         Loading,
         Success,
@@ -21,7 +25,7 @@ data class Resource<T>(
         }
 
         @JvmStatic
-        fun <T> loading(content: T): Resource<T> {
+        fun <T> loading(content: T?): Resource<T> {
             return Resource(content, Resource.Status.Loading)
         }
 
@@ -31,7 +35,7 @@ data class Resource<T>(
         }
 
         @JvmStatic
-        fun <T> success(content: T): Resource<T> {
+        fun <T> success(content: T?): Resource<T> {
             return Resource(content, Resource.Status.Success)
         }
     }

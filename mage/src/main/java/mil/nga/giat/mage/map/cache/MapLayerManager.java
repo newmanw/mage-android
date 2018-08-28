@@ -19,7 +19,6 @@ import com.google.android.gms.maps.model.TileProvider;
 
 import org.jetbrains.annotations.NotNull;
 
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -42,8 +41,6 @@ import mil.nga.giat.mage.map.MapPolylineSpec;
 import mil.nga.giat.mage.map.MapTileOverlaySpec;
 import mil.nga.giat.mage.map.view.MapLayersViewModel;
 import mil.nga.giat.mage.map.view.MapOwner;
-
-import static java.util.Objects.requireNonNull;
 
 /**
  * A {@code MapLayerManager} binds {@link MapLayerDescriptor layer data} from various
@@ -381,7 +378,7 @@ public class MapLayerManager implements
     }
 
     @Override
-    public void layerElementsChanged(@NotNull MapLayersViewModel.Layer layer, @NotNull Map<Object, ? extends MapElementSpec> added, @NotNull Map<Object, ? extends MapElementSpec> removed) {
+    public void layerElementsChanged(@NotNull MapLayersViewModel.Layer layer, int position, @NotNull Map<Object, ? extends MapElementSpec> removed) {
 
     }
 

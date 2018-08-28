@@ -80,6 +80,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 
 import mil.nga.giat.mage.MAGE;
 import mil.nga.giat.mage.R;
@@ -119,6 +120,8 @@ import mil.nga.giat.mage.sdk.location.LocationService;
 import mil.nga.mgrs.MGRS;
 import mil.nga.mgrs.gzd.MGRSTileProvider;
 import mil.nga.wkb.geom.Geometry;
+
+import static java.util.Objects.requireNonNull;
 
 public class MapFragment extends Fragment implements
 	OnMapReadyCallback,
@@ -499,7 +502,7 @@ public class MapFragment extends Fragment implements
 				@NonNull
 				@Override
 				public <T extends ViewModel> T create(@NonNull Class<T> modelClass) {
-					return (T) new MapLayersViewModel(MapDataManager.getInstance());
+					return (T) new MapLayersViewModel(requireNonNull(MapDataManager.getInstance()), AsyncTask.THREAD_POOL_EXECUTOR);
 				}
 			}).get(MapLayersViewModel.class);
 

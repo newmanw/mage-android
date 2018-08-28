@@ -2,7 +2,6 @@ package mil.nga.giat.mage.map.view
 
 import android.arch.lifecycle.LiveData
 import android.arch.lifecycle.MediatorLiveData
-import android.arch.lifecycle.MutableLiveData
 import android.arch.lifecycle.ViewModel
 import android.support.annotation.UiThread
 import com.google.android.gms.maps.model.LatLngBounds
@@ -12,6 +11,7 @@ import mil.nga.giat.mage.data.UniqueAsyncTaskManager
 import mil.nga.giat.mage.map.*
 import mil.nga.giat.mage.map.cache.MapDataManager
 import mil.nga.giat.mage.map.cache.MapDataProvider
+import mil.nga.giat.mage.map.cache.MapDataProvider.LayerQuery
 import mil.nga.giat.mage.map.cache.MapLayerDescriptor
 import mil.nga.giat.mage.utils.EnumLiveEvents
 import mil.nga.giat.mage.utils.LiveEvents
@@ -20,6 +20,8 @@ import java.util.concurrent.Executor
 import kotlin.Comparator
 import kotlin.collections.HashMap
 
+
+typealias MapElementSpecs = Map<Any, MapElementSpec>
 
 private val defaultLayerOrder = Comparator<MapLayersViewModel.Layer> { a, b ->
     if (a == b) {
@@ -38,13 +40,30 @@ private val defaultLayerOrder = Comparator<MapLayersViewModel.Layer> { a, b ->
 @UiThread
 class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: Executor) : ViewModel() {
 
-    private val layerOrder = ArrayList<Layer>()
+    private val layers = ArrayList<Layer>()
     private val mediatedLayers = MediatorLiveData<Resource<List<Layer>>>()
-    private val queryForLayer = HashMap<Layer, MapDataProvider.LayerQuery>()
-    private val elementsForLayer = HashMap<Layer, MutableLiveData<Resource<Map<Any, MapElementSpec>>>>()
-    private val elementLoadTasks = UniqueAsyncTaskManager(object : UniqueAsyncTaskManager.TaskListener<Layer, Void, Map<Any, MapElementSpec>> {
-        override fun taskFinished(key: Layer, task: UniqueAsyncTaskManager.Task<Void, Map<Any, MapElementSpec>>, result: Map<Any, MapElementSpec>?) {
-            elementsForLayer[key]!!.value = Resource.success(result!!)
+    private val queryForLayer = HashMap<Layer, LayerQuery>()
+    private val boundsForLayer = HashMap<Layer, LatLngBounds>()
+    private val elementLoadTasks = UniqueAsyncTaskManager(object : UniqueAsyncTaskManager.TaskListener<Layer, Void, LoadLayerElementsResult> {
+        override fun taskFinished(key: Layer, task: UniqueAsyncTaskManager.Task<Void, LoadLayerElementsResult>, result: LoadLayerElementsResult?) {
+            queryForLayer[key] = result!!.query
+            boundsForLayer[key] = result.bounds
+            var pos = posOfZIndex(key.zIndex)
+            if (pos >= layers.size || layers[pos] != key) {
+                pos = layers.indexOf(key)
+            }
+            val target = layers[pos]
+            val elements = result.elements ?: emptyMap()
+            val prevElements = target.elements.content ?: emptyMap()
+            val removed = HashMap<Any, MapElementSpec>(prevElements.size)
+            for ((prevKey, prev) in prevElements) {
+                if (!elements.containsKey(prevKey)) {
+                    removed[prevKey] = prev
+                }
+            }
+            val updatedLayer = target.copy(elements = Resource.success(elements))
+            layers[pos] = updatedLayer
+            triggerLayerEvent.elementsChanged(updatedLayer, pos, removed)
         }
     }, executor)
     private val triggerLayerEvent = object : EnumLiveEvents<LayerEventType, LayerListener>(LayerEventType::class.java) {
@@ -55,6 +74,10 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
 
         fun layerVisibility(layer: Layer, position: Int) {
             super.trigger(LayerEventType.Visibility, Pair(layer, position))
+        }
+
+        fun elementsChanged(layer: Layer, position: Int, removed: MapElementSpecs) {
+            super.trigger(LayerEventType.ElementsChanged, Triple(layer, position, removed))
         }
     }
 
@@ -73,72 +96,64 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
     init {
         mediatedLayers.addSource(mapDataManager.mapData) { mapData ->
             if (mapData?.status == Loading) {
-                mediatedLayers.value = Resource.loading(emptyList())
+                mediatedLayers.value = Resource.loading(layers)
                 return@addSource
             }
-            val mutableLayers = mapDataManager.layers
-            var cursor = layerOrder.listIterator()
+            val layerDescs = mapDataManager.layers
+            val layerCount = layerDescs.size
+            var cursor = layers.listIterator()
             // TODO: track z-indexes and emit events so visible layers get updated
             var firstZIndexChange = -1
-            var cursorPos = 0
             while (cursor.hasNext()) {
                 val layer = cursor.next()
-                if (mutableLayers.remove(layer.desc.layerUri) == null) {
-                    val elements = elementsForLayer.remove(layer)
+                if (layerDescs.remove(layer.desc.layerUri) == null) {
                     // TODO: post value or keep serial here, collect and do all at once in another loop below?
-                    elements?.value = null
                     cursor.remove()
                     if (firstZIndexChange < 0) {
-                        firstZIndexChange = cursorPos
+                        firstZIndexChange = cursor.previousIndex()
                     }
-                    // TODO: layer removed notification, or suffice to set elements live data value to null?
                 }
                 else {
                     // TODO: handle updated layers that might need to reload elements
-                    cursorPos++
                 }
             }
             if (firstZIndexChange < 0) {
-                firstZIndexChange = layerOrder.size
+                firstZIndexChange = layers.size
             }
-            // TODO: z-index shift event or just the live data change?
-            cursorPos = firstZIndexChange
-            cursor = layerOrder.listIterator(cursorPos)
+            cursor = layers.listIterator(firstZIndexChange)
             while (cursor.hasNext()) {
                 val layer = cursor.next()
-                cursor.set(layer.copy(zIndex = cursorPos++))
+                cursor.set(layer.copy(zIndex = zIndexOfPos(cursor.previousIndex(), layerCount)))
             }
-            val layerCount = mutableLayers.size
-            mutableLayers.values.asSequence()
-                    .map { Layer(it, mapDataManager.resourceForLayer(it)!!.requireResolved().name, false, layerCount - cursorPos++) }
+            var layerPos = layers.size
+            layerDescs.values.asSequence()
+                    .map { Layer(it, mapDataManager.resourceForLayer(it)!!.requireResolved().name, false, zIndexOfPos(layerPos++, layerCount)) }
                     .sortedWith(defaultLayerOrder)
-                    .forEach {
-                        layerOrder.add(it)
-                        val elements = MutableLiveData<Resource<Map<Any, MapElementSpec>>>()
-                        elements.value = Resource.success(emptyMap())
-                        elementsForLayer[it] = elements
-                    }
-            mediatedLayers.value = Resource.success(layerOrder)
+                    .forEach { layers.add(it) }
+            mediatedLayers.value = Resource.success(layers)
         }
     }
 
-    fun setLayerVisibility(layer: Layer, visible: Boolean) {
-        if (layer.isVisible == visible) {
+    fun setLayerVisible(layer: Layer, visible: Boolean) {
+        val pos = layers.indexOf(layer)
+        val target = layers[pos]
+        if (target.isVisible == visible) {
             return
         }
         if (!visible) {
-            triggerLayerEvent.layerVisibility(layer, layerOrder.indexOf(layer))
+            layers[pos] = target.copy(isVisible = false)
+            triggerLayerEvent.layerVisibility(layers[pos], pos)
             return
         }
-        val pos = layerOrder.indexOf(layer)
-        layerOrder[pos] = layerOrder[pos].copy(isVisible = true)
-        triggerLayerEvent.layerVisibility(layer, pos)
         if (currentBounds == null) {
-            return
+            layers[pos] = target.copy(isVisible = true)
         }
-        val elements = elementsForLayer[layer]!!
-        elements.value = Resource.loading(elements.value!!.content!!)
-        elementLoadTasks.execute(layer, LoadLayerElements(layer, currentBounds!!, queryForLayer[layer], mapDataManager.providers[layer.desc.dataType]!!))
+        else if (currentBounds != boundsForLayer[layer]) {
+            layers[pos] = target.copy(isVisible = true, elements = target.elements.copy(status = Loading))
+            elementLoadTasks.execute(layers[pos], LoadLayerElements(
+                layers[pos], currentBounds!!, queryForLayer[layer], mapDataManager.providers[layer.desc.dataType]!!))
+        }
+        triggerLayerEvent.layerVisibility(layers[pos], pos)
     }
 
     /**
@@ -152,12 +167,11 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
         }
         val low = Math.min(from, to)
         val shiftRange = low..(from + to - low)
-        val layer = layerOrder.removeAt(from)
-        layerOrder.add(to, layer)
-        val layerCount = layerOrder.size
+        val layer = layers.removeAt(from)
+        layers.add(to, layer)
         for (pos in shiftRange) {
-            val shiftedLayer = layerOrder[pos]
-            layerOrder[pos] = shiftedLayer.copy(zIndex = layerCount - pos)
+            val shiftedLayer = layers[pos]
+            layers[pos] = shiftedLayer.copy(zIndex = zIndexOfPos(pos))
         }
         triggerLayerEvent.zOrderShift(shiftRange)
         return true
@@ -165,13 +179,17 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
 
     fun mapBoundsChanged(bounds: LatLngBounds) {
         currentBounds = bounds
-        layerOrder.asSequence().filter(Layer::isVisible).forEach { layer ->
-            val layerQuery = queryForLayer[layer]!!
-            if (layerQuery.hasDynamicElements()) {
-                // TODO: create async task to reconcile new results
-
+        val cursor = layers.listIterator()
+        for (layer in cursor) {
+            if (layer.isVisible) {
+                val layerQuery = queryForLayer[layer]
+                if ((layerQuery != null && layerQuery.hasDynamicElements()) || layerQuery == null) {
+                    val loadingLayer = layer.copy(elements = layer.elements.copy(status = Loading))
+                    cursor.set(loadingLayer)
+                    triggerLayerEvent.elementsChanged(loadingLayer, cursor.previousIndex(), emptyMap())
+                    elementLoadTasks.execute(layer, LoadLayerElements(loadingLayer, bounds, layerQuery, mapDataManager.providers[layer.desc.dataType]!!))
+                }
             }
-            // else don't bother updating
         }
     }
 
@@ -179,23 +197,32 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
         mapDataManager.refreshMapData()
     }
 
+    /**
+     * Return the layer at the given index position in the [layer list][layersInZOrder].
+     */
     fun layerAt(pos: Int): Layer {
-        return layerOrder[pos]
-    }
-
-    fun elementsForLayer(layer: Layer): LiveData<Resource<Map<Any, MapElementSpec>>> {
-        return elementsForLayer[layer]!!
+        return layers[pos]
     }
 
     override fun onCleared() {
         elementLoadTasks.dispose()
     }
 
+    private fun posOfZIndex(zIndex: Int, layerCount: Int = layers.size): Int {
+        return layerCount - zIndex
+    }
+
+    private fun zIndexOfPos(pos: Int, layerCount: Int = layers.size): Int {
+        return layerCount - pos
+    }
+
+
     data class Layer(
             val desc: MapLayerDescriptor,
             val resourceName: String,
             val isVisible: Boolean = false,
-            val zIndex: Int = 0
+            val zIndex: Int = 0,
+            val elements: Resource<MapElementSpecs> = Resource.success()
     ) {
 
         override fun hashCode(): Int {
@@ -213,8 +240,19 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
          * The [layers][layersInZOrder] in the given range, closed/inclusive, changed z-indexes.
          */
         fun zOrderShift(range: IntRange)
+
+        /**
+         * The [visibility][Layer.isVisible] [changed][setLayerVisible] for the given layer.  This event
+         * also implies a change to the layer's [elements][Layer.elements], but without actually firing
+         * [that event][layerElementsChanged].
+         */
         fun layerVisibilityChanged(layer: Layer, position: Int)
-        fun layerElementsChanged(layer: Layer, added: Map<Any, MapElementSpec>, removed: Map<Any, MapElementSpec>)
+
+        /**
+         * The [elements][Layer.elements] for the given layer changed.  This occurs as a result of a change
+         * to the [map bounds][mapBoundsChanged].
+         */
+        fun layerElementsChanged(layer: Layer, position: Int, removed: MapElementSpecs)
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -233,7 +271,7 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
         },
         ElementsChanged {
             override fun deliver(listener: LayerListener, data: Any?) {
-                val triple = data as Triple<Layer, Map<Any, MapElementSpec>, Map<Any, MapElementSpec>>
+                val triple = data as Triple<Layer, Int, MapElementSpecs>
                 listener.layerElementsChanged(triple.first, triple.second, triple.third)
             }
         },
@@ -276,15 +314,20 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
         constructor(
             val layer: Layer,
             val bounds: LatLngBounds,
-            var query: MapDataProvider.LayerQuery?,
+            var query: LayerQuery?,
             var provider: MapDataProvider)
-        : UniqueAsyncTaskManager.Task<Void, Map<Any, MapElementSpec>> {
+        : UniqueAsyncTaskManager.Task<Void, LoadLayerElementsResult> {
 
-        override fun run(support: UniqueAsyncTaskManager.TaskSupport<Void>): Map<Any, MapElementSpec> {
+        override fun run(support: UniqueAsyncTaskManager.TaskSupport<Void>): LoadLayerElementsResult {
             if (query == null) {
                 query = provider.createQueryForLayer(layer.desc)
             }
-            return query!!.fetchMapElements(bounds)
+            if (support.isCancelled()) {
+                return LoadLayerElementsResult(query!!, bounds)
+            }
+            return LoadLayerElementsResult(query!!, bounds, query!!.fetchMapElements(bounds))
         }
     }
+
+    private data class LoadLayerElementsResult(val query: LayerQuery, val bounds: LatLngBounds, val elements: MapElementSpecs? = null)
 }

@@ -1,6 +1,5 @@
 package mil.nga.giat.mage.map.view;
 
-import android.arch.lifecycle.LiveData;
 import android.arch.lifecycle.ViewModelProviders;
 import android.content.Context;
 import android.os.Bundle;
@@ -31,8 +30,8 @@ import java.util.Map;
 
 import mil.nga.giat.mage.R;
 import mil.nga.giat.mage.data.Resource;
-import mil.nga.giat.mage.map.MapElementSpec;
 import mil.nga.giat.mage.map.cache.MapLayerManager;
+import mil.nga.giat.mage.map.view.MapLayersViewModel.Layer;
 
 import static android.support.v7.widget.RecyclerView.NO_ID;
 
@@ -372,7 +371,7 @@ public class MapDataFragment extends Fragment implements DragListView.DragListLi
             icon.setVisibility(View.VISIBLE);
             mGrabView.setVisibility(View.VISIBLE);
             dataVisible.setVisibility(View.VISIBLE);
-            MapLayersViewModel.Layer layer = (MapLayersViewModel.Layer) mapData;
+            Layer layer = (Layer) mapData;
             Integer iconResourceId = layer.getDesc().getIconImageResourceId();
             if (iconResourceId != null) {
                 icon.setImageResource(iconResourceId);
@@ -380,15 +379,13 @@ public class MapDataFragment extends Fragment implements DragListView.DragListLi
             name.setText(layer.getDesc().getLayerTitle());
             detail.setText(layer.getResourceName());
             dataVisible.setChecked(layer.isVisible());
-            LiveData<Resource<Map<Object, MapElementSpec>>> liveElements = model.elementsForLayer(layer);
-            Resource<?> layerResource = liveElements.getValue();
-            dataLoading.setVisibility(layerResource != null && layerResource.getStatus() == Resource.Status.Loading ?
-                View.VISIBLE : View.INVISIBLE);
+            dataLoading.setVisibility(
+                layer.getElements().getStatus() == Resource.Status.Loading ? View.VISIBLE : View.INVISIBLE);
         }
 
         @Override
         public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
-            model.setLayerVisibility((MapLayersViewModel.Layer) mapData, isChecked);
+            model.setLayerVisible((Layer) mapData, isChecked);
         }
     }
 
