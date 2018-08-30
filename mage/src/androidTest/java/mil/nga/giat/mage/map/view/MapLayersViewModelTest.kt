@@ -853,6 +853,65 @@ class MapLayersViewModelTest : LifecycleOwner {
     }
 
     @Test
+    fun zOrderShiftWhileLayerElementsFetchingConcurrently() {
+
+        val control = ConcurrentMethodControl(testTimeout)
+        val bounds = bounds(130.0, 45.0, 2.0)
+        val elements = mapOf(MapMarkerSpec("m1", null, MarkerOptions()))
+        val query = mock<LayerQuery> {
+            on { fetchMapElements(bounds) }.then { _ ->
+                control.enterAndAwaitRelease()
+                elements
+            }
+            on { hasDynamicElements() }.thenReturn(true)
+            on { supportsDynamicFetch() }.thenReturn(true)
+        }
+        val provider = providerForLayer(allLayerDescs[0])
+        whenever(provider.createQueryForLayer(allLayerDescs[0])).thenReturn(query)
+
+        waitForMainThreadToRun {
+            mapData.value = Resource.success(allResources)
+            model.setLayerVisible(model.layerAt(0), true)
+            model.mapBoundsChanged(bounds)
+            assertThat(model.layerAt(0).elements.status, equalTo(Loading))
+            assertThat(model.layerAt(0).elements.content, equalTo(emptyMap()))
+            verify(listener).layerVisibilityChanged(model.layerAt(0), 0)
+            verify(listener).layerElementsChanged(model.layerAt(0), 0, emptyMap())
+        }
+
+        control.waitUntilBlocked()
+
+        waitForMainThreadToRun {
+            val moved = model.layerAt(0)
+            model.moveZIndex(0, 3)
+            assertThat(model.layerAt(0), not(equalTo(moved)))
+            assertThat(model.layerAt(3), equalTo(moved))
+            assertThat(model.layerAt(0).elements.status, equalTo(Success))
+            assertThat(model.layerAt(0).elements.content, nullValue())
+            assertThat(model.layerAt(3).elements.status, equalTo(Loading))
+            assertThat(model.layerAt(3).elements.content, equalTo(emptyMap()))
+            assertZIndexesMatchInversePositions(model.layersInZOrder.value!!.requireContent())
+            verify(listener).zOrderShift(0..3)
+        }
+
+        control.release()
+
+        onMainThread.assertThatWithin(testTimeout, { model.layerAt(3).elements.status }, equalTo(Success))
+        waitForThreadPoolTermination()
+
+
+        assertThat(model.layerAt(0).elements.status, equalTo(Success))
+        assertThat(model.layerAt(0).elements.content, nullValue())
+        assertThat(model.layerAt(3).elements.status, equalTo(Success))
+        assertThat(model.layerAt(3).elements.content, equalTo(elements))
+        assertZIndexesMatchInversePositions(model.layersInZOrder.value!!.requireContent())
+        verify(listener).layerVisibilityChanged(model.layerAt(3), 0)
+        verify(listener).layerElementsChanged(model.layerAt(3), 0, emptyMap())
+        verify(listener).layerElementsChanged(model.layerAt(3), 3, emptyMap())
+        verifyNoMoreInteractions(listener)
+    }
+
+    @Test
     @UiThreadTest
     fun zOrderShiftNoop() {
 
