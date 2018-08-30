@@ -44,8 +44,19 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
     private val mediatedLayers = MediatorLiveData<Resource<List<Layer>>>()
     private val queryForLayer = HashMap<Layer, LayerQuery>()
     private val boundsForLayer = HashMap<Layer, LatLngBounds>()
-    private val elementLoadTasks = UniqueAsyncTaskManager(object : UniqueAsyncTaskManager.TaskListener<Layer, Void, LoadLayerElementsResult> {
-        override fun taskFinished(key: Layer, task: UniqueAsyncTaskManager.Task<Void, LoadLayerElementsResult>, result: LoadLayerElementsResult?) {
+    private val elementLoadTasks = UniqueAsyncTaskManager(object : UniqueAsyncTaskManager.TaskListener<Layer, LayerQuery, LoadLayerElementsResult> {
+
+        override fun taskProgress(key: Layer, task: UniqueAsyncTaskManager.Task<LayerQuery, LoadLayerElementsResult>, progress: LayerQuery) {
+            queryForLayer[key] = progress
+        }
+
+        override fun taskCancelled(key: Layer, task: UniqueAsyncTaskManager.Task<LayerQuery, LoadLayerElementsResult>, result: LoadLayerElementsResult?) {
+            val cancelled = task as LoadLayerElements
+            val pending = task.manager.pendingTaskForKey(key) as LoadLayerElements?
+            pending?.query = cancelled.query
+        }
+
+        override fun taskFinished(key: Layer, task: UniqueAsyncTaskManager.Task<LayerQuery, LoadLayerElementsResult>, result: LoadLayerElementsResult?) {
             var pos = posOfZIndex(key.zIndex)
             if (pos < 0 || pos >= layers.size || layers[pos] != key) {
                 pos = layers.indexOf(key)
@@ -54,10 +65,12 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
                 // layer was removed when map data changed
                 return
             }
-            queryForLayer[key] = result!!.query
-            boundsForLayer[key] = result.bounds
+            boundsForLayer[key] = result!!.bounds
+            if (result.elements == null) {
+                return
+            }
             val target = layers[pos]
-            val elements = result.elements ?: emptyMap()
+            val elements = result.elements
             val prevElements = target.elements.content ?: emptyMap()
             val removed = HashMap<Any, MapElementSpec>(prevElements.size)
             for ((prevKey, prev) in prevElements) {
@@ -141,7 +154,7 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
         else if (currentBounds != boundsForLayer[layer]) {
             layers[pos] = target.copy(isVisible = true, elements = target.elements.copy(status = Loading))
             elementLoadTasks.execute(layers[pos], LoadLayerElements(
-                layers[pos], currentBounds!!, queryForLayer[layer], mapDataManager.providers[layer.desc.dataType]!!))
+                layers[pos], currentBounds!!, queryForLayer[layer], mapDataManager.providers[layer.desc.dataType]!!, elementLoadTasks))
         }
         triggerLayerEvent.layerVisibility(layers[pos], pos)
     }
@@ -170,15 +183,19 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
     fun mapBoundsChanged(bounds: LatLngBounds) {
         currentBounds = bounds
         val cursor = layers.listIterator()
-        for (layer in cursor) {
-            if (layer.isVisible) {
-                val layerQuery = queryForLayer[layer]
-                if ((layerQuery != null && layerQuery.hasDynamicElements() && layerQuery.supportsDynamicFetch()) || layerQuery == null) {
-                    val loadingLayer = layer.copy(elements = layer.elements.copy(status = Loading))
-                    cursor.set(loadingLayer)
-                    triggerLayerEvent.elementsChanged(loadingLayer, cursor.previousIndex(), emptyMap())
-                    elementLoadTasks.execute(layer, LoadLayerElements(loadingLayer, bounds, layerQuery, mapDataManager.providers[layer.desc.dataType]!!))
+        cursor.forEach { layer ->
+            if (!layer.isVisible) {
+                return@forEach
+            }
+            val layerQuery = queryForLayer[layer]
+            if (layerQuery == null || (layerQuery.hasDynamicElements() && layerQuery.supportsDynamicFetch())) {
+                var loadTarget = layer
+                if (Loading != layer.elements.status) {
+                    loadTarget = layer.copy(elements = layer.elements.copy(status = Loading, content = layer.elements.content ?: emptyMap()))
+                    cursor.set(loadTarget)
+                    triggerLayerEvent.elementsChanged(loadTarget, cursor.previousIndex(), emptyMap())
                 }
+                elementLoadTasks.execute(layer, LoadLayerElements(loadTarget, bounds, layerQuery, mapDataManager.providers[layer.desc.dataType]!!, elementLoadTasks))
             }
         }
     }
@@ -305,20 +322,22 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
             val layer: Layer,
             val bounds: LatLngBounds,
             var query: LayerQuery?,
-            var provider: MapDataProvider)
-        : UniqueAsyncTaskManager.Task<Void, LoadLayerElementsResult> {
+            var provider: MapDataProvider,
+            val manager: UniqueAsyncTaskManager<Layer, LayerQuery, LoadLayerElementsResult>)
+        : UniqueAsyncTaskManager.Task<LayerQuery, LoadLayerElementsResult> {
 
-        override fun run(support: UniqueAsyncTaskManager.TaskSupport<Void>): LoadLayerElementsResult {
+        override fun run(support: UniqueAsyncTaskManager.TaskSupport<LayerQuery>): LoadLayerElementsResult {
             if (query == null) {
                 query = provider.createQueryForLayer(layer.desc)
+                support.reportProgressToMainThread(query!!)
             }
             if (support.isCancelled()) {
-                return LoadLayerElementsResult(query!!, bounds)
+                return LoadLayerElementsResult(bounds)
             }
             val elements = query!!.fetchMapElements(bounds)
-            return LoadLayerElementsResult(query!!, bounds, elements)
+            return LoadLayerElementsResult(bounds, elements)
         }
     }
 
-    private data class LoadLayerElementsResult(val query: LayerQuery, val bounds: LatLngBounds, val elements: MapElementSpecs? = null)
+    private data class LoadLayerElementsResult(val bounds: LatLngBounds, val elements: MapElementSpecs? = null)
 }
