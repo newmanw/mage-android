@@ -465,6 +465,8 @@ class MapLayersViewModelTest : LifecycleOwner {
         val layerPos = allLayerDescs.indexOf(layerDesc)
         val query = mock<LayerQuery> {
             on { fetchMapElements(any()) }.thenReturn(mapOf(MapMarkerSpec("point1", null, MarkerOptions())))
+            on { hasDynamicElements() }.thenReturn(true)
+            on { supportsDynamicFetch() }.thenReturn(true)
         }
         val provider = providerForLayer(layerDesc)
         whenever(provider.createQueryForLayer(layerDesc)).thenReturn(query)
@@ -502,6 +504,8 @@ class MapLayersViewModelTest : LifecycleOwner {
         val bounds = bounds(12.0, 15.0, 3.0)
         val query = mock<LayerQuery> {
             on { fetchMapElements(bounds) }.thenReturn(mapOf(marker))
+            on { hasDynamicElements() }.thenReturn(true)
+            on { supportsDynamicFetch() }.thenReturn(true)
         }
         val provider = providerForLayer(res2Layer1)
         whenever(provider.createQueryForLayer(res2Layer1)).thenReturn(query)
@@ -560,6 +564,8 @@ class MapLayersViewModelTest : LifecycleOwner {
         val provider = providerForLayer(allLayerDescs[0])
         val query = mock<LayerQuery> {
             on { fetchMapElements(bounds) }.thenReturn(elements)
+            on { hasDynamicElements() }.thenReturn(true)
+            on { supportsDynamicFetch() }.thenReturn(true)
         }
         whenever(provider.createQueryForLayer(allLayerDescs[0])).thenReturn(query)
 
@@ -591,12 +597,120 @@ class MapLayersViewModelTest : LifecycleOwner {
 
     @Test
     fun doesNotReloadElementsWhenLayerDoesNotHaveDynamicElements() {
-        fail("unimplemented")
+
+        val marker = MapMarkerSpec("point1", null, MarkerOptions())
+        val bounds = bounds(12.0, 15.0, 3.0)
+        val query = mock<LayerQuery> {
+            on { fetchMapElements(bounds) }.thenReturn(mapOf(marker))
+            on { hasDynamicElements() }.thenReturn(false)
+            on { supportsDynamicFetch() }.thenReturn(false)
+        }
+        val provider = providerForLayer(res2Layer1)
+        whenever(provider.createQueryForLayer(res2Layer1)).thenReturn(query)
+        val layerPos = allLayerDescs.indexOf(res2Layer1)
+
+        waitForMainThreadToRun {
+            mapData.value = Resource.success(allResources)
+            model.mapBoundsChanged(bounds)
+            val layer = model.layerAt(layerPos)
+
+            assertThat(layer.desc, equalTo(res2Layer1))
+
+            model.setLayerVisible(layer, true)
+            val visibleLayer = model.layerAt(layerPos)
+
+            assertThat(visibleLayer.elements.status, equalTo(Loading))
+            verify(listener).layerVisibilityChanged(visibleLayer, layerPos)
+        }
+
+        onMainThread.assertThatWithin(testTimeout, { model.layerAt(layerPos).elements.status }, equalTo(Success))
+
+        val elements = model.layerAt(layerPos).elements
+
+        assertThat(elements.requireContent(), equalTo(mapOf(marker)))
+        verify(provider).createQueryForLayer(model.layerAt(layerPos).desc)
+        verify(query).fetchMapElements(bounds)
+
+        waitForMainThreadToRun {
+            model.setLayerVisible(model.layerAt(layerPos), false)
+            val layer = model.layerAt(layerPos)
+
+            assertThat(layer.elements.status, equalTo(Success))
+            assertThat(layer.elements.content, equalTo(elements.content))
+            verify(listener, times(2)).layerVisibilityChanged(layer, layerPos)
+        }
+
+        waitForMainThreadToRun {
+            model.setLayerVisible(model.layerAt(layerPos), true)
+            val layer = model.layerAt(layerPos)
+
+            assertThat(layer.elements.status, equalTo(Success))
+            assertThat(layer.elements, sameInstance(elements))
+            assertThat(layer.elements.content, equalTo(mapOf(marker)))
+            verify(listener, times(3)).layerVisibilityChanged(layer, layerPos)
+        }
+
+        verifyNoMoreInteractions(provider)
+        verifyNoMoreInteractions(query)
     }
 
     @Test
     fun doesNotReloadElementsWhenLayerHasDynamicElementsAndDoesNotSupportDynamicQueries() {
-        fail("unimplemented")
+
+        val marker = MapMarkerSpec("point1", null, MarkerOptions())
+        val bounds = bounds(12.0, 15.0, 3.0)
+        val query = mock<LayerQuery> {
+            on { fetchMapElements(bounds) }.thenReturn(mapOf(marker))
+            on { hasDynamicElements() }.thenReturn(true)
+            on { supportsDynamicFetch() }.thenReturn(false)
+        }
+        val provider = providerForLayer(res2Layer1)
+        whenever(provider.createQueryForLayer(res2Layer1)).thenReturn(query)
+        val layerPos = allLayerDescs.indexOf(res2Layer1)
+
+        waitForMainThreadToRun {
+            mapData.value = Resource.success(allResources)
+            model.mapBoundsChanged(bounds)
+            val layer = model.layerAt(layerPos)
+
+            assertThat(layer.desc, equalTo(res2Layer1))
+
+            model.setLayerVisible(layer, true)
+            val visibleLayer = model.layerAt(layerPos)
+
+            assertThat(visibleLayer.elements.status, equalTo(Loading))
+            verify(listener).layerVisibilityChanged(visibleLayer, layerPos)
+        }
+
+        onMainThread.assertThatWithin(testTimeout, { model.layerAt(layerPos).elements.status }, equalTo(Success))
+
+        val elements = model.layerAt(layerPos).elements
+
+        assertThat(elements.requireContent(), equalTo(mapOf(marker)))
+        verify(provider).createQueryForLayer(model.layerAt(layerPos).desc)
+        verify(query).fetchMapElements(bounds)
+
+        waitForMainThreadToRun {
+            model.setLayerVisible(model.layerAt(layerPos), false)
+            val layer = model.layerAt(layerPos)
+
+            assertThat(layer.elements.status, equalTo(Success))
+            assertThat(layer.elements.content, equalTo(elements.content))
+            verify(listener, times(2)).layerVisibilityChanged(layer, layerPos)
+        }
+
+        waitForMainThreadToRun {
+            model.setLayerVisible(model.layerAt(layerPos), true)
+            val layer = model.layerAt(layerPos)
+
+            assertThat(layer.elements.status, equalTo(Success))
+            assertThat(layer.elements, sameInstance(elements))
+            assertThat(layer.elements.content, equalTo(mapOf(marker)))
+            verify(listener, times(3)).layerVisibilityChanged(layer, layerPos)
+        }
+
+        verifyNoMoreInteractions(provider)
+        verifyNoMoreInteractions(query)
     }
 
     @Test
@@ -691,7 +805,7 @@ class MapLayersViewModelTest : LifecycleOwner {
     }
 
     @Test
-    fun reusesLayerQueryFromPreemptedElementFetch() {
+    fun reusesLayerQueryWhenFetchIsPreemptedConcurrently() {
 
         val control = ConcurrentMethodControl(testTimeout)
         val bounds1 = bounds(130.0, 45.0, 2.0)
