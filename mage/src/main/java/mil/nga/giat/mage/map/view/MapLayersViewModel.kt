@@ -15,9 +15,9 @@ import mil.nga.giat.mage.map.cache.MapDataProvider.LayerQuery
 import mil.nga.giat.mage.map.cache.MapLayerDescriptor
 import mil.nga.giat.mage.utils.EnumLiveEvents
 import mil.nga.giat.mage.utils.LiveEvents
-import java.util.*
 import java.util.concurrent.Executor
 import kotlin.Comparator
+import kotlin.collections.ArrayList
 import kotlin.collections.HashMap
 
 
@@ -40,18 +40,22 @@ private val defaultLayerOrder = Comparator<MapLayersViewModel.Layer> { a, b ->
 @UiThread
 class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: Executor) : ViewModel() {
 
-    private val layers = ArrayList<Layer>()
+    private var layers = ArrayList<Layer>()
     private val mediatedLayers = MediatorLiveData<Resource<List<Layer>>>()
     private val queryForLayer = HashMap<Layer, LayerQuery>()
     private val boundsForLayer = HashMap<Layer, LatLngBounds>()
     private val elementLoadTasks = UniqueAsyncTaskManager(object : UniqueAsyncTaskManager.TaskListener<Layer, Void, LoadLayerElementsResult> {
         override fun taskFinished(key: Layer, task: UniqueAsyncTaskManager.Task<Void, LoadLayerElementsResult>, result: LoadLayerElementsResult?) {
-            queryForLayer[key] = result!!.query
-            boundsForLayer[key] = result.bounds
             var pos = posOfZIndex(key.zIndex)
-            if (pos >= layers.size || layers[pos] != key) {
+            if (pos < 0 || pos >= layers.size || layers[pos] != key) {
                 pos = layers.indexOf(key)
             }
+            if (pos < 0) {
+                // layer was removed when map data changed
+                return
+            }
+            queryForLayer[key] = result!!.query
+            boundsForLayer[key] = result.bounds
             val target = layers[pos]
             val elements = result.elements ?: emptyMap()
             val prevElements = target.elements.content ?: emptyMap()
@@ -99,37 +103,23 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
                 mediatedLayers.value = Resource.loading(layers)
                 return@addSource
             }
+            val fresh = ArrayList<Layer>()
             val layerDescs = mapDataManager.layers
             val layerCount = layerDescs.size
-            var cursor = layers.listIterator()
             // TODO: track z-indexes and emit events so visible layers get updated
-            var firstZIndexChange = -1
-            while (cursor.hasNext()) {
-                val layer = cursor.next()
-                if (layerDescs.remove(layer.desc.layerUri) == null) {
-                    // TODO: post value or keep serial here, collect and do all at once in another loop below?
-                    cursor.remove()
-                    if (firstZIndexChange < 0) {
-                        firstZIndexChange = cursor.previousIndex()
-                    }
-                }
-                else {
+            layers.forEachIndexed { index, layer ->
+                val layerDesc = layerDescs.remove(layer.desc.layerUri)
+                if (layerDesc != null) {
+                    fresh.add(layer.copy(zIndex = zIndexOfPos(index, layerCount)))
                     // TODO: handle updated layers that might need to reload elements
                 }
-            }
-            if (firstZIndexChange < 0) {
-                firstZIndexChange = layers.size
-            }
-            cursor = layers.listIterator(firstZIndexChange)
-            while (cursor.hasNext()) {
-                val layer = cursor.next()
-                cursor.set(layer.copy(zIndex = zIndexOfPos(cursor.previousIndex(), layerCount)))
             }
             var layerPos = layers.size
             layerDescs.values.asSequence()
                     .map { Layer(it, mapDataManager.resourceForLayer(it)!!.requireResolved().name, false, zIndexOfPos(layerPos++, layerCount)) }
                     .sortedWith(defaultLayerOrder)
-                    .forEach { layers.add(it) }
+                    .forEach { fresh.add(it) }
+            layers = fresh
             mediatedLayers.value = Resource.success(layers)
         }
     }
@@ -183,7 +173,7 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
         for (layer in cursor) {
             if (layer.isVisible) {
                 val layerQuery = queryForLayer[layer]
-                if ((layerQuery != null && layerQuery.hasDynamicElements()) || layerQuery == null) {
+                if ((layerQuery != null && layerQuery.hasDynamicElements() && layerQuery.supportsDynamicFetch()) || layerQuery == null) {
                     val loadingLayer = layer.copy(elements = layer.elements.copy(status = Loading))
                     cursor.set(loadingLayer)
                     triggerLayerEvent.elementsChanged(loadingLayer, cursor.previousIndex(), emptyMap())
@@ -325,7 +315,8 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
             if (support.isCancelled()) {
                 return LoadLayerElementsResult(query!!, bounds)
             }
-            return LoadLayerElementsResult(query!!, bounds, query!!.fetchMapElements(bounds))
+            val elements = query!!.fetchMapElements(bounds)
+            return LoadLayerElementsResult(query!!, bounds, elements)
         }
     }
 

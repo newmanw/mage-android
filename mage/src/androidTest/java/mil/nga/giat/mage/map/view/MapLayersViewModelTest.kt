@@ -18,6 +18,7 @@ import mil.nga.giat.mage.map.view.MapLayersViewModel.Layer
 import mil.nga.giat.mage.test.AsyncTesting
 import mil.nga.giat.mage.test.AsyncTesting.waitForMainThreadToCall
 import mil.nga.giat.mage.test.AsyncTesting.waitForMainThreadToRun
+import mil.nga.giat.mage.test.ConcurrentMethodControl
 import mil.nga.giat.mage.test.TargetSuppliesPropertyValueMatcher.valueSuppliedBy
 import org.hamcrest.Matchers.*
 import org.junit.After
@@ -583,12 +584,62 @@ class MapLayersViewModelTest : LifecycleOwner {
     }
 
     @Test
-    fun layerRemovedWhileFetchingElementsConcurrently() {
+    fun doesNotReloadElementsWhenLayerDoesNotHaveDynamicElements() {
         fail("unimplemented")
     }
 
     @Test
+    fun doesNotReloadElementsWhenLayerHasDynamicElementsAndDoesNotSupportDynamicQueries() {
+        fail("unimplemented")
+    }
+
+    @Test
+    fun layerRemovedWhileFetchingElementsConcurrently() {
+
+        val control = ConcurrentMethodControl(testTimeout)
+        val elements = mapOf(MapMarkerSpec("m1", null, MarkerOptions()))
+        val query = mock<LayerQuery> {
+            on { fetchMapElements(any()) }.then { _ ->
+                control.enterAndAwaitRelease()
+                elements
+            }
+        }
+        val provider = providerForLayer(allLayerDescs[0])
+        whenever(provider.createQueryForLayer(allLayerDescs[0])).thenReturn(query)
+
+        waitForMainThreadToRun {
+            mapData.value = Resource.success(allResources)
+            model.mapBoundsChanged(bounds(38.0, 53.0, 1.0))
+            model.setLayerVisible(model.layerAt(0), true)
+            verify(listener).layerVisibilityChanged(model.layerAt(0), 0)
+        }
+
+        control.waitUntilBlocked()
+
+        waitForMainThreadToRun {
+            mapData.value = Resource.success(allResources.minus(res1.uri))
+        }
+
+        control.release()
+
+        waitForThreadPoolTermination()
+
+        assertThat(model.layersInZOrder.value!!.requireContent(), not(anyOf(hasItem(res1Layer1), hasItem(res1Layer2))))
+        verifyNoMoreInteractions(listener)
+        argumentCaptor<Resource<List<Layer>>> {
+            verify(observer, times(2)).onChanged(capture())
+            assertThat(allValues[0].requireContent(), hasSize(5))
+            assertThat(allValues[1].requireContent(), hasSize(3))
+        }
+    }
+
+    @Test
     fun mapBoundsChangeWhileLayerElementsFetchingConcurrently() {
+        fail("unimplemented")
+    }
+
+    @Test
+    fun createsLayerQueryWhenElementFetchGetsPreempted() {
         fail("unimplemented")
     }
 

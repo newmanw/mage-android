@@ -167,6 +167,7 @@ class UniqueAsyncTaskManager<Key, Progress, Result>(private val listener: TaskLi
                 delegate.run(this)
             }
             catch (e: Exception) {
+                // TODO: report errors
                 return null
             }
         }
