@@ -107,10 +107,10 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
             val layerDescs = mapDataManager.layers
             val layerCount = layerDescs.size
             // TODO: track z-indexes and emit events so visible layers get updated
-            layers.forEachIndexed { index, layer ->
+            layers.forEachIndexed { pos, layer ->
                 val layerDesc = layerDescs.remove(layer.desc.layerUri)
                 if (layerDesc != null) {
-                    fresh.add(layer.copy(zIndex = zIndexOfPos(index, layerCount)))
+                    fresh.add(layer.copy(zIndex = zIndexOfPos(fresh.size, layerCount)))
                     // TODO: handle updated layers that might need to reload elements
                 }
             }

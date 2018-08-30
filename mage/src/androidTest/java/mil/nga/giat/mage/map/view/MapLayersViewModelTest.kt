@@ -236,6 +236,7 @@ class MapLayersViewModelTest : LifecycleOwner {
         assertThat(model.layersInZOrder.value!!.status, equalTo(Success))
         assertThat(model.layersInZOrder.value!!.content!!.map(Layer::desc),
             equalTo(listOf(res1Layer1, res1Layer2, res2Layer1, res2Layer2, res3Layer1)))
+        assertZIndexesMatchInversePositions(model.layersInZOrder.value!!.requireContent())
     }
 
     @Test
@@ -267,6 +268,7 @@ class MapLayersViewModelTest : LifecycleOwner {
         mapData.value = Resource.success(mapOf(res1, res2))
 
         assertThat(model.layersInZOrder.value!!.content!!.map(Layer::desc), equalTo(listOf(res1Layer1, res1Layer2, res2Layer1, res2Layer2)))
+        assertZIndexesMatchInversePositions(model.layersInZOrder.value!!.requireContent())
     }
 
     @Test
@@ -281,6 +283,7 @@ class MapLayersViewModelTest : LifecycleOwner {
         mapData.value = Resource.success(mapOf(res1))
 
         assertThat(model.layersInZOrder.value!!.content!!.map(Layer::desc), equalTo(listOf(res1Layer2, res1Layer1)))
+        assertZIndexesMatchInversePositions(model.layersInZOrder.value!!.requireContent())
     }
 
     @Test
@@ -295,6 +298,7 @@ class MapLayersViewModelTest : LifecycleOwner {
         mapData.value = Resource.success(mapOf(res1, res3))
 
         assertThat(model.layersInZOrder.value!!.content!!.map(Layer::desc), equalTo(listOf(res1Layer1, res1Layer2, res3Layer1)))
+        assertZIndexesMatchInversePositions(model.layersInZOrder.value!!.requireContent())
 
         mapData.value = Resource.success(emptyMap())
 
@@ -314,6 +318,7 @@ class MapLayersViewModelTest : LifecycleOwner {
         mapData.value = Resource.loading()
 
         assertThat(model.layersInZOrder.value!!.content, equalTo(layers))
+        assertZIndexesMatchInversePositions(model.layersInZOrder.value!!.requireContent())
     }
 
     @Test
