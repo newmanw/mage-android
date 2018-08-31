@@ -6,9 +6,8 @@ import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.model.*
 import mil.nga.giat.mage.data.Resource
 import mil.nga.giat.mage.data.Resource.Status
-import mil.nga.giat.mage.map.BasicMapElementContainer
-import mil.nga.giat.mage.map.MapElementOperation
-import mil.nga.giat.mage.map.MapElementSpec
+import mil.nga.giat.mage.map.*
+import mil.nga.giat.mage.map.MapElementSpec.MapElementSpecVisitor
 import mil.nga.giat.mage.map.view.MapLayersViewModel
 import mil.nga.giat.mage.map.view.MapOwner
 import java.util.*
@@ -38,45 +37,6 @@ class MapLayerManager(
     val map: GoogleMap
         get() = mapOwner.map
 
-    interface MapLayerAdapter : MapElementSpec.MapElementOwner {
-
-        /**
-         * Release resources and prepare for garbage collection.
-         */
-        @UiThread
-        fun onLayerRemoved()
-
-        @UiThread
-        fun onClick(x: Circle, id: Any): Callable<String>? {
-            return null
-        }
-
-        @UiThread
-        fun onClick(x: GroundOverlay, id: Any): Callable<String>? {
-            return null
-        }
-
-        @UiThread
-        fun onClick(x: Marker, id: Any): Callable<String>? {
-            return null
-        }
-
-        @UiThread
-        fun onClick(x: Polygon, id: Any): Callable<String>? {
-            return null
-        }
-
-        @UiThread
-        fun onClick(x: Polyline, id: Any): Callable<String>? {
-            return null
-        }
-
-        @UiThread
-        fun onClick(pos: LatLng): Callable<String>? {
-            return null
-        }
-    }
-
     /**
      * A `ViewLayer` is the visual representation on a [GoogleMap] of the data
      * a [MapLayerDescriptor] describes.  A [MapDataProvider] creates instances
@@ -88,10 +48,9 @@ class MapLayerManager(
      * etc.
      */
     @UiThread
-    private inner class ViewLayer {
+    private inner class ViewLayer(val adapter: MapDataProvider.LayerQuery) {
 
         val mapElements = BasicMapElementContainer()
-        val adapter = AtomicReference<MapLayerAdapter>()
         var isVisible = true
         var zIndex = 0
             set(z) {
@@ -106,7 +65,7 @@ class MapLayerManager(
          */
         fun removeFromMap() {
             mapElements.forEach(MapElementOperation.REMOVE)
-            adapter.get().onLayerRemoved()
+            adapter.onLayerRemoved()
         }
 
         fun show() {
@@ -140,32 +99,32 @@ class MapLayerManager(
         }
 
         fun onMarkerClick(x: Marker) {
-            val getInfo = mapElements.withElement<Callable<String>>(x) { x1, id -> adapter.get().onClick(x1, id) }
+            val getInfo = mapElements.withElement<Callable<String>>(x) { x1, id -> adapter.onClick(x1, id) }
             // TODO: get the info on background thread and get it on the map popup
         }
 
         fun onCircleClick(x: Circle) {
-            val getInfo = mapElements.withElement<Callable<String>>(x) { x1, id -> adapter.get().onClick(x1, id) }
+            val getInfo = mapElements.withElement<Callable<String>>(x) { x1, id -> adapter.onClick(x1, id) }
             // TODO: get the info on background thread and get it on the map popup
         }
 
         fun onPolylineClick(x: Polyline) {
-            val getInfo = mapElements.withElement<Callable<String>>(x) { x1, id -> adapter.get().onClick(x1, id) }
+            val getInfo = mapElements.withElement<Callable<String>>(x) { x1, id -> adapter.onClick(x1, id) }
             // TODO: get the info on background thread and get it on the map popup
         }
 
         fun onPolygonClick(x: Polygon) {
-            val getInfo = mapElements.withElement<Callable<String>>(x) { x1, id -> adapter.get().onClick(x1, id) }
+            val getInfo = mapElements.withElement<Callable<String>>(x) { x1, id -> adapter.onClick(x1, id) }
             // TODO: get the info on background thread and get it on the map popup
         }
 
         fun onGroundOverlayClick(x: GroundOverlay) {
-            val getInfo = mapElements.withElement<Callable<String>>(x) { x1, id -> adapter.get().onClick(x1, id) }
+            val getInfo = mapElements.withElement<Callable<String>>(x) { x1, id -> adapter.onClick(x1, id) }
             // TODO: get the info on background thread and get it on the map popup
         }
 
-        fun onMapClick(pos: LatLng) {
-            adapter.get().onClick(pos)
+        fun onMapClick(pos: LatLng, mapOwner: MapOwner) {
+            adapter.onClick(pos, mapOwner)
         }
     }
 
@@ -175,11 +134,11 @@ class MapLayerManager(
     }
 
     override fun layerVisibilityChanged(layer: MapLayersViewModel.Layer, position: Int) {
-        var viewLayer: ViewLayer? = layersOnMap[layer]
+        var viewLayer = layersOnMap[layer]
         if (layer.isVisible) {
             if (viewLayer == null) {
                 // load layer elements for bounds
-                viewLayer = ViewLayer()
+                viewLayer = ViewLayer(layer.adapter)
                 layersOnMap[layer] = viewLayer
             }
             viewLayer.show()
@@ -203,7 +162,7 @@ class MapLayerManager(
 
         }
         for (rm in removed.values) {
-            viewLayer.mapElements.withElementForId(rm.id, MapElementOperation.REMOVE)
+
         }
         for (el in layer.elements.content!!.values) {
             TODO("create the elements if they don't exist - move MapElementSpec.createFor() somewhere else, maybe another spec visitor")
@@ -215,13 +174,10 @@ class MapLayerManager(
     }
 
     override fun onMapClick(pos: LatLng) {
-        val (content) = layersModel.layersInZOrder.value ?: return
-        val modelLayers = content ?: return
-        val cursor = modelLayers.listIterator(modelLayers.size)
-        while (cursor.hasPrevious()) {
-            val modelLayer = cursor.previous()
+        val modelLayers = layersModel.layersInZOrder.value?.content ?: return
+        for (modelLayer in modelLayers) {
             val layer = layersOnMap[modelLayer]
-            layer?.onMapClick(pos)
+            layer?.onMapClick(pos, mapOwner)
         }
     }
 
@@ -272,17 +228,57 @@ class MapLayerManager(
     }
 
     private fun onMapLayersChanged(change: Resource<List<MapLayersViewModel.Layer>>?) {
-
+        val modelLayers = change?.content?.associateBy { it } ?: emptyMap()
+        val cursor = layersOnMap.keys.iterator()
+        for (modelLayerOnMap in cursor) {
+            if (!modelLayers.containsKey(modelLayerOnMap)) {
+                val viewLayer = layersOnMap[modelLayerOnMap]!!
+                viewLayer.removeFromMap()
+                cursor.remove()
+            }
+        }
+        // TODO: handle updated/chagned layers; use layerElementsChanged event?
     }
 
     fun dispose() {
         // TODO: remove and dispose all overlays/notify providers
+        val cursor = layersOnMap.values.iterator()
+        for (layer in cursor) {
+            layer.removeFromMap()
+            cursor.remove()
+        }
+    }
+
+    private class RemoveElementForSpec(private val elements: MapElements) : MapElementSpecVisitor<Boolean> {
+
+        override fun visit(x: MapCircleSpec): Boolean? {
+            return elements.withElementForSpec(x, MapElementOperation.REMOVE)
+        }
+
+        override fun visit(x: MapGroundOverlaySpec): Boolean? {
+            return elements.withElementForSpec(x, MapElementOperation.REMOVE)
+        }
+
+        override fun visit(x: MapMarkerSpec): Boolean? {
+            return elements.withElementForSpec(x, MapElementOperation.REMOVE)
+        }
+
+        override fun visit(x: MapPolygonSpec): Boolean? {
+            return elements.withElementForSpec(x, MapElementOperation.REMOVE)
+        }
+
+        override fun visit(x: MapPolylineSpec): Boolean? {
+            return elements.withElementForSpec(x, MapElementOperation.REMOVE)
+        }
+
+        override fun visit(x: MapTileOverlaySpec): Boolean? {
+            return elements.withElementForSpec(x, MapElementOperation.REMOVE)
+        }
     }
 
     companion object {
 
         private val LOG_NAME = MapLayerManager::class.java.simpleName
-
         private val ANYWHERE = LatLngBounds(LatLng(-90.0, -180.0), LatLng(90.0, 180.0))
     }
 }

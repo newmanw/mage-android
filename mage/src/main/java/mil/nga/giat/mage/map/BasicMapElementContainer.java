@@ -199,38 +199,33 @@ public class BasicMapElementContainer implements MapElements {
     }
 
     @Override
-    public <R> R withElementForId(Object id, CircleVisitor<R> action) {
-        return action.visit(circleForId.get(id), id);
+    public <R> R withElementForSpec(MapCircleSpec id, CircleVisitor<R> action) {
+        return action.visit(circleForId.get(id.getId()), id);
     }
 
     @Override
-    public <R> R withElementForId(Object id, GroundOverlayVisitor<R> action) {
-        return action.visit(groundOverlayForId.get(id), id);
+    public <R> R withElementForSpec(MapGroundOverlaySpec x, GroundOverlayVisitor<R> action) {
+        return action.visit(groundOverlayForId.get(x.getId()), x);
     }
 
     @Override
-    public <R> R withElementForId(Object id, MarkerVisitor<R> action) {
-        return action.visit(markerForId.get(id), id);
+    public <R> R withElementForSpec(MapMarkerSpec x, MarkerVisitor<R> action) {
+        return action.visit(markerForId.get(x.getId()), x);
     }
 
     @Override
-    public <R> R withElementForId(Object id, PolygonVisitor<R> action) {
-        return action.visit(polygonForId.get(id), id);
+    public <R> R withElementForSpec(MapPolygonSpec x, PolygonVisitor<R> action) {
+        return action.visit(polygonForId.get(x.getId()), x);
     }
 
     @Override
-    public <R> R withElementForId(Object id, PolylineVisitor<R> action) {
-        return action.visit(polylineForId.get(id), id);
+    public <R> R withElementForSpec(MapPolylineSpec x, PolylineVisitor<R> action) {
+        return action.visit(polylineForId.get(x.getId()), x);
     }
 
     @Override
-    public <R> R withElementForId(Object id, TileOverlayVisitor<R> action) {
-        return action.visit(tileOverlayForId.get(id), id);
-    }
-
-    @Override
-    public <T> T withElementForId(Object id, ComprehensiveMapElementVisitor<T> action) {
-        return null;
+    public <R> R withElementForSpec(MapTileOverlaySpec x, TileOverlayVisitor<R> action) {
+        return action.visit(tileOverlayForId.get(x.getId()), x);
     }
 
     @Override

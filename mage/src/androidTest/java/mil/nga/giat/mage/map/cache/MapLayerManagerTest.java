@@ -448,7 +448,7 @@ public class MapLayerManagerTest {
 //            TestLayerAdapter layer1 = showAndWaitForLayerOnMap(overlayManager, overlay1, markerSpec("m1"));
 //
 //            assertTrue(overlayManager.isLayerVisible(overlay1));
-//            assertThat(layer1.elements.withElementForId("m1", GET_MARKER), notNullValue());
+//            assertThat(layer1.elements.withElementForSpec("m1", GET_MARKER), notNullValue());
 //            // TODO: uiautomator verify markers
 //        }
 //
@@ -854,9 +854,9 @@ public class MapLayerManagerTest {
 //
 //            waitForMainThreadToRun(() -> {
 //                assertThat(c1o2OnMap.elementSpecForId("c1o2.1", MapElementSpec.MapMarkerSpec.class).options.getZIndex(), is((float) c1o2z));
-//                assertThat(c1o2OnMap.elements.withElementForId("c1o2.1", GET_MARKER).getZIndex(), is((float) c1o2z));
+//                assertThat(c1o2OnMap.elements.withElementForSpec("c1o2.1", GET_MARKER).getZIndex(), is((float) c1o2z));
 //                assertThat(c2o1OnMap.elementSpecForId("c2o1.1", MapElementSpec.MapMarkerSpec.class).options.getZIndex(), is((float) c2o1z));
-//                assertThat(c2o1OnMap.elements.withElementForId("c2o1.1", GET_MARKER).getZIndex(), is((float) c2o1z));
+//                assertThat(c2o1OnMap.elements.withElementForSpec("c2o1.1", GET_MARKER).getZIndex(), is((float) c2o1z));
 //            });
 //
 //            // TODO: uiautomator verify markers
@@ -916,9 +916,9 @@ public class MapLayerManagerTest {
 //                assertThat(orderMod.indexOf(c1o1), is(c1o1zMod));
 //                assertThat(orderMod.indexOf(c2o1), is(c2o1zMod));
 //                assertThat(orderMod.indexOf(c2o2), is(c2o2zMod));
-//                assertThat(c1o1OnMap.elements.withElementForId("c1o1.1", (Marker x, Object id) -> x.getZIndex()), is((float) c1o1zMod));
-//                assertThat(c2o1OnMap.elements.withElementForId("c2o1.1", (Marker x, Object id) -> x.getZIndex()), is((float) c2o1zMod));
-//                assertThat(c2o1OnMap.elements.withElementForId("c2o1.2", (Marker x, Object id) -> x.getZIndex()), is((float) c2o1zMod));
+//                assertThat(c1o1OnMap.elements.withElementForSpec("c1o1.1", (Marker x, Object id) -> x.getZIndex()), is((float) c1o1zMod));
+//                assertThat(c2o1OnMap.elements.withElementForSpec("c2o1.1", (Marker x, Object id) -> x.getZIndex()), is((float) c2o1zMod));
+//                assertThat(c2o1OnMap.elements.withElementForSpec("c2o1.2", (Marker x, Object id) -> x.getZIndex()), is((float) c2o1zMod));
 //                assertThat(c2o2OnMap.elements.count(), is(0));
 //            });
 //        }
@@ -952,8 +952,8 @@ public class MapLayerManagerTest {
 //                assertThat(orderMod, equalTo(order));
 //                assertThat(orderMod.indexOf(c1o1), is(c2o1z));
 //                assertThat(orderMod.indexOf(c2o1), is(c1o1z));
-//                assertThat((double) c1o1OnMap.elements.withElementForId("c1o1.1", GET_MARKER).getZIndex(), closeTo(c2o1z, 1.0e-10));
-//                assertThat((double) c2o1OnMap.elements.withElementForId("c2o1.1", GET_MARKER).getZIndex(), closeTo(c1o1z, 1.0e-10));
+//                assertThat((double) c1o1OnMap.elements.withElementForSpec("c1o1.1", GET_MARKER).getZIndex(), closeTo(c2o1z, 1.0e-10));
+//                assertThat((double) c2o1OnMap.elements.withElementForSpec("c2o1.1", GET_MARKER).getZIndex(), closeTo(c1o1z, 1.0e-10));
 //            });
 //        }
 //
@@ -969,7 +969,7 @@ public class MapLayerManagerTest {
 //            invalidOrder.set(1, new MapLayerDescriptorTest.TestLayerDescriptor1("c1.1.tainted", c1Uri, provider1.getClass()));
 //
 //            waitForMainThreadToRun(() -> {
-//                float originalZIndex = firstOnMap.elements.withElementForId("m1", GET_MARKER).getZIndex();
+//                float originalZIndex = firstOnMap.elements.withElementForSpec("m1", GET_MARKER).getZIndex();
 //
 //                assertFalse(overlayManager.setZOrder(invalidOrder));
 //
@@ -977,7 +977,7 @@ public class MapLayerManagerTest {
 //
 //                assertThat(unchangedOrder, not(equalTo(invalidOrder)));
 //                assertThat(unchangedOrder, not(hasItem(invalidOrder.get(1))));
-//                assertThat(firstOnMap.elements.withElementForId("m1", GET_MARKER).getZIndex(), is(originalZIndex));
+//                assertThat(firstOnMap.elements.withElementForSpec("m1", GET_MARKER).getZIndex(), is(originalZIndex));
 //            });
 //        }
 //
@@ -994,7 +994,7 @@ public class MapLayerManagerTest {
 //            invalidOrder.remove(0);
 //
 //            waitForMainThreadToRun(() -> {
-//                float originalZIndex = lastOnMap.elements.withElementForId("m1", GET_MARKER).getZIndex();
+//                float originalZIndex = lastOnMap.elements.withElementForSpec("m1", GET_MARKER).getZIndex();
 //
 //                assertFalse(overlayManager.setZOrder(invalidOrder));
 //
@@ -1002,7 +1002,7 @@ public class MapLayerManagerTest {
 //
 //                assertThat(unchangedOrder, not(equalTo(invalidOrder)));
 //                assertThat(unchangedOrder.size(), is(invalidOrder.size() + 1));
-//                assertThat(lastOnMap.elements.withElementForId("m1", GET_MARKER).getZIndex(), is(originalZIndex));
+//                assertThat(lastOnMap.elements.withElementForSpec("m1", GET_MARKER).getZIndex(), is(originalZIndex));
 //            });
 //        }
 //
@@ -1057,7 +1057,7 @@ public class MapLayerManagerTest {
 //                for (int zIndex = 0; zIndex < expectedOrder.size(); zIndex++) {
 //                    MapLayerDescriptor overlay = expectedOrder.get(zIndex);
 //                    TestLayerAdapter onMap = overlaysOnMap.get(overlay);
-//                    assertThat(onMap.elements.withElementForId(overlay.getLayerName() + ".m1", GET_MARKER).getZIndex(), is((float) zIndex));
+//                    assertThat(onMap.elements.withElementForSpec(overlay.getLayerName() + ".m1", GET_MARKER).getZIndex(), is((float) zIndex));
 //                }
 //            });
 //        }

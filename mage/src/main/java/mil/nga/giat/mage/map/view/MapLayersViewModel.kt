@@ -44,6 +44,7 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
     private val mediatedLayers = MediatorLiveData<Resource<List<Layer>>>()
     private val queryForLayer = HashMap<Layer, LayerQuery>()
     private val boundsForLayer = HashMap<Layer, LatLngBounds>()
+
     private val elementLoadTasks = UniqueAsyncTaskManager(object : UniqueAsyncTaskManager.TaskListener<Layer, LayerQuery, LoadLayerElementsResult> {
 
         override fun taskProgress(key: Layer, task: UniqueAsyncTaskManager.Task<LayerQuery, LoadLayerElementsResult>, progress: LayerQuery) {
@@ -83,6 +84,7 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
             triggerLayerEvent.elementsChanged(updatedLayer, pos, removed)
         }
     }, executor)
+
     private val triggerLayerEvent = object : EnumLiveEvents<LayerEventType, LayerListener>(LayerEventType::class.java) {
 
         fun zOrderShift(range: IntRange) {

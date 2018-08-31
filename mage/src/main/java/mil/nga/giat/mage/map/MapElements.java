@@ -43,12 +43,25 @@ public interface MapElements {
         R visit(TileOverlay x, Object id);
     }
 
-    interface ComprehensiveMapElementVisitor<T> {
+    interface ComprehensiveMapElementVisitor<T> extends
+        CircleVisitor<T>,
+        GroundOverlayVisitor<T>,
+        MarkerVisitor<T>,
+        PolygonVisitor<T>,
+        PolylineVisitor<T>,
+        TileOverlayVisitor<T> {
+
+        @Override
         default T visit(Circle x, Object id) { return null; }
+        @Override
         default T visit(GroundOverlay x, Object id) { return null; }
+        @Override
         default T visit(Marker x, Object id) { return null; }
+        @Override
         default T visit(Polygon x, Object id) { return null; }
+        @Override
         default T visit(Polyline x, Object id) { return null; }
+        @Override
         default T visit(TileOverlay x, Object id) { return null; }
     }
 
@@ -74,13 +87,12 @@ public interface MapElements {
     <T> T withElement(Polyline x, PolylineVisitor<T> action);
     <T> T withElement(TileOverlay x, TileOverlayVisitor<T> action);
 
-    <T> T withElementForId(Object id, CircleVisitor<T> action);
-    <T> T withElementForId(Object id, GroundOverlayVisitor<T> action);
-    <T> T withElementForId(Object id, MarkerVisitor<T> action);
-    <T> T withElementForId(Object id, PolygonVisitor<T> action);
-    <T> T withElementForId(Object id, PolylineVisitor<T> action);
-    <T> T withElementForId(Object id, TileOverlayVisitor<T> action);
-    <T> T withElementForId(Object id, ComprehensiveMapElementVisitor<T> action);
+    <T> T withElementForSpec(MapCircleSpec x, CircleVisitor<T> action);
+    <T> T withElementForSpec(MapGroundOverlaySpec x, GroundOverlayVisitor<T> action);
+    <T> T withElementForSpec(MapMarkerSpec x, MarkerVisitor<T> action);
+    <T> T withElementForSpec(MapPolygonSpec x, PolygonVisitor<T> action);
+    <T> T withElementForSpec(MapPolylineSpec x, PolylineVisitor<T> action);
+    <T> T withElementForSpec(MapTileOverlaySpec x, TileOverlayVisitor<T> action);
 
     void remove(Circle x);
     void remove(GroundOverlay x);

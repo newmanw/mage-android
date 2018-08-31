@@ -2,8 +2,8 @@ package mil.nga.giat.mage.map.cache
 
 import android.support.annotation.UiThread
 import android.support.annotation.WorkerThread
-import com.google.android.gms.maps.model.LatLngBounds
-import mil.nga.giat.mage.map.MapElementSpec
+import com.google.android.gms.maps.model.*
+import mil.nga.giat.mage.map.*
 import mil.nga.giat.mage.map.view.MapOwner
 import java.io.Closeable
 import java.util.concurrent.Callable
@@ -46,16 +46,6 @@ interface MapDataProvider {
     @Throws(MapDataResolveException::class)
     fun resolveResource(resource: MapDataResource): MapDataResource
 
-    /**
-     * Create a [mil.nga.giat.mage.map.cache.MapLayerManager.MapLayerAdapter] to add elements and interactions
-     * to the given map for the given layer descriptor.  This method will run on the main/UI thread so the provider
-     * can obtain any data necessary from the map, then return a [Callable] that will run on a background
-     * thread to initialize the adapter and avoid blocking the UI thread with any I/O or expensive computations
-     * the adapter might need.
-     */
-    @UiThread
-    fun createMapLayerAdapter(layerDescriptor: MapLayerDescriptor, mapOwner: MapOwner): Callable<out MapLayerManager.MapLayerAdapter>?
-
     @WorkerThread
     fun createQueryForLayer(layer: MapLayerDescriptor): LayerQuery
 
@@ -86,5 +76,72 @@ interface MapDataProvider {
          */
         @WorkerThread
         fun fetchMapElements(bounds: LatLngBounds): Map<Any, MapElementSpec>
+
+        @UiThread
+        @JvmDefault
+        fun addedToMap(spec: MapCircleSpec, elmt: Circle) {}
+
+        @UiThread
+        @JvmDefault
+        fun addedToMap(spec: MapGroundOverlaySpec, elmt: GroundOverlay) {}
+
+        @UiThread
+        @JvmDefault
+        fun addedToMap(spec: MapMarkerSpec, elmt: Marker) {}
+
+        @UiThread
+        @JvmDefault
+        fun addedToMap(spec: MapPolygonSpec, elmt: Polygon) {}
+
+        @UiThread
+        @JvmDefault
+        fun addedToMap(spec: MapPolylineSpec, elmt: Polyline) {}
+
+        @UiThread
+        @JvmDefault
+        fun addedToMap(spec: MapTileOverlaySpec, elmt: TileOverlay) {}
+
+        @UiThread
+        @JvmDefault
+        fun onClick(x: Circle, id: Any): Callable<String>? {
+            return null
+        }
+
+        @UiThread
+        @JvmDefault
+        fun onClick(x: GroundOverlay, id: Any): Callable<String>? {
+            return null
+        }
+
+        @UiThread
+        @JvmDefault
+        fun onClick(x: Marker, id: Any): Callable<String>? {
+            return null
+        }
+
+        @UiThread
+        @JvmDefault
+        fun onClick(x: Polygon, id: Any): Callable<String>? {
+            return null
+        }
+
+        @UiThread
+        @JvmDefault
+        fun onClick(x: Polyline, id: Any): Callable<String>? {
+            return null
+        }
+
+        @UiThread
+        @JvmDefault
+        fun onClick(pos: LatLng, mapOwner: MapOwner): Callable<String>? {
+            return null
+        }
+
+        /**
+         * Release resources and prepare for garbage collection.
+         */
+        @UiThread
+        @JvmDefault
+        fun onLayerRemoved() {}
     }
 }

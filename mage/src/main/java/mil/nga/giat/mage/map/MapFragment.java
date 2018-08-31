@@ -71,7 +71,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
 import org.apache.commons.lang3.StringUtils;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Calendar;
@@ -80,7 +79,6 @@ import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 
 import mil.nga.giat.mage.MAGE;
 import mil.nga.giat.mage.R;

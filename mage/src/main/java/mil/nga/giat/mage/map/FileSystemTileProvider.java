@@ -6,6 +6,7 @@ import com.google.android.gms.maps.model.UrlTileProvider;
 
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.Locale;
 
 public class FileSystemTileProvider extends UrlTileProvider {
 
@@ -17,13 +18,12 @@ public class FileSystemTileProvider extends UrlTileProvider {
 
 	public FileSystemTileProvider(int width, int height, String baseDirectory) {
 		super(width, height);
-
 		this.baseDirectory = baseDirectory;
 	}
 
 	@Override
 	public URL getTileUrl(int x, int y, int z) {
-		String tile = String.format(fileUrlFormat, baseDirectory, z, x, y);
+		String tile = String.format(Locale.getDefault(), fileUrlFormat, baseDirectory, z, x, y);
 		URL fileURL = null;
 		try {
 			fileURL = new URL(tile);
