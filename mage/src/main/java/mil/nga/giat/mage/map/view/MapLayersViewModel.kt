@@ -11,7 +11,7 @@ import mil.nga.giat.mage.data.UniqueAsyncTaskManager
 import mil.nga.giat.mage.map.*
 import mil.nga.giat.mage.map.cache.MapDataManager
 import mil.nga.giat.mage.map.cache.MapDataProvider
-import mil.nga.giat.mage.map.cache.MapDataProvider.LayerQuery
+import mil.nga.giat.mage.map.cache.MapDataProvider.LayerAdapter
 import mil.nga.giat.mage.map.cache.MapLayerDescriptor
 import mil.nga.giat.mage.utils.EnumLiveEvents
 import mil.nga.giat.mage.utils.LiveEvents
@@ -42,22 +42,22 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
 
     private var layers = ArrayList<Layer>()
     private val mediatedLayers = MediatorLiveData<Resource<List<Layer>>>()
-    private val queryForLayer = HashMap<Layer, LayerQuery>()
+    private val queryForLayer = HashMap<Layer, LayerAdapter>()
     private val boundsForLayer = HashMap<Layer, LatLngBounds>()
 
-    private val elementLoadTasks = UniqueAsyncTaskManager(object : UniqueAsyncTaskManager.TaskListener<Layer, LayerQuery, LoadLayerElementsResult> {
+    private val elementLoadTasks = UniqueAsyncTaskManager(object : UniqueAsyncTaskManager.TaskListener<Layer, LayerAdapter, LoadLayerElementsResult> {
 
-        override fun taskProgress(key: Layer, task: UniqueAsyncTaskManager.Task<LayerQuery, LoadLayerElementsResult>, progress: LayerQuery) {
+        override fun taskProgress(key: Layer, task: UniqueAsyncTaskManager.Task<LayerAdapter, LoadLayerElementsResult>, progress: LayerAdapter) {
             queryForLayer[key] = progress
         }
 
-        override fun taskCancelled(key: Layer, task: UniqueAsyncTaskManager.Task<LayerQuery, LoadLayerElementsResult>, result: LoadLayerElementsResult?) {
+        override fun taskCancelled(key: Layer, task: UniqueAsyncTaskManager.Task<LayerAdapter, LoadLayerElementsResult>, result: LoadLayerElementsResult?) {
             val cancelled = task as LoadLayerElements
             val pending = task.manager.pendingTaskForKey(key) as LoadLayerElements?
-            pending?.query = cancelled.query
+            pending?.adapter = cancelled.adapter
         }
 
-        override fun taskFinished(key: Layer, task: UniqueAsyncTaskManager.Task<LayerQuery, LoadLayerElementsResult>, result: LoadLayerElementsResult?) {
+        override fun taskFinished(key: Layer, task: UniqueAsyncTaskManager.Task<LayerAdapter, LoadLayerElementsResult>, result: LoadLayerElementsResult?) {
             var pos = posOfZIndex(key.zIndex)
             if (pos < 0 || pos >= layers.size || layers[pos] != key) {
                 pos = layers.indexOf(key)
@@ -323,20 +323,20 @@ class MapLayersViewModel(private val mapDataManager: MapDataManager, executor: E
         constructor(
             val layer: Layer,
             val bounds: LatLngBounds,
-            var query: LayerQuery?,
+            var adapter: LayerAdapter?,
             var provider: MapDataProvider,
-            val manager: UniqueAsyncTaskManager<Layer, LayerQuery, LoadLayerElementsResult>)
-        : UniqueAsyncTaskManager.Task<LayerQuery, LoadLayerElementsResult> {
+            val manager: UniqueAsyncTaskManager<Layer, LayerAdapter, LoadLayerElementsResult>)
+        : UniqueAsyncTaskManager.Task<LayerAdapter, LoadLayerElementsResult> {
 
-        override fun run(support: UniqueAsyncTaskManager.TaskSupport<LayerQuery>): LoadLayerElementsResult {
-            if (query == null) {
-                query = provider.createQueryForLayer(layer.desc)
-                support.reportProgressToMainThread(query!!)
+        override fun run(support: UniqueAsyncTaskManager.TaskSupport<LayerAdapter>): LoadLayerElementsResult {
+            if (adapter == null) {
+                adapter = provider.createAdapterForLayer(layer.desc)
+                support.reportProgressToMainThread(adapter!!)
             }
             if (support.isCancelled()) {
                 return LoadLayerElementsResult(bounds)
             }
-            val elements = query!!.fetchMapElements(bounds)
+            val elements = adapter!!.fetchMapElements(bounds)
             return LoadLayerElementsResult(bounds, elements)
         }
     }

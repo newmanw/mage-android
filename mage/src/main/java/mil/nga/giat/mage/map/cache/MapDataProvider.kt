@@ -47,9 +47,9 @@ interface MapDataProvider {
     fun resolveResource(resource: MapDataResource): MapDataResource
 
     @WorkerThread
-    fun createQueryForLayer(layer: MapLayerDescriptor): LayerQuery
+    fun createAdapterForLayer(layer: MapLayerDescriptor): LayerAdapter
 
-    interface LayerQuery : Closeable {
+    interface LayerAdapter : Closeable {
 
         /**
          * Return true if this layer query returns elements bound to a particulary location, which is really
@@ -103,6 +103,30 @@ interface MapDataProvider {
 
         @UiThread
         @JvmDefault
+        fun removedFromMap(elmt: Circle, id: Any) {}
+
+        @UiThread
+        @JvmDefault
+        fun removedFromMap(elmt: GroundOverlay, id: Any) {}
+
+        @UiThread
+        @JvmDefault
+        fun removedFromMap(elmt: Marker, id: Any) {}
+
+        @UiThread
+        @JvmDefault
+        fun removedFromMap(elmt: Polygon, id: Any) {}
+
+        @UiThread
+        @JvmDefault
+        fun removedFromMap(elmt: Polyline, id: Any) {}
+
+        @UiThread
+        @JvmDefault
+        fun removedFromMap(elmt: TileOverlay, id: Any) {}
+
+        @UiThread
+        @JvmDefault
         fun onClick(x: Circle, id: Any): Callable<String>? {
             return null
         }
@@ -136,12 +160,5 @@ interface MapDataProvider {
         fun onClick(pos: LatLng, mapOwner: MapOwner): Callable<String>? {
             return null
         }
-
-        /**
-         * Release resources and prepare for garbage collection.
-         */
-        @UiThread
-        @JvmDefault
-        fun onLayerRemoved() {}
     }
 }

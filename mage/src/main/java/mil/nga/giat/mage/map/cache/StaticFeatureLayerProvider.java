@@ -66,8 +66,8 @@ public class StaticFeatureLayerProvider implements MapDataProvider {
 
     @NonNull
     @Override
-    public MapDataProvider.LayerQuery createQueryForLayer(@NonNull MapLayerDescriptor layer) {
-        return new LayerQuery((StaticFeatureLayerDescriptor) layer);
+    public MapDataProvider.LayerAdapter createAdapterForLayer(@NonNull MapLayerDescriptor layer) {
+        return new LayerAdapter((StaticFeatureLayerDescriptor) layer);
     }
 
     static class StaticFeatureLayerDescriptor extends MapLayerDescriptor {
@@ -81,12 +81,11 @@ public class StaticFeatureLayerProvider implements MapDataProvider {
         }
     }
 
-    private class LayerQuery implements MapDataProvider.LayerQuery {
+    private class LayerAdapter implements MapDataProvider.LayerAdapter {
 
         private final StaticFeatureLayerDescriptor layerDescriptor;
-        private final Map<String, String> infoForMapElementId = new HashMap<>();
 
-        private LayerQuery(StaticFeatureLayerDescriptor layerDescriptor) {
+        private LayerAdapter(StaticFeatureLayerDescriptor layerDescriptor) {
             this.layerDescriptor = layerDescriptor;
         }
 
@@ -206,43 +205,22 @@ public class StaticFeatureLayerProvider implements MapDataProvider {
         }
 
         @Override
-        public void addedToMap(@NonNull MapMarkerSpec spec, @NonNull Marker x) {
-            infoForMapElementId.put(x.getId(), (String) spec.getData());
-        }
-
-        @Override
-        public void addedToMap(@NonNull MapPolygonSpec spec, @NonNull Polygon x) {
-            infoForMapElementId.put(x.getId(), (String) spec.getData());
-        }
-
-        @Override
-        public void addedToMap(@NonNull MapPolylineSpec spec, @NonNull Polyline x) {
-            infoForMapElementId.put(x.getId(), (String) spec.getData());
-        }
-
-        @Override
         public Callable<String> onClick(@NonNull Marker x, @NonNull Object id) {
-            return () -> infoForMapElementId.get(x.getId());
+            return () -> (String) x.getTag();
         }
 
         @Override
         public Callable<String> onClick(@NonNull Polygon x, @NonNull Object id) {
-            return () -> infoForMapElementId.get(x.getId());
+            return () -> (String) x.getTag();
         }
 
         @Override
         public Callable<String> onClick(@NonNull Polyline x, @NonNull Object id) {
-            return () -> infoForMapElementId.get(x.getId());
-        }
-
-        @Override
-        public void onLayerRemoved() {
-            infoForMapElementId.clear();
+            return () -> (String) x.getTag();
         }
 
         @Override
         public void close() {
-            infoForMapElementId.clear();
         }
     }
 }

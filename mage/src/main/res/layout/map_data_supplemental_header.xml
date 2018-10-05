@@ -15,35 +15,35 @@
 
     <TextView
         android:id="@+id/map_supplemental_layers_header"
+        style="@style/ListSubheader"
         android:layout_width="wrap_content"
         android:layout_height="match_parent"
         android:text="@string/map_supplemental_layers_header"
-        app:layout_constraintTop_toTopOf="@id/vertical_center"
         app:layout_constraintBottom_toBottomOf="@id/vertical_center"
         app:layout_constraintStart_toStartOf="parent"
-        style="@style/ListSubheader"
+        app:layout_constraintTop_toTopOf="@id/vertical_center"
         />
 
     <ImageButton
         android:id="@+id/map_refresh_layers_button"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:tint="@color/md_black_1000"
         android:contentDescription="@string/cd_map_refresh_layers_button"
+        android:tint="@color/md_black_1000"
+        app:layout_constraintBottom_toBottomOf="@id/vertical_center"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="@id/vertical_center"
-        app:layout_constraintBottom_toBottomOf="@id/vertical_center"
         app:srcCompat="@android:drawable/stat_notify_sync"
         />
 
     <ProgressBar
         android:id="@+id/map_refresh_layers_progress"
+        style="@style/Widget.AppCompat.ProgressBar.Horizontal"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:indeterminate="true"
-        app:layout_constraintTop_toBottomOf="@id/map_refresh_layers_button"
         app:layout_constraintBottom_toBottomOf="parent"
-        style="@style/Widget.AppCompat.ProgressBar.Horizontal"
+        app:layout_constraintTop_toBottomOf="@id/map_refresh_layers_button"
         />
 
 </android.support.constraint.ConstraintLayout>

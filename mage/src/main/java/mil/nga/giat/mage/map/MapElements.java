@@ -10,6 +10,10 @@ import com.google.android.gms.maps.model.Polygon;
 import com.google.android.gms.maps.model.Polyline;
 import com.google.android.gms.maps.model.TileOverlay;
 
+import org.jetbrains.annotations.NotNull;
+
+import mil.nga.giat.mage.map.view.MapOwner;
+
 @UiThread
 public interface MapElements {
 
@@ -52,17 +56,17 @@ public interface MapElements {
         TileOverlayVisitor<T> {
 
         @Override
-        default T visit(Circle x, Object id) { return null; }
+        default T visit(@NonNull Circle x, @NonNull Object id) { return null; }
         @Override
-        default T visit(GroundOverlay x, Object id) { return null; }
+        default T visit(@NonNull GroundOverlay x, @NonNull  Object id) { return null; }
         @Override
-        default T visit(Marker x, Object id) { return null; }
+        default T visit(@NonNull Marker x, @NonNull Object id) { return null; }
         @Override
-        default T visit(Polygon x, Object id) { return null; }
+        default T visit(@NonNull Polygon x, @NonNull Object id) { return null; }
         @Override
-        default T visit(Polyline x, Object id) { return null; }
+        default T visit(@NonNull Polyline x, @NonNull Object id) { return null; }
         @Override
-        default T visit(TileOverlay x, Object id) { return null; }
+        default T visit(@NonNull TileOverlay x, @NonNull Object id) { return null; }
     }
 
     MapElements add(Circle x, Object id);
@@ -104,4 +108,9 @@ public interface MapElements {
     void forEach(ComprehensiveMapElementVisitor<Boolean> v);
 
     int count();
+
+    /**
+     * Remove all elements from the map.
+     */
+    void clear();
 }

@@ -30,7 +30,6 @@ import java.util.Map;
 
 import mil.nga.giat.mage.R;
 import mil.nga.giat.mage.data.Resource;
-import mil.nga.giat.mage.map.cache.MapLayerManager;
 import mil.nga.giat.mage.map.view.MapLayersViewModel.Layer;
 
 import static android.support.v7.widget.RecyclerView.NO_ID;

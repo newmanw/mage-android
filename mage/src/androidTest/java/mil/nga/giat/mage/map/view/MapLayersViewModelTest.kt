@@ -13,7 +13,7 @@ import mil.nga.giat.mage.data.Resource.Status.Success
 import mil.nga.giat.mage.map.MapElementSpec
 import mil.nga.giat.mage.map.MapMarkerSpec
 import mil.nga.giat.mage.map.cache.*
-import mil.nga.giat.mage.map.cache.MapDataProvider.LayerQuery
+import mil.nga.giat.mage.map.cache.MapDataProvider.LayerAdapter
 import mil.nga.giat.mage.map.view.MapLayersViewModel.Layer
 import mil.nga.giat.mage.test.AsyncTesting
 import mil.nga.giat.mage.test.AsyncTesting.waitForMainThreadToCall
@@ -23,7 +23,6 @@ import mil.nga.giat.mage.test.TargetSuppliesPropertyValueMatcher.valueSuppliedBy
 import org.hamcrest.Matchers.*
 import org.junit.After
 import org.junit.Assert.assertThat
-import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -367,10 +366,10 @@ class MapLayersViewModelTest : LifecycleOwner {
         assertThat(layer.elements.status, equalTo(Success))
         assertThat(layer.elements.content, nullValue())
 
-        val query = mock<LayerQuery> {
+        val query = mock<LayerAdapter> {
             on { fetchMapElements(any()) }.thenReturn(emptyMap())
         }
-        whenever(providerA.createQueryForLayer(layer.desc)).thenReturn(query)
+        whenever(providerA.createAdapterForLayer(layer.desc)).thenReturn(query)
         model.setLayerVisible(layer, true)
         layer = model.layerAt(0)
 
@@ -384,9 +383,9 @@ class MapLayersViewModelTest : LifecycleOwner {
     @UiThreadTest
     fun mapBoundsChangeMarksVisibleLayersElementStatusLoadingSerially() {
 
-        val query = mock<LayerQuery> { on { fetchMapElements(any()) }.thenReturn(emptyMap())}
-        whenever(providerA.createQueryForLayer(any())).thenReturn(query)
-        whenever(providerB.createQueryForLayer(any())).thenReturn(query)
+        val query = mock<LayerAdapter> { on { fetchMapElements(any()) }.thenReturn(emptyMap())}
+        whenever(providerA.createAdapterForLayer(any())).thenReturn(query)
+        whenever(providerB.createAdapterForLayer(any())).thenReturn(query)
 
         mapData.value = Resource.success(allResources)
         val layers = model.layersInZOrder.value!!.content!!
@@ -412,10 +411,10 @@ class MapLayersViewModelTest : LifecycleOwner {
         }
 
         val createdOnBGThread = AtomicBoolean(false)
-        val query = mock<LayerQuery> {
+        val query = mock<LayerAdapter> {
             on { fetchMapElements(any()) }.thenReturn(emptyMap())
         }
-        whenever(providerA.createQueryForLayer(res3Layer1)).then { _ ->
+        whenever(providerA.createAdapterForLayer(res3Layer1)).then { _ ->
             createdOnBGThread.set(Thread.currentThread() is TestThread)
             query
         }
@@ -428,13 +427,13 @@ class MapLayersViewModelTest : LifecycleOwner {
     @Test
     fun reusesLayerQueryForMapBoundsChange() {
 
-        val query = mock<LayerQuery> {
+        val query = mock<LayerAdapter> {
             on { fetchMapElements(any()) }.thenReturn(mapOf(MapMarkerSpec("point1", null, MarkerOptions())))
             on { hasDynamicElements() }.thenReturn(true)
             on { supportsDynamicFetch() }.thenReturn(true)
         }
         val provider = providerForLayer(res2Layer1)
-        whenever(provider.createQueryForLayer(res2Layer1)).thenReturn(query)
+        whenever(provider.createAdapterForLayer(res2Layer1)).thenReturn(query)
         val bounds1 = bounds(120.0, 30.0, 10.0)
         val bounds2 = bounds(110.0, 30.0, 10.0)
         val layerPos = allLayerDescs.indexOf(res2Layer1)
@@ -453,7 +452,7 @@ class MapLayersViewModelTest : LifecycleOwner {
 
         onMainThread.assertThatWithin(testTimeout, { model.layerAt(layerPos).elements.status }, equalTo(Success))
 
-        verify(provider).createQueryForLayer(res2Layer1)
+        verify(provider).createAdapterForLayer(res2Layer1)
         verify(query).fetchMapElements(bounds1)
         verify(query).fetchMapElements(bounds2)
     }
@@ -463,13 +462,13 @@ class MapLayersViewModelTest : LifecycleOwner {
 
         val layerDesc = res1Layer2
         val layerPos = allLayerDescs.indexOf(layerDesc)
-        val query = mock<LayerQuery> {
+        val query = mock<LayerAdapter> {
             on { fetchMapElements(any()) }.thenReturn(mapOf(MapMarkerSpec("point1", null, MarkerOptions())))
             on { hasDynamicElements() }.thenReturn(true)
             on { supportsDynamicFetch() }.thenReturn(true)
         }
         val provider = providerForLayer(layerDesc)
-        whenever(provider.createQueryForLayer(layerDesc)).thenReturn(query)
+        whenever(provider.createAdapterForLayer(layerDesc)).thenReturn(query)
         val bounds1 = bounds(120.0, 30.0, 10.0)
         val bounds2 = bounds(30.0, 120.0, 1.0)
 
@@ -492,7 +491,7 @@ class MapLayersViewModelTest : LifecycleOwner {
 
         waitForMainThreadToRun { model.setLayerVisible(model.layerAt(layerPos), true) }
 
-        verify(provider).createQueryForLayer(layerDesc)
+        verify(provider).createAdapterForLayer(layerDesc)
         verify(query).fetchMapElements(bounds1)
         verify(query).fetchMapElements(bounds2)
     }
@@ -502,13 +501,13 @@ class MapLayersViewModelTest : LifecycleOwner {
 
         val marker = MapMarkerSpec("point1", null, MarkerOptions())
         val bounds = bounds(12.0, 15.0, 3.0)
-        val query = mock<LayerQuery> {
+        val query = mock<LayerAdapter> {
             on { fetchMapElements(bounds) }.thenReturn(mapOf(marker))
             on { hasDynamicElements() }.thenReturn(true)
             on { supportsDynamicFetch() }.thenReturn(true)
         }
         val provider = providerForLayer(res2Layer1)
-        whenever(provider.createQueryForLayer(res2Layer1)).thenReturn(query)
+        whenever(provider.createAdapterForLayer(res2Layer1)).thenReturn(query)
         val layerPos = allLayerDescs.indexOf(res2Layer1)
 
         waitForMainThreadToRun {
@@ -530,7 +529,7 @@ class MapLayersViewModelTest : LifecycleOwner {
         val elements = model.layerAt(layerPos).elements
 
         assertThat(elements.requireContent(), equalTo(mapOf(marker)))
-        verify(provider).createQueryForLayer(model.layerAt(layerPos).desc)
+        verify(provider).createAdapterForLayer(model.layerAt(layerPos).desc)
         verify(query).fetchMapElements(bounds)
 
         waitForMainThreadToRun {
@@ -562,12 +561,12 @@ class MapLayersViewModelTest : LifecycleOwner {
         val bounds = bounds(33.0, 50.0, 2.0)
         val elements = mapOf(MapMarkerSpec("m1", null, MarkerOptions()))
         val provider = providerForLayer(allLayerDescs[0])
-        val query = mock<LayerQuery> {
+        val query = mock<LayerAdapter> {
             on { fetchMapElements(bounds) }.thenReturn(elements)
             on { hasDynamicElements() }.thenReturn(true)
             on { supportsDynamicFetch() }.thenReturn(true)
         }
-        whenever(provider.createQueryForLayer(allLayerDescs[0])).thenReturn(query)
+        whenever(provider.createAdapterForLayer(allLayerDescs[0])).thenReturn(query)
 
         waitForMainThreadToRun {
             model.mapBoundsChanged(bounds)
@@ -578,7 +577,7 @@ class MapLayersViewModelTest : LifecycleOwner {
         onMainThread.assertThatWithin(testTimeout, { model.layerAt(0).elements.status }, equalTo(Success))
 
         assertThat(model.layerAt(0).elements.content, equalTo(elements))
-        verify(provider).createQueryForLayer(allLayerDescs[0])
+        verify(provider).createAdapterForLayer(allLayerDescs[0])
         verify(query).fetchMapElements(bounds)
 
         waitForMainThreadToRun {
@@ -600,13 +599,13 @@ class MapLayersViewModelTest : LifecycleOwner {
 
         val marker = MapMarkerSpec("point1", null, MarkerOptions())
         val bounds = bounds(12.0, 15.0, 3.0)
-        val query = mock<LayerQuery> {
+        val query = mock<LayerAdapter> {
             on { fetchMapElements(bounds) }.thenReturn(mapOf(marker))
             on { hasDynamicElements() }.thenReturn(false)
             on { supportsDynamicFetch() }.thenReturn(false)
         }
         val provider = providerForLayer(res2Layer1)
-        whenever(provider.createQueryForLayer(res2Layer1)).thenReturn(query)
+        whenever(provider.createAdapterForLayer(res2Layer1)).thenReturn(query)
         val layerPos = allLayerDescs.indexOf(res2Layer1)
 
         waitForMainThreadToRun {
@@ -628,7 +627,7 @@ class MapLayersViewModelTest : LifecycleOwner {
         val elements = model.layerAt(layerPos).elements
 
         assertThat(elements.requireContent(), equalTo(mapOf(marker)))
-        verify(provider).createQueryForLayer(model.layerAt(layerPos).desc)
+        verify(provider).createAdapterForLayer(model.layerAt(layerPos).desc)
         verify(query).fetchMapElements(bounds)
 
         waitForMainThreadToRun {
@@ -659,13 +658,13 @@ class MapLayersViewModelTest : LifecycleOwner {
 
         val marker = MapMarkerSpec("point1", null, MarkerOptions())
         val bounds = bounds(12.0, 15.0, 3.0)
-        val query = mock<LayerQuery> {
+        val query = mock<LayerAdapter> {
             on { fetchMapElements(bounds) }.thenReturn(mapOf(marker))
             on { hasDynamicElements() }.thenReturn(true)
             on { supportsDynamicFetch() }.thenReturn(false)
         }
         val provider = providerForLayer(res2Layer1)
-        whenever(provider.createQueryForLayer(res2Layer1)).thenReturn(query)
+        whenever(provider.createAdapterForLayer(res2Layer1)).thenReturn(query)
         val layerPos = allLayerDescs.indexOf(res2Layer1)
 
         waitForMainThreadToRun {
@@ -687,7 +686,7 @@ class MapLayersViewModelTest : LifecycleOwner {
         val elements = model.layerAt(layerPos).elements
 
         assertThat(elements.requireContent(), equalTo(mapOf(marker)))
-        verify(provider).createQueryForLayer(model.layerAt(layerPos).desc)
+        verify(provider).createAdapterForLayer(model.layerAt(layerPos).desc)
         verify(query).fetchMapElements(bounds)
 
         waitForMainThreadToRun {
@@ -718,14 +717,14 @@ class MapLayersViewModelTest : LifecycleOwner {
 
         val control = ConcurrentMethodControl(testTimeout)
         val elements = mapOf(MapMarkerSpec("m1", null, MarkerOptions()))
-        val query = mock<LayerQuery> {
+        val query = mock<LayerAdapter> {
             on { fetchMapElements(any()) }.then { _ ->
                 control.enterAndAwaitRelease()
                 elements
             }
         }
         val provider = providerForLayer(allLayerDescs[0])
-        whenever(provider.createQueryForLayer(allLayerDescs[0])).thenReturn(query)
+        whenever(provider.createAdapterForLayer(allLayerDescs[0])).thenReturn(query)
 
         waitForMainThreadToRun {
             mapData.value = Resource.success(allResources)
@@ -761,7 +760,7 @@ class MapLayersViewModelTest : LifecycleOwner {
         val bounds2 = bounds(120.0, 40.0, 2.0)
         val elements1 = mapOf(MapMarkerSpec("bounds1", null, MarkerOptions()))
         val elements2 = mapOf(MapMarkerSpec("bounds2", null, MarkerOptions()))
-        val query = mock<LayerQuery> {
+        val query = mock<LayerAdapter> {
             on { fetchMapElements(bounds1) }.then { _ ->
                 control.enterAndAwaitRelease()
                 elements1
@@ -771,7 +770,7 @@ class MapLayersViewModelTest : LifecycleOwner {
             on { supportsDynamicFetch() }.thenReturn(true)
         }
         val provider = providerForLayer(allLayerDescs[0])
-        whenever(provider.createQueryForLayer(allLayerDescs[0])).thenReturn(query)
+        whenever(provider.createAdapterForLayer(allLayerDescs[0])).thenReturn(query)
 
         waitForMainThreadToRun {
             mapData.value = Resource.success(allResources)
@@ -811,11 +810,11 @@ class MapLayersViewModelTest : LifecycleOwner {
         val bounds1 = bounds(130.0, 45.0, 2.0)
         val bounds2 = bounds(120.0, 40.0, 2.0)
         val elements = mapOf(MapMarkerSpec("bounds2", null, MarkerOptions()))
-        val query = mock<LayerQuery> {
+        val query = mock<LayerAdapter> {
             on { fetchMapElements(bounds2) }.thenReturn(elements)
         }
         val provider = providerForLayer(allLayerDescs[0])
-        whenever(provider.createQueryForLayer(allLayerDescs[0])).then {
+        whenever(provider.createAdapterForLayer(allLayerDescs[0])).then {
             control.enterAndAwaitRelease()
             query
         }
@@ -846,7 +845,7 @@ class MapLayersViewModelTest : LifecycleOwner {
         waitForThreadPoolTermination()
 
         assertThat(model.layerAt(0).elements.requireContent(), equalTo(elements))
-        verify(provider).createQueryForLayer(allLayerDescs[0])
+        verify(provider).createAdapterForLayer(allLayerDescs[0])
         verify(query).fetchMapElements(bounds2)
         verifyNoMoreInteractions(query)
         verify(listener, times(2)).layerElementsChanged(model.layerAt(0), 0, emptyMap())
@@ -858,7 +857,7 @@ class MapLayersViewModelTest : LifecycleOwner {
         val control = ConcurrentMethodControl(testTimeout)
         val bounds = bounds(130.0, 45.0, 2.0)
         val elements = mapOf(MapMarkerSpec("m1", null, MarkerOptions()))
-        val query = mock<LayerQuery> {
+        val query = mock<LayerAdapter> {
             on { fetchMapElements(bounds) }.then { _ ->
                 control.enterAndAwaitRelease()
                 elements
@@ -867,7 +866,7 @@ class MapLayersViewModelTest : LifecycleOwner {
             on { supportsDynamicFetch() }.thenReturn(true)
         }
         val provider = providerForLayer(allLayerDescs[0])
-        whenever(provider.createQueryForLayer(allLayerDescs[0])).thenReturn(query)
+        whenever(provider.createAdapterForLayer(allLayerDescs[0])).thenReturn(query)
 
         waitForMainThreadToRun {
             mapData.value = Resource.success(allResources)

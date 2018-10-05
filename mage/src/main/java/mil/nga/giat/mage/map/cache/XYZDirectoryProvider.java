@@ -1,7 +1,6 @@
 package mil.nga.giat.mage.map.cache;
 
 import android.support.annotation.NonNull;
-import android.support.annotation.Nullable;
 
 import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.android.gms.maps.model.TileOverlayOptions;
@@ -9,12 +8,10 @@ import com.google.android.gms.maps.model.TileOverlayOptions;
 import java.io.File;
 import java.util.Collections;
 import java.util.Map;
-import java.util.concurrent.Callable;
 
 import mil.nga.giat.mage.map.FileSystemTileProvider;
 import mil.nga.giat.mage.map.MapElementSpec;
 import mil.nga.giat.mage.map.MapTileOverlaySpec;
-import mil.nga.giat.mage.map.view.MapOwner;
 
 public class XYZDirectoryProvider implements MapDataProvider {
 
@@ -41,8 +38,8 @@ public class XYZDirectoryProvider implements MapDataProvider {
 
     @NonNull
     @Override
-    public LayerQuery createQueryForLayer(@NonNull MapLayerDescriptor layer) {
-        return new Query((XYZDirectoryLayerDescriptor) layer);
+    public MapDataProvider.LayerAdapter createAdapterForLayer(@NonNull MapLayerDescriptor layer) {
+        return new LayerAdapter((XYZDirectoryLayerDescriptor) layer);
     }
 
     /**
@@ -65,11 +62,11 @@ public class XYZDirectoryProvider implements MapDataProvider {
         base.delete();
     }
 
-    static class Query implements MapDataProvider.LayerQuery {
+    static class LayerAdapter implements MapDataProvider.LayerAdapter {
 
         final Map<Object, MapElementSpec> elements;
 
-        Query(XYZDirectoryLayerDescriptor layerDesc) {
+        LayerAdapter(XYZDirectoryLayerDescriptor layerDesc) {
             TileOverlayOptions overlayOptions = new TileOverlayOptions();
             overlayOptions.tileProvider(new FileSystemTileProvider(256, 256, layerDesc.getDirectory().getAbsolutePath()));
             MapTileOverlaySpec tilesSpec = new MapTileOverlaySpec(layerDesc.getLayerUri(), null, overlayOptions);

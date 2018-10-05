@@ -115,7 +115,7 @@ public class GeoPackageProvider implements MapDataProvider {
 
     @NonNull
     @Override
-    public LayerQuery createQueryForLayer(@NonNull MapLayerDescriptor layer) {
+    public LayerAdapter createAdapterForLayer(@NonNull MapLayerDescriptor layer) {
         if (layer instanceof GeoPackageTileTableDescriptor) {
             return createTileTableLayerQuery((GeoPackageTileTableDescriptor) layer);
         }
@@ -309,7 +309,7 @@ public class GeoPackageProvider implements MapDataProvider {
         return new FeatureTableAdapter(new MapTileOverlaySpec(layerDesc.getLayerUri(), null, overlayOptions), featureQuery, linkedTiles);
     }
 
-    private class TileTableAdapter implements LayerQuery {
+    private class TileTableAdapter implements LayerAdapter {
 
         private final MapTileOverlaySpec tileOverlaySpec;
         private final List<FeatureOverlayQuery> queries;
@@ -360,17 +360,12 @@ public class GeoPackageProvider implements MapDataProvider {
         }
 
         @Override
-        public void onLayerRemoved() {
-            clearFeatureOverlayQueries();
-        }
-
-        @Override
         public void close() {
             clearFeatureOverlayQueries();
         }
     }
 
-    private class FeatureTableAdapter implements LayerQuery {
+    private class FeatureTableAdapter implements LayerAdapter {
 
         private final FeatureOverlayQuery indexedFeatureQuery;
         private final FeatureDao featureDao;
@@ -496,13 +491,6 @@ public class GeoPackageProvider implements MapDataProvider {
                 mapBounds.southwest.longitude, mapBounds.northeast.longitude,
                 mapBounds.southwest.latitude, mapBounds.northeast.latitude);
             return () -> indexedFeatureQuery.buildMapClickMessageWithMapBounds(latLng, zoom, bbox);
-        }
-
-        @Override
-        public void onLayerRemoved() {
-            if (indexedFeatureQuery != null) {
-                indexedFeatureQuery.close();
-            }
         }
 
         @Override

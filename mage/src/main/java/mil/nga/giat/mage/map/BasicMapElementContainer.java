@@ -259,33 +259,34 @@ public class BasicMapElementContainer implements MapElements {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public void forEach(ComprehensiveMapElementVisitor<Boolean> action) {
-        for (Map.Entry<Marker, Object> e : markers.entrySet()) {
+        for (Map.Entry<Marker, Object> e : markers.entrySet().toArray(new Map.Entry[markers.size()])) {
             if (!action.visit(e.getKey(), e.getValue())) {
                 return;
             }
         }
-        for (Map.Entry<Circle, Object> e : circles.entrySet()) {
+        for (Map.Entry<Circle, Object> e : circles.entrySet().toArray(new Map.Entry[circles.size()])) {
             if (!action.visit(e.getKey(), e.getValue())) {
                 return;
             }
         }
-        for (Map.Entry<Polygon, Object> e : polygons.entrySet()) {
+        for (Map.Entry<Polygon, Object> e : polygons.entrySet().toArray(new Map.Entry[polygons.size()])) {
             if (!action.visit(e.getKey(), e.getValue())) {
                 return;
             }
         }
-        for (Map.Entry<Polyline, Object> e : polylines.entrySet()) {
+        for (Map.Entry<Polyline, Object> e : polylines.entrySet().toArray(new Map.Entry[polylines.size()])) {
             if (!action.visit(e.getKey(), e.getValue())) {
                 return;
             }
         }
-        for (Map.Entry<GroundOverlay, Object> e : groundOverlays.entrySet()) {
+        for (Map.Entry<GroundOverlay, Object> e : groundOverlays.entrySet().toArray(new Map.Entry[groundOverlays.size()])) {
             if (!action.visit(e.getKey(), e.getValue())) {
                 return;
             }
         }
-        for (Map.Entry<TileOverlay, Object> e : tileOverlays.entrySet()) {
+        for (Map.Entry<TileOverlay, Object> e : tileOverlays.entrySet().toArray(new Map.Entry[tileOverlays.size()])) {
             if (!action.visit(e.getKey(), e.getValue())) {
                 return;
             }
@@ -296,4 +297,48 @@ public class BasicMapElementContainer implements MapElements {
     public int count() {
         return circles.size() + groundOverlays.size() + markers.size() + polygons.size() + polylines.size() + tileOverlays.size();
     }
+
+    @Override
+    public void clear() {
+        forEach(CLEAR);
+    }
+
+    private final ComprehensiveMapElementVisitor<Boolean> CLEAR = new ComprehensiveMapElementVisitor<Boolean>() {
+
+        @Override
+        public Boolean visit(@NonNull Circle x, @NonNull Object id) {
+            remove(x);
+            return true;
+        }
+
+        @Override
+        public Boolean visit(@NonNull GroundOverlay x, @NonNull Object id) {
+            remove(x);
+            return true;
+        }
+
+        @Override
+        public Boolean visit(@NonNull Marker x, @NonNull Object id) {
+            remove(x);
+            return true;
+        }
+
+        @Override
+        public Boolean visit(@NonNull Polygon x, @NonNull Object id) {
+            remove(x);
+            return true;
+        }
+
+        @Override
+        public Boolean visit(@NonNull Polyline x, @NonNull Object id) {
+            remove(x);
+            return true;
+        }
+
+        @Override
+        public Boolean visit(@NonNull TileOverlay x, @NonNull Object id) {
+            remove(x);
+            return true;
+        }
+    };
 }
