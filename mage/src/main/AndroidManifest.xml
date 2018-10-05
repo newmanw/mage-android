@@ -1,46 +1,47 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+<manifest package="mil.nga.giat.mage"
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
-    package="mil.nga.giat.mage"
     android:versionCode="1"
     android:versionName="1">
 
     <permission
         android:name="${applicationId}.permission.MAPS_RECEIVE"
-        android:protectionLevel="signature" />
+        android:protectionLevel="signature"/>
 
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_GPS" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-    <uses-permission android:name="android.permission.CAMERA" />
-    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.VIBRATE" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-    <uses-permission android:name="com.google.android.providers.gsf.permission.READ_GSERVICES" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_GPS"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE"/>
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="com.google.android.providers.gsf.permission.READ_GSERVICES"/>
 
     <uses-feature
         android:name="android.hardware.camera"
-        android:required="false" />
+        android:required="false"/>
     <uses-feature
         android:glEsVersion="0x00020000"
-        android:required="true" />
+        android:required="true"/>
 
     <application
         android:name=".MAGE"
-        tools:replace="android:allowBackup"
         android:allowBackup="false"
         android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
         android:logo="@drawable/ic_wand_white_50dp"
+        android:networkSecurityConfig="@xml/network_security_config"
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
-        android:networkSecurityConfig="@xml/network_security_config">
-
-        <meta-data android:name="${applicationId}.source_refspec" android:value="${source_refspec}"/>
+        tools:replace="android:allowBackup">
+        <meta-data
+            android:name="${applicationId}.source_refspec"
+            android:value="${source_refspec}"/>
 
         <provider
             android:name="android.support.v4.content.FileProvider"
@@ -49,70 +50,69 @@
             android:grantUriPermissions="true">
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/filepaths" />
+                android:resource="@xml/filepaths"/>
         </provider>
 
         <activity
             android:name=".disclaimer.DisclaimerActivity"
             android:label="@string/app_name"
             android:noHistory="true"
-            android:windowSoftInputMode="adjustResize" />
+            android:windowSoftInputMode="adjustResize"/>
         <activity
             android:name=".login.LoginActivity"
-            android:windowSoftInputMode="stateAlwaysHidden"
-            android:theme="@style/AppTheme.NoActionBar">
-
+            android:theme="@style/AppTheme.NoActionBar"
+            android:windowSoftInputMode="stateAlwaysHidden">
             <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
+                <action android:name="android.intent.action.MAIN"/>
 
-                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
 
             <!-- Open files with matching extensions from a file browser -->
             <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.VIEW"/>
+                <action android:name="android.intent.action.SEND"/>
 
-                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.DEFAULT"/>
 
-                <data android:scheme="file" />
-                <data android:mimeType="*/*" />
-                <data android:pathPattern=".*\\.gpkg" /> <!-- GeoPackage -->
-                <data android:pathPattern=".*\\.gpkx" /> <!-- GeoPackage Extension -->
-                <data android:host="*" />
+                <data android:scheme="file"/>
+                <data android:mimeType="*/*"/>
+                <data android:pathPattern=".*\\.gpkg"/> <!-- GeoPackage -->
+                <data android:pathPattern=".*\\.gpkx"/> <!-- GeoPackage Extension -->
+                <data android:host="*"/>
             </intent-filter>
             <!-- Email attachments -->
             <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.VIEW"/>
+                <action android:name="android.intent.action.SEND"/>
 
-                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.DEFAULT"/>
 
-                <data android:scheme="content" />
-                <data android:mimeType="application/octet-stream" />
+                <data android:scheme="content"/>
+                <data android:mimeType="application/octet-stream"/>
             </intent-filter>
             <!-- Google Drive or sends from other apps -->
             <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.VIEW"/>
+                <action android:name="android.intent.action.SEND"/>
 
-                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.DEFAULT"/>
 
-                <data android:mimeType="application/octet-stream" />
+                <data android:scheme="*"/>
+                <data android:mimeType="application/octet-stream"/>
             </intent-filter>
         </activity>
-
         <activity
             android:name=".login.OAuthActivity"
-            android:windowSoftInputMode="adjustResize" />
+            android:windowSoftInputMode="adjustResize"/>
         <activity
             android:name=".login.SignupActivity"
             android:theme="@style/AppTheme.NoActionBar"
-            android:windowSoftInputMode="stateAlwaysHidden" />
+            android:windowSoftInputMode="stateAlwaysHidden"/>
         <activity
             android:name=".login.ServerUrlActivity"
-            android:theme="@style/AppTheme.NoActionBar"
-            android:label="@string/app_name"/>
+            android:label="@string/app_name"
+            android:theme="@style/AppTheme.NoActionBar"/>
         <activity
             android:name=".event.EventActivity"
             android:label="@string/app_name"/>
@@ -131,112 +131,113 @@
         <activity
             android:name=".LandingActivity"
             android:configChanges="keyboardHidden|orientation|screenSize"
-            android:theme="@style/AppTheme.Toolbar"
             android:launchMode="singleTop"
-            android:windowSoftInputMode="adjustNothing" />
+            android:theme="@style/AppTheme.Toolbar"
+            android:windowSoftInputMode="adjustNothing"/>
         <activity
             android:name=".event.ChangeEventActivity"
-            android:parentActivityName=".LandingActivity" />
+            android:parentActivityName=".LandingActivity"/>
         <activity
             android:name=".help.HelpActivity"
-            android:theme="@style/AppTheme.NoActionBar"
-            android:parentActivityName=".LandingActivity" />
+            android:parentActivityName=".LandingActivity"
+            android:theme="@style/AppTheme.NoActionBar"/>
         <activity
             android:name=".preferences.LocationPreferencesActivity"
             android:label="@string/location_settings"
-            android:parentActivityName=".LandingActivity" />
+            android:parentActivityName=".LandingActivity"/>
         <activity
             android:name=".preferences.GeneralPreferencesActivity"
-            android:parentActivityName=".LandingActivity" />
+            android:parentActivityName=".LandingActivity"/>
         <activity
             android:name=".preferences.FetchPreferencesActivity"
             android:label="@string/fetch_settings"
-            android:parentActivityName=".LandingActivity" />
+            android:parentActivityName=".LandingActivity"/>
         <activity
             android:name=".preferences.ClearDataPreferenceActivity"
             android:label="Clear Data"
             android:parentActivityName=".LandingActivity"
-            android:uiOptions="splitActionBarWhenNarrow" />
+            android:uiOptions="splitActionBarWhenNarrow"/>
         <activity
             android:name=".observation.ObservationViewActivity"
-            android:launchMode="singleTop"
-            android:label="@string/observation_view" />
+            android:label="@string/observation_view"
+            android:launchMode="singleTop"/>
         <activity
             android:name=".observation.ObservationFormPickerActivity"
             android:theme="@style/AppTheme.NoActionBar"
-            android:uiOptions="splitActionBarWhenNarrow" />
+            android:uiOptions="splitActionBarWhenNarrow"/>
         <activity
             android:name=".observation.ObservationEditActivity"
-            android:uiOptions="splitActionBarWhenNarrow" />
-        <activity android:name=".observation.AttachmentViewerActivity" />
-        <activity android:name=".profile.ProfilePictureViewerActivity" />
-        <activity android:name=".profile.ProfileActivity" />
-        <activity android:name=".profile.ChangePasswordActivity"
+            android:uiOptions="splitActionBarWhenNarrow"/>
+        <activity android:name=".observation.AttachmentViewerActivity"/>
+        <activity android:name=".profile.ProfilePictureViewerActivity"/>
+        <activity android:name=".profile.ProfileActivity"/>
+        <activity
+            android:name=".profile.ChangePasswordActivity"
             android:label="Change Password"/>
-        <activity android:name=".observation.LocationEditActivity"
-            android:label="Edit Location"
-            android:windowSoftInputMode="adjustResize"
+        <activity
+            android:name=".observation.LocationEditActivity"
             android:configChanges="orientation|screenSize"
-            android:theme="@style/AppTheme.NoActionBar"/>
+            android:label="Edit Location"
+            android:theme="@style/AppTheme.NoActionBar"
+            android:windowSoftInputMode="adjustResize"/>
         <activity
             android:name=".observation.SelectEditActivity"
-            android:windowSoftInputMode="stateAlwaysHidden"
-            android:theme="@style/AppTheme.NoActionBar"/>
+            android:theme="@style/AppTheme.NoActionBar"
+            android:windowSoftInputMode="stateAlwaysHidden"/>
         <activity
             android:name=".people.PeopleActivity"
             android:label="Favorited by"
             android:launchMode="singleTop"
-            android:parentActivityName=".observation.ObservationViewActivity" />
+            android:parentActivityName=".observation.ObservationViewActivity"/>
 
         <receiver android:name=".sdk.connectivity.NetworkChangeReceiver">
             <intent-filter>
-                <action android:name="android.net.conn.CONNECTIVITY_CHANGE" />
+                <action android:name="android.net.conn.CONNECTIVITY_CHANGE"/>
             </intent-filter>
         </receiver>
 
         <service
             android:name=".sdk.fetch.LocationFetchIntentService"
-            android:exported="false" />
+            android:exported="false"/>
         <service
             android:name=".sdk.fetch.LocationRefreshIntent"
-            android:exported="false" />
+            android:exported="false"/>
         <service
             android:name=".sdk.fetch.ObservationFetchIntentService"
-            android:exported="false" />
+            android:exported="false"/>
         <service
             android:name=".sdk.fetch.ObservationRefreshIntent"
-            android:exported="false" />
+            android:exported="false"/>
         <service
             android:name=".sdk.fetch.EventIconFetchIntentService"
-            android:exported="false" />
+            android:exported="false"/>
         <service
             android:name=".sdk.fetch.InitialFetchIntentService"
-            android:exported="false" />
+            android:exported="false"/>
         <service
             android:name=".sdk.push.LocationPushIntentService"
-            android:exported="false" />
+            android:exported="false"/>
         <service
             android:name=".sdk.push.ObservationPushIntentService"
-            android:exported="false" />
+            android:exported="false"/>
 
         <receiver
             android:name=".sdk.push.AttachmentPushAlarmReceiver"
-            android:exported="false" />
+            android:exported="false"/>
 
         <service
             android:name=".sdk.push.AttachmentPushIntentService"
-            android:exported="false" />
+            android:exported="false"/>
 
         <meta-data
             android:name="com.google.android.maps.v2.API_KEY"
-            android:value="@string/GOOGLE_MAPS_ANDROID_API_KEY" />
+            android:value="@string/GOOGLE_MAPS_ANDROID_API_KEY"/>
         <meta-data
             android:name="com.google.android.gms.version"
-            android:value="@integer/google_play_services_version" />
+            android:value="@integer/google_play_services_version"/>
         <meta-data
             android:name="mil.nga.giat.mage.glide.MageGlideModule"
-            android:value="GlideModule" />
-
+            android:value="GlideModule"/>
     </application>
 
 </manifest>
