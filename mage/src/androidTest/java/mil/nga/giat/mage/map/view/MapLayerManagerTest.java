@@ -1,4 +1,4 @@
-package mil.nga.giat.mage.map.cache;
+package mil.nga.giat.mage.map.view;
 
 import android.support.test.filters.MediumTest;
 import android.support.test.rule.ActivityTestRule;

@@ -1,4 +1,4 @@
-package mil.nga.giat.mage.map.cache
+package mil.nga.giat.mage.map.view
 
 import android.arch.lifecycle.Observer
 import android.support.annotation.UiThread
@@ -8,20 +8,18 @@ import mil.nga.giat.mage.data.Resource
 import mil.nga.giat.mage.data.Resource.Status
 import mil.nga.giat.mage.map.*
 import mil.nga.giat.mage.map.MapElementSpec.MapElementSpecVisitor
-import mil.nga.giat.mage.map.view.MapLayersViewModel
-import mil.nga.giat.mage.map.view.MapOwner
+import mil.nga.giat.mage.map.cache.MapDataProvider
 import java.util.*
 import java.util.concurrent.Callable
-import java.util.concurrent.atomic.AtomicReference
+import kotlin.collections.HashSet
 
 /**
- * A `MapLayerManager` binds [layer data][MapLayerDescriptor] from various
- * [sources][MapDataRepository] to visual objects on a [GoogleMap].
+ * A `MapLayerManager` binds [layer data][MapLayersViewModel] from various
+ * [sources][mil.nga.giat.mage.map.cache.MapDataRepository] to visual objects on a [GoogleMap].
  */
 class MapLayerManager(
     private val mapOwner: MapOwner,
-    private val layersModel: MapLayersViewModel,
-    mapDataManager: MapDataManager) :
+    private val layersModel: MapLayersViewModel) :
     GoogleMap.OnCameraIdleListener,
     GoogleMap.OnMarkerClickListener,
     GoogleMap.OnMapClickListener,
@@ -31,7 +29,6 @@ class MapLayerManager(
     GoogleMap.OnGroundOverlayClickListener,
     MapLayersViewModel.LayerListener {
 
-    private val providers = mapDataManager.providers
     private val layersOnMap = HashMap<MapLayersViewModel.Layer, ViewLayer>()
 
     val map: GoogleMap
@@ -48,15 +45,31 @@ class MapLayerManager(
      * etc.
      */
     @UiThread
-    private inner class ViewLayer(val adapter: MapDataProvider.LayerQuery) {
+    TODO: this class doesn't do much anymore, so just manage the MapElements instances instead
+    private data class ViewLayer(
 
-        val mapElements = BasicMapElementContainer()
-        var isVisible = true
-        var zIndex = 0
-            set(z) {
-                field = z
-                mapElements.forEach(MapElementOperation.SetZIndex(z))
+        val modelLayer: MapLayersViewModel.Layer,
+        val mapOwner: MapOwner,
+        val mapElements: MapElements = BasicMapElementContainer()) {
+
+        init {
+            syncElements()
+        }
+
+        fun syncElements() {
+            val specs = modelLayer.elements.content
+            if (specs == null) {
+                mapElements.clear()
+                return
             }
+            val removeOrSync = RemoveOrSync(modelLayer, mapElements)
+            mapElements.forEach(removeOrSync)
+            val addElement = AddLayerElement(modelLayer, this)
+            for (id in removeOrSync.newElementIds) {
+                val spec = specs[id]!!
+                spec.accept(addElement)
+            }
+        }
 
         /**
          * Remove this layer's visible and hidden objects from the map.
@@ -64,18 +77,7 @@ class MapLayerManager(
          * connections or large geometry collections and prepare for garbage collection.
          */
         fun removeFromMap() {
-            mapElements.forEach(MapElementOperation.REMOVE)
-            adapter.onLayerRemoved()
-        }
-
-        fun show() {
-            mapElements.forEach(MapElementOperation.SHOW)
-            isVisible = true
-        }
-
-        fun hide() {
-            mapElements.forEach(MapElementOperation.HIDE)
-            isVisible = false
+            mapElements.clear()
         }
 
         fun ownsElement(x: Circle): Boolean {
@@ -99,32 +101,32 @@ class MapLayerManager(
         }
 
         fun onMarkerClick(x: Marker) {
-            val getInfo = mapElements.withElement<Callable<String>>(x) { x1, id -> adapter.onClick(x1, id) }
+            val getInfo = mapElements.withElement<Callable<String>>(x) { x1, id -> modelLayer.onClick(x1, id) }
             // TODO: get the info on background thread and get it on the map popup
         }
 
         fun onCircleClick(x: Circle) {
-            val getInfo = mapElements.withElement<Callable<String>>(x) { x1, id -> adapter.onClick(x1, id) }
+            val getInfo = mapElements.withElement<Callable<String>>(x) { x1, id -> modelLayer.onClick(x1, id) }
             // TODO: get the info on background thread and get it on the map popup
         }
 
         fun onPolylineClick(x: Polyline) {
-            val getInfo = mapElements.withElement<Callable<String>>(x) { x1, id -> adapter.onClick(x1, id) }
+            val getInfo = mapElements.withElement<Callable<String>>(x) { x1, id -> modelLayer.onClick(x1, id) }
             // TODO: get the info on background thread and get it on the map popup
         }
 
         fun onPolygonClick(x: Polygon) {
-            val getInfo = mapElements.withElement<Callable<String>>(x) { x1, id -> adapter.onClick(x1, id) }
+            val getInfo = mapElements.withElement<Callable<String>>(x) { x1, id -> modelLayer.onClick(x1, id) }
             // TODO: get the info on background thread and get it on the map popup
         }
 
         fun onGroundOverlayClick(x: GroundOverlay) {
-            val getInfo = mapElements.withElement<Callable<String>>(x) { x1, id -> adapter.onClick(x1, id) }
+            val getInfo = mapElements.withElement<Callable<String>>(x) { x1, id -> modelLayer.onClick(x1, id) }
             // TODO: get the info on background thread and get it on the map popup
         }
 
         fun onMapClick(pos: LatLng, mapOwner: MapOwner) {
-            adapter.onClick(pos, mapOwner)
+            modelLayer.onClick(pos, mapOwner)
         }
     }
 
@@ -135,24 +137,19 @@ class MapLayerManager(
 
     override fun layerVisibilityChanged(layer: MapLayersViewModel.Layer, position: Int) {
         var viewLayer = layersOnMap[layer]
-        if (layer.isVisible) {
-            if (viewLayer == null) {
-                // load layer elements for bounds
-                viewLayer = ViewLayer(layer.adapter)
-                layersOnMap[layer] = viewLayer
-            }
-            viewLayer.show()
+        if (layer.isVisible && viewLayer == null) {
+            viewLayer = ViewLayer(layer, mapOwner)
+            layersOnMap[layer] = viewLayer
+            return
         }
-        else {
-            viewLayer?.hide()
-        }
+        layersOnMap[layer] = viewLayer!!.copy(modelLayer = layer)
     }
 
     override fun zOrderShift(range: IntRange) {
-        for (z in range) {
-            val modelLayer = layersModel.layerAt(z)
-            val viewLayer = layersOnMap[modelLayer]
-            viewLayer?.zIndex = modelLayer.zIndex
+        range.forEach { pos ->
+            val modelLayer = layersModel.layerAt(pos)
+            val viewLayer = layersOnMap[modelLayer] ?: return@forEach
+            layersOnMap[modelLayer] = viewLayer.copy(modelLayer = modelLayer)
         }
     }
 
@@ -246,6 +243,126 @@ class MapLayerManager(
         for (layer in cursor) {
             layer.removeFromMap()
             cursor.remove()
+        }
+    }
+
+    private class AddLayerElement(val modelLayer: MapLayersViewModel.Layer, val viewLayer: ViewLayer) : MapElementSpecVisitor<Unit> {
+
+        override fun visit(x: MapCircleSpec): Unit? {
+            val e = viewLayer.mapOwner.map.addCircle(x.options.zIndex(modelLayer.zIndex.toFloat()).visible(modelLayer.isVisible))
+            viewLayer.mapElements.add(e, x.id)
+            e.tag = x.data
+            return null
+        }
+
+        override fun visit(x: MapGroundOverlaySpec): Unit? {
+            val e = viewLayer.mapOwner.map.addGroundOverlay(x.options.zIndex(modelLayer.zIndex.toFloat()).visible(modelLayer.isVisible))
+            viewLayer.mapElements.add(e, x.id)
+            e.tag = x.data
+            return null
+        }
+
+        override fun visit(x: MapMarkerSpec): Unit? {
+            val e = viewLayer.mapOwner.map.addMarker(x.options.zIndex(modelLayer.zIndex.toFloat()).visible(modelLayer.isVisible))
+            viewLayer.mapElements.add(e, x.id)
+            e.tag = x.data
+            return null
+        }
+
+        override fun visit(x: MapPolygonSpec): Unit? {
+            val e = viewLayer.mapOwner.map.addPolygon(x.options.zIndex(modelLayer.zIndex.toFloat()).visible(modelLayer.isVisible))
+            viewLayer.mapElements.add(e, x.id)
+            e.tag = x.data
+            return null
+        }
+
+        override fun visit(x: MapPolylineSpec): Unit? {
+            val e = viewLayer.mapOwner.map.addPolyline(x.options.zIndex(modelLayer.zIndex.toFloat()).visible(modelLayer.isVisible))
+            viewLayer.mapElements.add(e, x.id)
+            e.tag = x.data
+            return null
+        }
+
+        override fun visit(x: MapTileOverlaySpec): Unit? {
+            viewLayer.mapElements.add(viewLayer.mapOwner.map.addTileOverlay(x.options.zIndex(modelLayer.zIndex.toFloat()).visible(modelLayer.isVisible)), x.id)
+            return null
+        }
+    }
+
+    private class RemoveOrSync(val modelLayer: MapLayersViewModel.Layer, val mapElements: MapElements) : MapElements.ComprehensiveMapElementVisitor<Boolean> {
+
+        val newElementIds = HashSet(modelLayer.elements.content?.keys ?: emptySet())
+
+        override fun visit(x: Circle, id: Any): Boolean {
+            if (newElementIds.contains(id)) {
+                x.zIndex = modelLayer.zIndex.toFloat()
+                x.isVisible = modelLayer.isVisible
+                newElementIds.remove(id)
+            }
+            else {
+                mapElements.remove(x)
+            }
+            return true
+        }
+
+        override fun visit(x: GroundOverlay, id: Any): Boolean {
+            if (newElementIds.contains(id)) {
+                x.zIndex = modelLayer.zIndex.toFloat()
+                x.isVisible = modelLayer.isVisible
+                newElementIds.remove(id)
+            }
+            else {
+                mapElements.remove(x)
+            }
+            return true
+        }
+
+        override fun visit(x: Marker, id: Any): Boolean {
+            if (newElementIds.contains(id)) {
+                x.zIndex = modelLayer.zIndex.toFloat()
+                x.isVisible = modelLayer.isVisible
+                newElementIds.remove(id)
+            }
+            else {
+                mapElements.remove(x)
+            }
+            return true
+        }
+
+        override fun visit(x: Polygon, id: Any): Boolean {
+            if (newElementIds.contains(id)) {
+                x.zIndex = modelLayer.zIndex.toFloat()
+                x.isVisible = modelLayer.isVisible
+                newElementIds.remove(id)
+            }
+            else {
+                mapElements.remove(x)
+            }
+            return true
+        }
+
+        override fun visit(x: Polyline, id: Any): Boolean {
+            if (newElementIds.contains(id)) {
+                x.zIndex = modelLayer.zIndex.toFloat()
+                x.isVisible = modelLayer.isVisible
+                newElementIds.remove(id)
+            }
+            else {
+                mapElements.remove(x)
+            }
+            return true
+        }
+
+        override fun visit(x: TileOverlay, id: Any): Boolean {
+            if (newElementIds.contains(id)) {
+                x.zIndex = modelLayer.zIndex.toFloat()
+                x.isVisible = modelLayer.isVisible
+                newElementIds.remove(id)
+            }
+            else {
+                mapElements.remove(x)
+            }
+            return true
         }
     }
 
