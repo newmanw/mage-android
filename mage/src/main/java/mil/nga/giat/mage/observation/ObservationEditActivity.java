@@ -5,12 +5,15 @@ import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.Dialog;
 import android.content.ClipData;
+import android.content.ContentUris;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.res.Configuration;
+import android.database.Cursor;
+import android.database.MergeCursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -746,6 +749,15 @@ public class ObservationEditActivity extends AppCompatActivity implements OnMapR
 		}
 	}
 
+	// Get permission to read external storage for searching photo gallery
+	public void onSearchGalleryClick(View v) {
+		if (ContextCompat.checkSelfPermission(getApplicationContext(), Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+			ActivityCompat.requestPermissions(ObservationEditActivity.this, new String[]{Manifest.permission.READ_EXTERNAL_STORAGE}, PERMISSIONS_REQUEST_STORAGE);
+		} else {
+			launchGalleryPhotoSearch();
+		}
+	}
+
 	private void launchCameraIntent() {
 		try {
 			File file = MediaUtility.createImageFile();
@@ -782,6 +794,143 @@ public class ObservationEditActivity extends AppCompatActivity implements OnMapR
 			intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
 		}
 		startActivityForResult(intent, GALLERY_ACTIVITY_REQUEST_CODE);
+	}
+
+	/**
+	 * Searches photo gallery for any image within a bounding box.  Bounding box must first be set in
+	 * the observation edit page's map menu before any photos will be added.
+	 */
+	private void launchGalleryPhotoSearch() {
+
+		// locationEnvelope will be set after someone has edited map data for the observation
+		if(locationEnvelope == null){
+			Toast toast = Toast.makeText(ObservationEditActivity.this, "Draw a bounding box on the map above first", Toast.LENGTH_LONG);
+			toast.show();
+		} else {
+			// Get bounding box values
+			double minY = locationEnvelope.getMinY();
+			double maxY = locationEnvelope.getMaxY();
+			double minX = locationEnvelope.getMinX();
+			double maxX = locationEnvelope.getMaxX();
+			if (minY == maxY || minX == maxX) {
+				// If either values are equal, map object was a point
+				Toast toast = Toast.makeText(ObservationEditActivity.this, "Must draw a box, not a point", Toast.LENGTH_LONG);
+				toast.show();
+			} else{
+				// Begin searching images in gallery
+				Cursor[] cursors = new Cursor[1];
+				cursors[0] = ObservationEditActivity.this.getContentResolver().query(
+						MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+						new String[]{
+								MediaStore.Images.Media._ID,
+								MediaStore.Images.Media.DATA,
+								MediaStore.Images.Media.ORIENTATION,
+								MediaStore.Images.Media.BUCKET_DISPLAY_NAME,
+								MediaStore.Images.Media.BUCKET_ID,
+								MediaStore.Images.Media.MIME_TYPE,
+								MediaStore.Images.Media.DISPLAY_NAME,
+								MediaStore.Images.Media.TITLE,
+								MediaStore.Images.ImageColumns.LATITUDE,
+								MediaStore.Images.ImageColumns.LONGITUDE,
+						},
+						null,
+						null,
+						MediaStore.Images.ImageColumns.DATE_TAKEN + " DESC");
+				Cursor cursor = new MergeCursor(cursors);
+				cursor.moveToFirst();
+//                String uri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI.getPath();        // /external/images/media
+				int photoCount = 0;
+				final ArrayList<Uri> uriList = new ArrayList<>();
+
+				while (!cursor.isAfterLast()) {
+					if (cursor.getString(cursor.getColumnIndex(MediaStore.Images.Media.BUCKET_DISPLAY_NAME)).equalsIgnoreCase("camera")) {
+						double lat = cursor.getDouble(cursor.getColumnIndex(MediaStore.Images.ImageColumns.LATITUDE));
+						double lon = cursor.getDouble(cursor.getColumnIndex(MediaStore.Images.ImageColumns.LONGITUDE));
+						long imageId = cursor.getLong(cursor.getColumnIndex(MediaStore.Images.ImageColumns._ID));
+						boolean inside = isInBox(lat, lon, minY, maxY, minX, maxX);
+//                        String fileName = cursor.getString(cursor.getColumnIndex(MediaStore.Images.ImageColumns.DISPLAY_NAME));
+//                        String env = Environment.DIRECTORY_PICTURES;
+
+						// If the photo's coordinates are inside our box, build a Uri to be parsed later for reading the file
+						if (inside) {
+							Uri imageAppendUri =
+									ContentUris
+											.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+													cursor.getInt(cursor.getColumnIndex(MediaStore.Images.ImageColumns._ID)));
+							Uri.Builder builder = new Uri.Builder();
+							builder.scheme("content");
+							builder.encodedAuthority(imageAppendUri.getAuthority());
+							builder.appendEncodedPath(imageAppendUri.getEncodedPath());
+							Uri imageUri = builder.build();
+							uriList.add(imageUri);
+							photoCount++;
+						}
+					}
+					cursor.moveToNext();
+				}
+				cursor.close();
+
+				if (photoCount > 0) {
+					// Confirmation to add all photos found
+					new AlertDialog.Builder(ObservationEditActivity.this, R.style.AppCompatAlertDialogStyle)
+							.setTitle("Attach Photos")
+							.setMessage("Attach " + photoCount + " photos to this observation?")
+							.setPositiveButton(android.R.string.ok, new DialogInterface.OnClickListener() {
+								@Override
+								public void onClick(DialogInterface dialog, int which) {
+									for (Uri uri : uriList) {
+										try {
+											File file = MediaUtility.copyMediaFromUri(getApplicationContext(), uri);
+											Attachment a = new Attachment();
+											a.setLocalPath(file.getAbsolutePath());
+											attachmentsToCreate.add(a);
+											attachmentGallery.addAttachment(attachmentLayout, a);
+										} catch (IOException e) {
+											Log.e(LOG_NAME, "Error copying gallery file to local storage", e);
+										}
+									}
+									dialog.dismiss();
+								}
+							})
+							.setNegativeButton(android.R.string.cancel, new DialogInterface.OnClickListener() {
+								@Override
+								public void onClick(DialogInterface dialog, int which) {
+									dialog.dismiss();
+								}
+							})
+							.create()
+							.show();
+				} else {
+					// No photos were found in the bounding box
+					Toast toast = Toast.makeText(ObservationEditActivity.this, "No photos found in bounding box", Toast.LENGTH_LONG);
+					toast.show();
+				}
+			}
+		}
+
+	}
+
+	/**
+	 * Searches the given coordinates as a box and returns true if the given lat/lon point is inside
+	 * @param lat - lattitude of the position to search
+	 * @param lon - longitude of the position to search
+	 * @param minY
+	 * @param maxY
+	 * @param minX
+	 * @param maxX
+	 * @return
+	 */
+	private boolean isInBox(double lat, double lon, double minY, double maxY, double minX, double maxX){
+		// Aurora north of illif rd
+//		double maxLat = 39.782;
+//		double minLat = 39.678;
+//		double maxLon = -104.664;
+//		double minLon = -104.914;
+
+		if(lat > minY && lat < maxY && lon > minX && lon < maxX) {
+			return true;
+		}
+		return false;
 	}
 
 	private void launchAudioIntent() {
@@ -930,6 +1079,7 @@ public class ObservationEditActivity extends AppCompatActivity implements OnMapR
 				break;
 			case LOCATION_EDIT_ACTIVITY_REQUEST_CODE:
 				location = data.getParcelableExtra(LocationEditActivity.LOCATION);
+				locationEnvelope = location.getGeometryEnvelope();
 				observation.setGeometry(location.getGeometry());
 				setupMap();
 				break;
