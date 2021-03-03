@@ -8,6 +8,7 @@ import android.widget.ArrayAdapter
 import android.widget.ListView
 import androidx.appcompat.widget.SearchView
 import androidx.fragment.app.DialogFragment
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProviders
 import kotlinx.android.synthetic.main.dialog_select_field.*
 import mil.nga.giat.mage.R
@@ -50,13 +51,15 @@ class SelectFieldDialog : DialogFragment() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        setStyle(STYLE_NORMAL, R.style.AppTheme_Dialog_Fullscreen)
+
         require(arguments?.containsKey(FORM_FIELD_KEY_EXTRA) ?: false) {"FORM_FIELD_ID_EXTRA is required to launch DateFieldDialog"}
 
         model = activity?.run {
-            ViewModelProviders.of(this).get(FormViewModel::class.java)
+            ViewModelProvider(this).get(FormViewModel::class.java)
         } ?: throw Exception("Invalid Activity")
 
-        fieldKey = arguments!!.getString(FORM_FIELD_KEY_EXTRA, null)
+        fieldKey = requireArguments().getString(FORM_FIELD_KEY_EXTRA, null)
         field = model.getField(fieldKey) as ChoiceFormField<out Any>
     }
 
@@ -80,14 +83,14 @@ class SelectFieldDialog : DialogFragment() {
         filteredChoices.addAll(choices)
 
         if (field.type == FieldType.MULTISELECTDROPDOWN) {
-            adapter = ArrayAdapter(context!!, android.R.layout.simple_list_item_multiple_choice, filteredChoices)
+            adapter = ArrayAdapter(requireContext(), android.R.layout.simple_list_item_multiple_choice, filteredChoices)
             listView.adapter = adapter
             listView.choiceMode = ListView.CHOICE_MODE_MULTIPLE
 
             val multiChoiceField = (field as MultiChoiceFormField)
             multiChoiceField.value?.let { selectedChoices.addAll(it) }
         } else {
-            adapter = ArrayAdapter(context!!, android.R.layout.simple_list_item_single_choice, filteredChoices)
+            adapter = ArrayAdapter(requireContext(), android.R.layout.simple_list_item_single_choice, filteredChoices)
             listView.adapter = adapter
             listView.choiceMode = ListView.CHOICE_MODE_SINGLE
 

@@ -23,7 +23,7 @@
             android:id="@+id/checkbox"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:checked="@{safeUnbox(field.value)}"
+            android:checked="@{safeUnbox(field.valueLiveData)}"
             android:onCheckedChanged="@{(view, checked) -> field.setValue(checked)}">
         </CheckBox>
 

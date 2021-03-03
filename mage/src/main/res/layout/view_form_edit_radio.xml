@@ -10,7 +10,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="@{choice.title}"
-        android:checked="@{choice.title.equals(field.value)}"
+        android:checked="@{choice.title.equals(field.valueLiveData)}"
         android:onClick="@{() -> field.setValue(choice.title)}"/>
 
 </layout>

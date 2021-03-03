@@ -60,7 +60,7 @@ class FormDefaultActivity : AppCompatActivity() {
             Form.fromJson(formJson)?.let {
                 formPreferences = FormPreferences(applicationContext, event!!, it.id)
 
-                if (formModel.getForm().value == null) {
+                if (formModel.form.value == null) {
                     formModel.setForm(it, formPreferences.getDefaults())
                 }
             }
@@ -70,7 +70,7 @@ class FormDefaultActivity : AppCompatActivity() {
 
         supportActionBar?.title = event?.name
 
-        formModel.getForm().value?.let { form ->
+        formModel.form.value?.let { form ->
             formName.text = form.name
             formDescription.visibility = if (form.description.isNullOrEmpty()) View.GONE else View.VISIBLE
             formDescription.text = form.description
@@ -110,7 +110,7 @@ class FormDefaultActivity : AppCompatActivity() {
         }
         if (invalidFields.isNotEmpty()) return
 
-        formModel.getForm().value?.let { form ->
+        formModel.form.value?.let { form ->
             val transform : (FormField<Any>) -> Pair<String, FormField<Any>> = { it.name to it }
             val formMap = form.fields.associateTo(mutableMapOf(), transform)
 

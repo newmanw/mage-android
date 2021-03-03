@@ -1,8 +1,6 @@
 package mil.nga.giat.mage.form
 
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.*
 import mil.nga.giat.mage.observation.ObservationLocation
 import mil.nga.giat.mage.sdk.utils.GeometryUtility
 import mil.nga.giat.mage.sdk.utils.ISO8601DateFormatFactory
@@ -20,7 +18,42 @@ class FormViewModel : ViewModel() {
 
     private val timestamp = MutableLiveData<FormField<Date>>()
     private val location = MutableLiveData<FormField<ObservationLocation>>()
-    private val form = MutableLiveData<Form>()
+
+    private val _form = MutableLiveData<Form>()
+    val form: LiveData<Form> = _form
+
+    val primaryMapField: LiveData<FormField<Any>> = Transformations.switchMap(form) { form ->
+        val mediator = MediatorLiveData<FormField<Any>>()
+        form.fields.find { it.name == form.primaryMapField }?.let { field ->
+            mediator.addSource(field.valueLiveData) {
+                mediator.value = field
+            }
+        }
+
+        mediator
+    }
+
+    val secondaryMapField: LiveData<FormField<Any>> = Transformations.switchMap(form) { form ->
+        val mediator = MediatorLiveData<FormField<Any>>()
+        form.fields.find { it.name == form.secondaryMapField }?.let { field ->
+            mediator.addSource(field.valueLiveData) {
+                mediator.value = field
+            }
+        }
+
+        mediator
+    }
+
+//    val fields: LiveData<FormField<Any>> = Transformations.switchMap(form) {
+//        val mediator = MediatorLiveData<FormField<Any>>()
+//        it.fields.forEach { field ->
+//            mediator.addSource(field.valueLiveData) {
+//                mediator.value = field
+//            }
+//        }
+//
+//        mediator
+//    }
 
     fun getTimestamp(): LiveData<FormField<Date>> {
         return timestamp
@@ -38,10 +71,6 @@ class FormViewModel : ViewModel() {
         this.location.value = location
     }
 
-    fun getForm(): LiveData<Form> {
-        return form
-    }
-
     fun setForm(form: Form, defaults: Map<String, Any?> = emptyMap()) {
         setUserDefaults(form, defaults)
 
@@ -49,7 +78,7 @@ class FormViewModel : ViewModel() {
             fieldMap = it
         }
 
-        this.form.value = form
+        this._form.value = form
     }
 
     fun getField(key: String): FormField<Any>? {

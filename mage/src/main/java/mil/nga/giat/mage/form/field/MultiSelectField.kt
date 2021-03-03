@@ -5,6 +5,7 @@ import androidx.databinding.BindingAdapter
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.widget.TextView
+import androidx.lifecycle.LifecycleOwner
 import kotlinx.android.synthetic.main.view_form_edit_multiselect.view.*
 import mil.nga.giat.mage.databinding.ViewFormEditMultiselectBinding
 import mil.nga.giat.mage.databinding.ViewFormMultiselectBinding
@@ -31,7 +32,8 @@ class ViewMultiselect @JvmOverloads constructor(
         binding = ViewFormMultiselectBinding.inflate(LayoutInflater.from(context), this, true)
     }
 
-    override fun bind(formField: FormField<List<String>>) {
+    override fun bind(lifecycleOwner: LifecycleOwner, formField: FormField<List<String>>) {
+        binding.lifecycleOwner = lifecycleOwner
         binding.field = formField
     }
 }
@@ -51,7 +53,8 @@ class EditMultiSelect @JvmOverloads constructor(
         binding = ViewFormEditMultiselectBinding.inflate(LayoutInflater.from(context), this, true)
     }
 
-    override fun bind(formField: FormField<List<String>>) {
+    override fun bind(lifecycleOwner: LifecycleOwner, formField: FormField<List<String>>) {
+        binding.lifecycleOwner = lifecycleOwner
         binding.field = formField
         binding.clickListener = {
             clickListener?.invoke(formField)

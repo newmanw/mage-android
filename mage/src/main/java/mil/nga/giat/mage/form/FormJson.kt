@@ -1,9 +1,7 @@
 package mil.nga.giat.mage.form
 
 import android.util.Log
-import androidx.databinding.BaseObservable
-import androidx.databinding.Bindable
-import androidx.databinding.library.baseAdapters.BR
+import androidx.lifecycle.MutableLiveData
 import com.fasterxml.jackson.core.JsonFactory
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.google.gson.*
@@ -12,7 +10,6 @@ import com.google.gson.reflect.TypeToken
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
 import com.google.gson.stream.JsonWriter
-import mil.nga.giat.mage.map.GeocoderTask
 import mil.nga.giat.mage.observation.ObservationLocation
 import mil.nga.giat.mage.sdk.gson.serializer.GeometrySerializer
 import mil.nga.giat.mage.sdk.jackson.deserializer.GeometryDeserializer
@@ -46,24 +43,48 @@ class Form(
             }
         }
     }
+
+    @SerializedName("primaryField")
+    var primaryMapField: String? = null
+
+    @SerializedName("secondaryField")
+    var secondaryMapField: String? = null
+
+    @SerializedName("primaryFeedField")
+    var primaryFeedField: String? = null
+
+    @SerializedName("secondaryFeedField")
+    var secondaryFeedField: String? = null
 }
 
-open class FormField<T> (
-        @SerializedName("id") val id: Long,
-        @SerializedName("type") val type: FieldType,
-        @SerializedName("name") val name: String,
-        @SerializedName("title") val title: String,
-        @SerializedName("required") val required: Boolean,
-        @SerializedName("archived") val archived: Boolean
-): BaseObservable() {
+open class FormField<T>() {
 
-    @Bindable
+    @SerializedName("id")
+    var id: Long = 0
+
+    @SerializedName("type")
+    lateinit var type: FieldType
+
+    @SerializedName("name")
+    lateinit var name: String
+
+    @SerializedName("title")
+    lateinit var title: String
+
+    @SerializedName("required")
+    var required: Boolean = false
+
+    @SerializedName("archived")
+    var archived: Boolean = false
+
     @SerializedName("value")
     open var value: T? = null
         set(value) {
             field = value
-            notifyPropertyChanged(BR.value)
+            valueLiveData.value = value
         }
+
+    open val valueLiveData = MutableLiveData<T>()
 
     open fun serialize(): Serializable? {
         (value as? Serializable)?.let {
@@ -83,10 +104,8 @@ open class FormField<T> (
         if (other == null || javaClass != other.javaClass) return false
 
         val rhs = other as FormField<T>
-        val check = name.equals(rhs.name) &&
-                value?.equals(rhs.value) ?: (rhs.value == null)
 
-        return check
+        return name == rhs.name && value?.equals(rhs.value) ?: (rhs.value == null)
     }
 
     override fun hashCode(): Int {
@@ -108,56 +127,25 @@ enum class FieldType(val typeClass: Class<out FormField<out Any>>) {
     @SerializedName("multiselectdropdown") MULTISELECTDROPDOWN(MultiChoiceFormField::class.java);
 }
 
-class TextFormField(
-        id: Long,
-        type: FieldType,
-        name: String,
-        title: String,
-        required: Boolean,
-        archived: Boolean
-): FormField<String>(id, type, name, title, required, archived) {
+class TextFormField: FormField<String>() {
     override fun hasValue(): Boolean {
         return !value.isNullOrEmpty()
     }
 }
 
-class BooleanFormField(
-        id: Long,
-        type: FieldType,
-        name: String,
-        title: String,
-        required: Boolean,
-        archived: Boolean
-): FormField<Boolean>(id, type, name, title, required, archived)
+class BooleanFormField: FormField<Boolean>()
 
-class NumberFormField(
-        id: Long,
-        type: FieldType,
-        name: String,
-        title: String,
-        required: Boolean,
-        archived: Boolean,
-        @SerializedName("min") val min: Number?,
-        @SerializedName("max") val max: Number?
-): FormField<Number>(id, type, name, title, required, archived)
+class NumberFormField: FormField<Number>() {
+    @SerializedName("min")
+    val min: Number? = null
 
-class DateFormField(
-        id: Long,
-        type: FieldType,
-        name: String,
-        title: String,
-        required: Boolean,
-        archived: Boolean
-): FormField<Date>(id, type, name, title, required, archived)
+    @SerializedName("max")
+    val max: Number? = null
+}
 
-class GeometryFormField(
-        id: Long,
-        type: FieldType,
-        name: String,
-        title: String,
-        required: Boolean,
-        archived: Boolean
-): FormField<ObservationLocation>(id, type, name, title, required, archived) {
+class DateFormField: FormField<Date>()
+
+class GeometryFormField: FormField<ObservationLocation>() {
     override fun serialize(): Serializable? {
         value?.geometry?.let {
             return GeometryUtility.toGeometryBytes(it);
@@ -171,39 +159,18 @@ class Choice(
         @SerializedName("id") val id: Int,
         @SerializedName("title") val title: String)
 
-open class ChoiceFormField<T>(
-        id: Long,
-        type: FieldType,
-        name: String,
-        title: String,
-        required: Boolean,
-        archived: Boolean,
-        @SerializedName("choices") val choices: List<Choice>
-): FormField<T>(id, type, name, title, required, archived)
+open class ChoiceFormField<T>: FormField<T>() {
+    @SerializedName("choices")
+    val choices: List<Choice> = emptyList()
+}
 
-class SingleChoiceFormField(
-        id: Long,
-        type: FieldType,
-        name: String,
-        title: String,
-        required: Boolean,
-        archived: Boolean,
-        choices: List<Choice>
-): ChoiceFormField<String>(id, type, name, title, required, archived, choices) {
+class SingleChoiceFormField: ChoiceFormField<String>() {
     override fun hasValue(): Boolean {
         return !value.isNullOrEmpty()
     }
 }
 
-class MultiChoiceFormField(
-        id: Long,
-        type: FieldType,
-        name: String,
-        title: String,
-        required: Boolean,
-        archived: Boolean,
-        choices: List<Choice>
-): ChoiceFormField<List<String>>(id, type, name, title, required, archived, choices) {
+class MultiChoiceFormField: ChoiceFormField<List<String>>() {
     override fun hasValue(): Boolean {
         return !value.isNullOrEmpty()
     }
@@ -215,11 +182,11 @@ class FormFieldDeserializer : JsonDeserializer<FormField<out Any>>, JsonSerializ
         private const val TYPE_FIELD = "type"
 
         private val gson = GsonBuilder()
-                .registerTypeAdapterFactory(ListTypeAdapterFactory())
-                .registerTypeAdapter(Date::class.java, DateTypeAdapter())
-                .registerTypeAdapter(FormField::class.java, FormFieldDeserializer())
-                .registerTypeAdapter(ObservationLocation::class.java, LocationParser())
-                .create()
+            .registerTypeAdapterFactory(ListTypeAdapterFactory())
+            .registerTypeAdapter(Date::class.java, DateTypeAdapter())
+            .registerTypeAdapter(FormField::class.java, FormFieldDeserializer())
+            .registerTypeAdapter(ObservationLocation::class.java, LocationParser())
+            .create()
     }
 
     override fun serialize(src: FormField<out Any>, type: Type, context: JsonSerializationContext): JsonElement {
@@ -228,11 +195,7 @@ class FormFieldDeserializer : JsonDeserializer<FormField<out Any>>, JsonSerializ
 
     @Throws(JsonParseException::class)
     override fun deserialize(json: JsonElement, typeOfT: Type?, context: JsonDeserializationContext?): FormField<out Any>? {
-        val type = gson.fromJson<FieldType>(json.asJsonObject.get(TYPE_FIELD), FieldType::class.java)
-        if (type == null) {
-            return null
-        }
-
+        val type = gson.fromJson<FieldType>(json.asJsonObject.get(TYPE_FIELD), FieldType::class.java) ?: return null
         val field = gson.fromJson(json, type.typeClass)
         return if (!field.archived) field else null
     }

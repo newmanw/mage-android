@@ -3,6 +3,7 @@ package mil.nga.giat.mage.form.field
 import android.content.Context
 import android.util.AttributeSet
 import android.view.LayoutInflater
+import androidx.lifecycle.LifecycleOwner
 import mil.nga.giat.mage.databinding.ViewFormCheckboxBinding
 import mil.nga.giat.mage.databinding.ViewFormEditCheckboxBinding
 import mil.nga.giat.mage.form.FormField
@@ -14,13 +15,10 @@ class ViewCheckbox @JvmOverloads constructor(
         defStyleRes: Int = 0
 ) : Field<Boolean>(context, attrs, defStyle, defStyleRes) {
 
-    private val binding: ViewFormCheckboxBinding
+    private val binding: ViewFormCheckboxBinding = ViewFormCheckboxBinding.inflate(LayoutInflater.from(context), this, true)
 
-    init {
-        binding = ViewFormCheckboxBinding.inflate(LayoutInflater.from(context), this, true)
-    }
-
-    override fun bind(formField: FormField<Boolean>) {
+    override fun bind(lifecycleOwner: LifecycleOwner, formField: FormField<Boolean>) {
+        binding.lifecycleOwner = lifecycleOwner
         binding.field = formField
     }
 }
@@ -37,7 +35,8 @@ class EditCheckbox @JvmOverloads constructor(
         binding = ViewFormEditCheckboxBinding.inflate(LayoutInflater.from(context), this, true)
     }
 
-    override fun bind(formField: FormField<Boolean>) {
+    override fun bind(lifecycleOwner: LifecycleOwner, formField: FormField<Boolean>) {
+        binding.lifecycleOwner = lifecycleOwner
         binding.field = formField
     }
 }

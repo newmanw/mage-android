@@ -5,6 +5,7 @@ import androidx.databinding.BindingAdapter
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.widget.TextView
+import androidx.lifecycle.LifecycleOwner
 import kotlinx.android.synthetic.main.view_form_edit_date.view.*
 import mil.nga.giat.mage.databinding.ViewFormDateBinding
 import mil.nga.giat.mage.databinding.ViewFormEditDateBinding
@@ -42,7 +43,8 @@ class ViewDate @JvmOverloads constructor(
         binding = ViewFormDateBinding.inflate(LayoutInflater.from(context), this, true)
     }
 
-    override fun bind(formField: FormField<Date>) {
+    override fun bind(lifecycleOwner: LifecycleOwner, formField: FormField<Date>) {
+        binding.lifecycleOwner = lifecycleOwner
         binding.field = formField
     }
 }
@@ -62,7 +64,8 @@ class EditDate @JvmOverloads constructor(
         binding = ViewFormEditDateBinding.inflate(LayoutInflater.from(context), this, true)
     }
 
-    override fun bind(formField: FormField<Date>) {
+    override fun bind(lifecycleOwner: LifecycleOwner, formField: FormField<Date>) {
+        binding.lifecycleOwner = lifecycleOwner
         binding.field = formField
         binding.clickListener = {
             clickListener?.invoke(formField)

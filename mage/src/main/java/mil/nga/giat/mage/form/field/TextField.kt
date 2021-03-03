@@ -3,6 +3,7 @@ package mil.nga.giat.mage.form.field
 import android.content.Context
 import android.util.AttributeSet
 import android.view.LayoutInflater
+import androidx.lifecycle.LifecycleOwner
 import kotlinx.android.synthetic.main.view_form_edit_text.view.*
 import mil.nga.giat.mage.databinding.ViewFormEditTextBinding
 import mil.nga.giat.mage.databinding.ViewFormTextBinding
@@ -21,7 +22,8 @@ class ViewText @JvmOverloads constructor(
         binding = ViewFormTextBinding.inflate(LayoutInflater.from(context), this, true)
     }
 
-    override fun bind(formField: FormField<String>) {
+    override fun bind(lifecycleOwner: LifecycleOwner, formField: FormField<String>) {
+        binding.lifecycleOwner = lifecycleOwner
         binding.field = formField
     }
 }
@@ -40,9 +42,10 @@ class EditText @JvmOverloads constructor(
         binding = ViewFormEditTextBinding.inflate(LayoutInflater.from(context), this, true)
     }
 
-    override fun bind(formField: FormField<String>) {
+    override fun bind(lifecycleOwner: LifecycleOwner, formField: FormField<String>) {
         required = formField.required
 
+        binding.lifecycleOwner = lifecycleOwner
         binding.field = formField
     }
 

@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import androidx.databinding.InverseMethod
+import androidx.lifecycle.LifecycleOwner
 import com.google.android.material.textfield.TextInputEditText
 import kotlinx.android.synthetic.main.view_form_edit_number.view.*
 import mil.nga.giat.mage.databinding.ViewFormEditNumberBinding
@@ -66,7 +67,8 @@ class ViewNumber @JvmOverloads constructor(
         binding = ViewFormNumberBinding.inflate(LayoutInflater.from(context), this, true)
     }
 
-    override fun bind(formField: FormField<Number>) {
+    override fun bind(lifecycleOwner: LifecycleOwner, formField: FormField<Number>) {
+        binding.lifecycleOwner = lifecycleOwner
         binding.field = formField
     }
 }
@@ -87,7 +89,8 @@ class EditNumber @JvmOverloads constructor(
         binding = ViewFormEditNumberBinding.inflate(LayoutInflater.from(context), this, true)
     }
 
-    override fun bind(formField: FormField<Number>) {
+    override fun bind(lifecycleOwner: LifecycleOwner, formField: FormField<Number>) {
+        binding.lifecycleOwner = lifecycleOwner
         binding.field = formField
 
         val numberField = (formField as NumberFormField)

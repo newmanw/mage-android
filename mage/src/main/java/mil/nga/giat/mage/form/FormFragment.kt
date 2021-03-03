@@ -2,12 +2,13 @@ package mil.nga.giat.mage.form
 
 import android.content.Context
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Observer
-import androidx.lifecycle.ViewModelProviders
+import androidx.lifecycle.ViewModelProvider
 import kotlinx.android.synthetic.main.fragement_form.*
 import mil.nga.giat.mage.R
 import mil.nga.giat.mage.form.field.*
@@ -28,7 +29,7 @@ class FormFragment : Fragment() {
         super.onCreate(savedInstanceState)
 
         model = activity?.run {
-            ViewModelProviders.of(this).get(FormViewModel::class.java)
+            ViewModelProvider(this).get(FormViewModel::class.java)
         } ?: throw Exception("Invalid Activity")
     }
 
@@ -37,7 +38,7 @@ class FormFragment : Fragment() {
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        model.getForm().observe(this, Observer { form ->
+        model.form.observe(viewLifecycleOwner, Observer { form ->
             form?.let { buildForm(it) }
         })
     }
@@ -50,7 +51,7 @@ class FormFragment : Fragment() {
                 .sortedBy { it.id }
 
         for (field in fields) {
-            createField(context!!, field)?.let {
+            createField(requireContext(), field)?.let {
                 forms.addView(it)
                 editFields.add(it)
             }
@@ -74,59 +75,59 @@ class FormFragment : Fragment() {
         return when(field.type) {
             FieldType.TEXTFIELD -> {
                 val view = ViewText(context)
-                view.bind(field as FormField<String>)
+                view.bind(viewLifecycleOwner, field as FormField<String>)
                 view
             }
             FieldType.TEXTAREA -> {
                 val view = ViewText(context)
-                view.bind(field as FormField<String>)
+                view.bind(viewLifecycleOwner, field as FormField<String>)
                 view
             }
             FieldType.EMAIL -> {
                 val view = ViewText(context)
-                view.bind(field as FormField<String>)
+                view.bind(viewLifecycleOwner, field as FormField<String>)
                 view
             }
             FieldType.PASSWORD -> {
                 val view = ViewText(context)
-                view.bind(field as FormField<String>)
+                view.bind(viewLifecycleOwner, field as FormField<String>)
                 view
             }
             FieldType.NUMBERFIELD -> {
                 val view = ViewNumber(context)
-                view.bind(field as FormField<Number>)
+                view.bind(viewLifecycleOwner, field as FormField<Number>)
                 view
             }
             FieldType.DATE -> {
                 val view = ViewDate(context)
-                view.bind(field as FormField<Date>)
+                view.bind(viewLifecycleOwner, field as FormField<Date>)
                 view
             }
             FieldType.RADIO -> {
                 val view = ViewText(context)
-                view.bind(field as FormField<String>)
+                view.bind(viewLifecycleOwner, field as FormField<String>)
                 view
             }
             FieldType.CHECKBOX -> {
                 val view = ViewCheckbox(context)
-                view.bind(field as FormField<Boolean>)
+                view.bind(viewLifecycleOwner, field as FormField<Boolean>)
                 view
             }
             FieldType.DROPDOWN -> {
                 val view = ViewText(context)
-                view.bind(field as FormField<String>)
+                view.bind(viewLifecycleOwner, field as FormField<String>)
 
                 view
             }
             FieldType.MULTISELECTDROPDOWN -> {
                 val view = ViewMultiselect(context)
-                view.bind(field as ChoiceFormField<List<String>>)
+                view.bind(viewLifecycleOwner, field as ChoiceFormField<List<String>>)
 
                 view
             }
             FieldType.GEOMETRY -> {
                 val view = ViewGeometry(context)
-                view.bind(field as FormField<ObservationLocation>)
+                view.bind(viewLifecycleOwner, field as FormField<ObservationLocation>)
 
                 view
             }
@@ -137,48 +138,48 @@ class FormFragment : Fragment() {
         return when(field.type) {
             FieldType.TEXTFIELD -> {
                 val view = EditText(context)
-                view.bind(field as FormField<String>)
+                view.bind(viewLifecycleOwner, field as FormField<String>)
                 view
             }
             FieldType.TEXTAREA -> {
                 val view = EditTextarea(context)
-                view.bind(field as FormField<String>)
+                view.bind(viewLifecycleOwner, field as FormField<String>)
                 view
             }
             FieldType.EMAIL -> {
                 val view = EmailField(context)
-                view.bind(field as FormField<String>)
+                view.bind(viewLifecycleOwner, field as FormField<String>)
                 view
             }
             FieldType.PASSWORD -> {
                 val view = PasswordField(context)
-                view.bind(field as FormField<String>)
+                view.bind(viewLifecycleOwner, field as FormField<String>)
                 view
             }
             FieldType.NUMBERFIELD -> {
                 val view = EditNumber(context)
-                view.bind(field as FormField<Number>)
+                view.bind(viewLifecycleOwner, field as FormField<Number>)
                 view
             }
             FieldType.DATE -> {
                 val view = EditDate(context)
-                view.bind(field as FormField<Date>)
+                view.bind(viewLifecycleOwner, field as FormField<Date>)
                 view.setOnEditDateClickListener { onDateFieldClick(field) }
                 view
             }
             FieldType.RADIO -> {
                 val view = RadioField(context)
-                view.bind(field as FormField<String>)
+                view.bind(viewLifecycleOwner, field as FormField<String>)
                 view
             }
             FieldType.CHECKBOX -> {
                 val view = EditCheckbox(context)
-                view.bind(field as FormField<Boolean>)
+                view.bind(viewLifecycleOwner, field as FormField<Boolean>)
                 view
             }
             FieldType.DROPDOWN -> {
                 val view = EditSelect(context)
-                view.bind(field as ChoiceFormField<String>)
+                view.bind(viewLifecycleOwner, field as ChoiceFormField<String>)
                 view.setOnEditSelectClickListener {
                     onSelectFieldClick(field)
                 }
@@ -187,7 +188,7 @@ class FormFragment : Fragment() {
             }
             FieldType.MULTISELECTDROPDOWN -> {
                 val view = EditMultiSelect(context)
-                view.bind(field as ChoiceFormField<List<String>>)
+                view.bind(viewLifecycleOwner, field as ChoiceFormField<List<String>>)
                 view.setOnEditSelectClickListener {
                     onSelectFieldClick(field)
                 }
@@ -196,7 +197,7 @@ class FormFragment : Fragment() {
             }
             FieldType.GEOMETRY -> {
                 val view = EditGeometry(context)
-                view.bind(field as FormField<ObservationLocation>)
+                view.bind(viewLifecycleOwner, field as FormField<ObservationLocation>)
                 view.setOnEditGeometryClickListener {
                     onGeometryFieldClick(field)
                 }

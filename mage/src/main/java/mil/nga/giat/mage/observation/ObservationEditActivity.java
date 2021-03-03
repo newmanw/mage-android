@@ -39,6 +39,7 @@ import androidx.appcompat.widget.Toolbar;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
+import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
 
 import com.google.android.gms.maps.CameraUpdateFactory;
@@ -130,7 +131,6 @@ public class ObservationEditActivity extends AppCompatActivity implements OnMapR
    private GoogleMap map;
    private MapObservation mapObservation;
    private Circle accuracyCircle;
-   private long locationElapsedTimeMilliseconds = 0;
    private MapFragment mapFragment;
    private MapObservationManager mapObservationManager;
    private FormFragment formFragment;
@@ -172,24 +172,38 @@ public class ObservationEditActivity extends AppCompatActivity implements OnMapR
          getSupportActionBar().setSubtitle(event.getName());
       }
 
-      FormField<Date> timestampField = new DateFormField(0, FieldType.DATE, "timestamp", "Date", true, false);
+      FormField<Date> timestampField = new DateFormField();
+      timestampField.setId(0);
+      timestampField.setType(FieldType.DATE);
+      timestampField.setName("timestamp");
+      timestampField.setTitle("Date");
+      timestampField.setRequired(true);
+      timestampField.setArchived(false);
+
       model.setTimestamp(timestampField);
       EditDate editTimestamp = findViewById(R.id.date);
-      editTimestamp.bind(timestampField);
+      editTimestamp.bind(this, timestampField);
       editTimestamp.setOnEditDateClickListener(dateFormField -> {
          DateFieldDialog dialog = DateFieldDialog.Companion.newInstance();
          dialog.show(getSupportFragmentManager(), "TIMESTAMP_FIELD_DIALOG");
          return null;
       });
 
-      FormField<ObservationLocation> geometryField = new GeometryFormField(0, FieldType.GEOMETRY, "geometry", "Location", true, false);
+      FormField<ObservationLocation> geometryField = new GeometryFormField();
+      geometryField.setId(0);
+      geometryField.setType(FieldType.GEOMETRY);
+      geometryField.setName("geometry");
+      geometryField.setTitle("Location");
+      geometryField.setRequired(true);
+      geometryField.setArchived(false);
+
       model.setLocation(geometryField);
       EditGeometry editGeometry = findViewById(R.id.geometry);
-      editGeometry.bind(geometryField);
+      editGeometry.bind(this, geometryField);
       findViewById(R.id.geometry_edit).setOnClickListener(view -> {
          GeometryFieldDialog dialog = GeometryFieldDialog.Companion.newInstance(null, () -> {
             observation.setGeometry(geometryField.getValue().getGeometry());
-            setupMap();
+            updateMapIcon();
          });
          dialog.show(getSupportFragmentManager(), "GEOMETRY_FIELD_DIALOG");
       });
@@ -243,6 +257,9 @@ public class ObservationEditActivity extends AppCompatActivity implements OnMapR
                  .replace(R.id.form_content, formFragment, "EDIT_FORM_FRAGMENT")
                  .commit();
       }
+
+      model.getPrimaryMapField().observe(this, (Observer<FormField<?>>) this::onMapFieldValueChanged);
+      model.getSecondaryMapField().observe(this, (Observer<FormField<?>>) this::onMapFieldValueChanged);
 
       attachmentLayout = findViewById(R.id.image_gallery);
       attachmentGallery = new AttachmentGallery(getApplicationContext(), 200, 200);
@@ -375,19 +392,26 @@ public class ObservationEditActivity extends AppCompatActivity implements OnMapR
       map.getUiSettings().setMapToolbarEnabled(false);
       map.animateCamera(location.getCameraUpdate(mapFragment.getView(), true, 1.0f / 6));
 
+      updateMapIcon();
+   }
+
+   private void updateMapIcon() {
+      if (map == null) return;
+
       if (accuracyCircle != null) {
          accuracyCircle.remove();
       }
 
+      ObservationLocation location = model.getLocation().getValue().getValue();
       CircleOptions circle = location.getAccuracyCircle(getResources());
       if (circle != null) {
          accuracyCircle = map.addCircle(circle);
       }
 
-      // TODO map should be based on geometry field value, not observation value
       if (mapObservation != null) {
          mapObservation.remove();
       }
+
       mapObservation = mapObservationManager.addToMap(observation);
    }
 
@@ -431,40 +455,54 @@ public class ObservationEditActivity extends AppCompatActivity implements OnMapR
 
    @Override
    public boolean onOptionsItemSelected(MenuItem item) {
-      switch (item.getItemId()) {
-
-         case android.R.id.home:
-            new AlertDialog.Builder(this)
-                    .setTitle("Discard Changes")
-                    .setMessage(R.string.cancel_edit)
-                    .setPositiveButton(R.string.discard_changes, new DialogInterface.OnClickListener() {
-                       public void onClick(DialogInterface dialog, int which) {
-                          finish();
-                       }
-                    }).setNegativeButton(R.string.no, null)
-                    .show();
-
-            break;
-         case R.id.observation_archive:
-            onArchiveObservation();
-            return true;
+      int itemId = item.getItemId();
+      if (itemId == android.R.id.home) {
+         new AlertDialog.Builder(this)
+           .setTitle("Discard Changes")
+           .setMessage(R.string.cancel_edit)
+           .setPositiveButton(R.string.discard_changes, new DialogInterface.OnClickListener() {
+              public void onClick(DialogInterface dialog, int which) {
+                 finish();
+              }
+           }).setNegativeButton(R.string.no, null)
+           .show();
+      } else if (itemId == R.id.observation_archive) {
+         onArchiveObservation();
+         return true;
       }
 
       return super.onOptionsItemSelected(item);
    }
 
+   private void onMapFieldValueChanged(FormField<?> field) {
+      Collection<ObservationForm> observationForms = new ArrayList<>();
+      Form form = model.getForm().getValue();
+      if (form != null) {
+         Collection<ObservationProperty> properties = new ArrayList<>();
+         for (FormField<Object> formField : form.getFields()) {
+            Serializable value = formField.serialize();
+            if (value != null) {
+               properties.add(new ObservationProperty(formField.getName(), value));
+            }
+         }
+
+         ObservationForm observationForm = new ObservationForm();
+         observationForm.setFormId(form.getId());
+         observationForm.addProperties(properties);
+         observationForms.add(observationForm);
+      }
+      observation.addForms(observationForms);
+
+      updateMapIcon();
+   }
+
    private void onArchiveObservation() {
       new AlertDialog.Builder(this)
-              .setTitle("Delete Observation")
-              .setMessage("Are you sure you want to remove this observation?")
-              .setPositiveButton("Delete", new Dialog.OnClickListener() {
-                 @Override
-                 public void onClick(DialogInterface dialog, int which) {
-                    archiveObservation();
-                 }
-              })
-              .setNegativeButton(android.R.string.cancel, null)
-              .show();
+        .setTitle("Delete Observation")
+        .setMessage("Are you sure you want to remove this observation?")
+        .setPositiveButton("Delete", (dialog, which) -> archiveObservation())
+        .setNegativeButton(android.R.string.cancel, null)
+        .show();
    }
 
    private void archiveObservation() {
@@ -530,9 +568,31 @@ public class ObservationEditActivity extends AppCompatActivity implements OnMapR
       observation.setProvider(provider);
 
       if (!"manual".equalsIgnoreCase(provider)) {
+         long locationElapsedTimeMilliseconds = 0;
          observation.setLocationDelta(Long.toString(locationElapsedTimeMilliseconds));
       }
 
+      transformForms();
+
+      observation.getAttachments().addAll(attachmentsToCreate);
+
+      ObservationHelper observationHelper = ObservationHelper.getInstance(getApplicationContext());
+      try {
+         if (observation.getId() == null) {
+            Observation newObs = observationHelper.create(observation);
+            Log.i(LOG_NAME, "Created new observation with id: " + newObs.getId());
+         } else {
+            observationHelper.update(observation);
+            Log.i(LOG_NAME, "Updated observation with remote id: " + observation.getRemoteId());
+         }
+
+         finish();
+      } catch (Exception e) {
+         Log.e(LOG_NAME, e.getMessage(), e);
+      }
+   }
+
+   private void transformForms() {
       Collection<ObservationForm> observationForms = new ArrayList<>();
       Form form = model.getForm().getValue();
       if (form != null) {
@@ -550,23 +610,6 @@ public class ObservationEditActivity extends AppCompatActivity implements OnMapR
          observationForms.add(observationForm);
       }
       observation.addForms(observationForms);
-
-      observation.getAttachments().addAll(attachmentsToCreate);
-
-      ObservationHelper oh = ObservationHelper.getInstance(getApplicationContext());
-      try {
-         if (observation.getId() == null) {
-            Observation newObs = oh.create(observation);
-            Log.i(LOG_NAME, "Created new observation with id: " + newObs.getId());
-         } else {
-            oh.update(observation);
-            Log.i(LOG_NAME, "Updated observation with remote id: " + observation.getRemoteId());
-         }
-
-         finish();
-      } catch (Exception e) {
-         Log.e(LOG_NAME, e.getMessage(), e);
-      }
    }
 
    private boolean validateForm() {

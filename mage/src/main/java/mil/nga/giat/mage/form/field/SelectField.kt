@@ -5,6 +5,9 @@ import androidx.databinding.BindingAdapter
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.widget.TextView
+import androidx.databinding.BaseObservable
+import androidx.databinding.Observable
+import androidx.lifecycle.LifecycleOwner
 import kotlinx.android.synthetic.main.view_form_edit_select.view.*
 import mil.nga.giat.mage.databinding.ViewFormEditSelectBinding
 import mil.nga.giat.mage.form.ChoiceFormField
@@ -26,15 +29,12 @@ class EditSelect @JvmOverloads constructor(
         defStyleRes: Int = 0
 ) : Field<String>(context, attrs, defStyle, defStyleRes) {
 
-    private val binding: ViewFormEditSelectBinding
+    private val binding: ViewFormEditSelectBinding = ViewFormEditSelectBinding.inflate(LayoutInflater.from(context), this, true)
     private var required = false
     private var clickListener: ((field: FormField<String>) -> Unit)? = null
 
-    init {
-        binding = ViewFormEditSelectBinding.inflate(LayoutInflater.from(context), this, true)
-    }
-
-    override fun bind(formField: FormField<String>) {
+    override fun bind(lifecycleOwner: LifecycleOwner, formField: FormField<String>) {
+        binding.lifecycleOwner = lifecycleOwner
         binding.field = formField as ChoiceFormField<String>
         binding.clickListener = {
             clickListener?.invoke(formField)

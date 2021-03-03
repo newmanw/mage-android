@@ -22,7 +22,7 @@
             android:layout_height="wrap_content"
             android:inputType="text"
             android:maxLines="1"
-            android:text="@={field.value}"/>
+            android:text="@={field.valueLiveData}"/>
 
     </com.google.android.material.textfield.TextInputLayout>
 

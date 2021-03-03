@@ -3,6 +3,7 @@ package mil.nga.giat.mage.form.field
 import android.content.Context
 import android.util.AttributeSet
 import android.view.LayoutInflater
+import androidx.lifecycle.LifecycleOwner
 import kotlinx.android.synthetic.main.view_form_edit_textarea.view.*
 import mil.nga.giat.mage.databinding.ViewFormEditTextareaBinding
 import mil.nga.giat.mage.databinding.ViewFormTextareaBinding
@@ -22,7 +23,8 @@ class EditTextarea @JvmOverloads constructor(
         binding = ViewFormEditTextareaBinding.inflate(LayoutInflater.from(context), this, true)
     }
 
-    override fun bind(formField: FormField<String>) {
+    override fun bind(lifecycleOwner: LifecycleOwner, formField: FormField<String>) {
+        binding.lifecycleOwner = lifecycleOwner
         binding.field = formField
 
         required = formField.required

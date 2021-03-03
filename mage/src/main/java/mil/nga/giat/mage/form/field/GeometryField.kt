@@ -5,6 +5,7 @@ import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.widget.TextView
 import androidx.databinding.BindingAdapter
+import androidx.lifecycle.LifecycleOwner
 import com.google.android.material.textfield.TextInputLayout
 import kotlinx.android.synthetic.main.view_form_edit_geometry.view.*
 import mil.nga.giat.mage.coordinate.CoordinateFormatter
@@ -52,7 +53,8 @@ class ViewGeometry @JvmOverloads constructor(
 
     private val binding: ViewFormGeometryBinding = ViewFormGeometryBinding.inflate(LayoutInflater.from(context), this, true)
 
-    override fun bind(formField: FormField<ObservationLocation>) {
+    override fun bind(lifecycleOwner: LifecycleOwner, formField: FormField<ObservationLocation>) {
+        binding.lifecycleOwner = lifecycleOwner
         binding.field = formField
     }
 }
@@ -68,7 +70,8 @@ class EditGeometry @JvmOverloads constructor(
     private var clickListener: ((field: FormField<ObservationLocation>) -> Unit)? = null
     private var required = false
 
-    override fun bind(formField: FormField<ObservationLocation>) {
+    override fun bind(lifecycleOwner: LifecycleOwner, formField: FormField<ObservationLocation>) {
+        binding.lifecycleOwner = lifecycleOwner
         binding.field = formField
         binding.clickListener = {
             clickListener?.invoke(formField)
