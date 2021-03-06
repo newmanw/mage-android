@@ -22,7 +22,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:inputType="number|numberDecimal"
-            android:text="@={NumberConverter.toString(editText, field.valueLiveData, field.valueLiveData)}"/>
+            android:text="@={NumberConverter.toString(editText, field.value)}"/>
 
     </com.google.android.material.textfield.TextInputLayout>
 

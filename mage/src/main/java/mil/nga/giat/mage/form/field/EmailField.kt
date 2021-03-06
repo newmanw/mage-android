@@ -17,12 +17,8 @@ class EmailField @JvmOverloads constructor(
         defStyleRes: Int = 0
 ) : Field<String>(context, attrs, defStyle, defStyleRes) {
 
-    private val binding: ViewFormEditEmailBinding
+    private val binding: ViewFormEditEmailBinding = ViewFormEditEmailBinding.inflate(LayoutInflater.from(context), this, true)
     private var required = false
-
-    init {
-        binding = ViewFormEditEmailBinding.inflate(LayoutInflater.from(context), this, true)
-    }
 
     override fun bind(lifecycleOwner: LifecycleOwner, formField: FormField<String>) {
         binding.lifecycleOwner = lifecycleOwner

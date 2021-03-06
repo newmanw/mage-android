@@ -17,7 +17,7 @@
         style="@style/AppTheme.TextInputLayout"
         android:theme="@style/AppTheme.TextInputLayout"
         app:geometryHint="@{field.title}"
-        app:geometryHelperText="@{field.valueLiveData}">
+        app:geometryHelperText="@{field.value}">
 
         <com.google.android.material.textfield.TextInputEditText
             android:id="@+id/editText"
@@ -28,7 +28,7 @@
             android:textIsSelectable="false"
             android:cursorVisible="false"
             android:clickable="false"
-            app:geometryText="@{field.valueLiveData}"
+            app:geometryText="@{field.value}"
             android:onClick="@{() -> clickListener.invoke() }"/>
 
     </com.google.android.material.textfield.TextInputLayout>

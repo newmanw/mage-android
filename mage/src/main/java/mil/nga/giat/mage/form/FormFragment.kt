@@ -116,19 +116,16 @@ class FormFragment : Fragment() {
             FieldType.DROPDOWN -> {
                 val view = ViewText(context)
                 view.bind(viewLifecycleOwner, field as FormField<String>)
-
                 view
             }
             FieldType.MULTISELECTDROPDOWN -> {
                 val view = ViewMultiselect(context)
                 view.bind(viewLifecycleOwner, field as ChoiceFormField<List<String>>)
-
                 view
             }
             FieldType.GEOMETRY -> {
                 val view = ViewGeometry(context)
                 view.bind(viewLifecycleOwner, field as FormField<ObservationLocation>)
-
                 view
             }
         }

@@ -27,7 +27,7 @@
             android:textIsSelectable="false"
             android:cursorVisible="false"
             android:clickable="false"
-            app:date="@{field.valueLiveData}"
+            app:date="@{field.value}"
             android:onClick="@{() -> clickListener.invoke() }"/>
 
     </com.google.android.material.textfield.TextInputLayout>

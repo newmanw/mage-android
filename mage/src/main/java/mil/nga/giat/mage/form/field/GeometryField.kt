@@ -16,19 +16,19 @@ import mil.nga.giat.mage.form.FormField
 import mil.nga.giat.mage.observation.ObservationLocation
 
 @BindingAdapter("geometryHint")
-fun geometryHint(view: TextInputLayout, value: String) {
+fun geometryHint(view: TextInputLayout, value: String?) {
     val coordinateSystem = CoordinateFormatter(view.context).coordinateSystem
-    view.hint = "${value} (${if (coordinateSystem == CoordinateSystem.WGS84) "Lat, Lng" else "MGRS"})"
+    view.hint = "$value (${if (coordinateSystem == CoordinateSystem.WGS84) "Lat, Lng" else "MGRS"})"
 }
 
 @BindingAdapter("geometryHelperText")
 fun geometryHelper(view: TextInputLayout, location: ObservationLocation?) {
     view.helperText = null
 
-    if (location?.isManualProvider == true) return;
+    if (location?.isManualProvider == true) return
 
     location?.accuracy?.let { accuracy ->
-        val provider = if ("gps".equals(location.provider) == true) "GPS" else location.provider?.capitalize();
+        val provider = if ("gps".equals(location.provider) == true) "GPS" else location.provider?.capitalize()
         view.helperText = "$provider Location Accuracy +/- ${"%.2f".format(accuracy)}m"
     }
 }

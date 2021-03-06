@@ -14,9 +14,9 @@ import mil.nga.giat.mage.form.FormField
 @BindingAdapter("multiSelectText")
 fun mulitSelectText(view: TextView, value: Any?) {
     if (value is Collection<*>) {
-        view.setText(value.joinToString(", "))
+        view.text = value.joinToString(", ")
     } else {
-        view.setText("")
+        view.text = ""
     }
 }
 class ViewMultiselect @JvmOverloads constructor(
@@ -26,11 +26,7 @@ class ViewMultiselect @JvmOverloads constructor(
         defStyleRes: Int = 0
 ) : Field<List<String>>(context, attrs, defStyle, defStyleRes) {
 
-    private val binding: ViewFormMultiselectBinding
-
-    init {
-        binding = ViewFormMultiselectBinding.inflate(LayoutInflater.from(context), this, true)
-    }
+    private val binding: ViewFormMultiselectBinding = ViewFormMultiselectBinding.inflate(LayoutInflater.from(context), this, true)
 
     override fun bind(lifecycleOwner: LifecycleOwner, formField: FormField<List<String>>) {
         binding.lifecycleOwner = lifecycleOwner
@@ -45,13 +41,9 @@ class EditMultiSelect @JvmOverloads constructor(
         defStyleRes: Int = 0
 ) : Field<List<String>>(context, attrs, defStyle, defStyleRes) {
 
-    private val binding: ViewFormEditMultiselectBinding
+    private val binding: ViewFormEditMultiselectBinding = ViewFormEditMultiselectBinding.inflate(LayoutInflater.from(context), this, true)
     private var clickListener: ((field: FormField<List<String>>) -> Unit)? = null
     private var required = false
-
-    init {
-        binding = ViewFormEditMultiselectBinding.inflate(LayoutInflater.from(context), this, true)
-    }
 
     override fun bind(lifecycleOwner: LifecycleOwner, formField: FormField<List<String>>) {
         binding.lifecycleOwner = lifecycleOwner

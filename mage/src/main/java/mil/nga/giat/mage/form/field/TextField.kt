@@ -16,11 +16,7 @@ class ViewText @JvmOverloads constructor(
         defStyleRes: Int = 0
 ) : Field<String>(context, attrs, defStyle, defStyleRes) {
 
-    private val binding: ViewFormTextBinding
-
-    init {
-        binding = ViewFormTextBinding.inflate(LayoutInflater.from(context), this, true)
-    }
+    private val binding: ViewFormTextBinding = ViewFormTextBinding.inflate(LayoutInflater.from(context), this, true)
 
     override fun bind(lifecycleOwner: LifecycleOwner, formField: FormField<String>) {
         binding.lifecycleOwner = lifecycleOwner
@@ -36,11 +32,7 @@ class EditText @JvmOverloads constructor(
 ) : Field<String>(context, attrs, defStyle, defStyleRes) {
 
     private var required = false
-    private val binding: ViewFormEditTextBinding
-
-    init {
-        binding = ViewFormEditTextBinding.inflate(LayoutInflater.from(context), this, true)
-    }
+    private val binding: ViewFormEditTextBinding = ViewFormEditTextBinding.inflate(LayoutInflater.from(context), this, true)
 
     override fun bind(lifecycleOwner: LifecycleOwner, formField: FormField<String>) {
         required = formField.required

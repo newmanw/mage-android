@@ -11,7 +11,7 @@ import androidx.fragment.app.DialogFragment
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentPagerAdapter
-import androidx.lifecycle.ViewModelProviders
+import androidx.lifecycle.ViewModelProvider
 import androidx.viewpager.widget.ViewPager
 import com.google.android.material.tabs.TabLayout
 import kotlinx.android.synthetic.main.date_time_dialog.view.*
@@ -141,7 +141,7 @@ class DateFieldDialog : DialogFragment() {
 
         view.ok.setOnClickListener {
             val field = if (fieldKey == null) model.getTimestamp().value else model.getField(fieldKey!!) as DateFormField
-            field?.value = calendar.time
+            field?.value?.value = calendar.time
             dismiss()
         }
 
@@ -172,7 +172,7 @@ class DateFieldDialog : DialogFragment() {
             super.onCreate(savedInstanceState)
 
             model = activity?.run {
-                ViewModelProviders.of(this).get(FormViewModel::class.java)
+                ViewModelProvider(this).get(FormViewModel::class.java)
             } ?: throw Exception("Invalid Activity")
 
             val fieldKey = arguments?.getString(FORM_FIELD_KEY_EXTRA, null)
@@ -223,7 +223,7 @@ class DateFieldDialog : DialogFragment() {
             super.onCreate(savedInstanceState)
 
             model = activity?.run {
-                ViewModelProviders.of(this).get(FormViewModel::class.java)
+                ViewModelProvider(this).get(FormViewModel::class.java)
             } ?: throw Exception("Invalid Activity")
 
             val fieldKey = arguments?.getString(FORM_FIELD_KEY_EXTRA, null)

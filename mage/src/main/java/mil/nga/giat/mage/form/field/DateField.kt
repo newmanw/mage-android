@@ -12,6 +12,7 @@ import mil.nga.giat.mage.databinding.ViewFormEditDateBinding
 import mil.nga.giat.mage.form.FormField
 import mil.nga.giat.mage.sdk.utils.ISO8601DateFormatFactory
 import mil.nga.giat.mage.utils.DateFormatFactory
+import java.text.ParseException
 import java.util.*
 
 @BindingAdapter("date")
@@ -23,10 +24,13 @@ fun date(view: TextView, value: Any?) {
     val dateFormat = DateFormatFactory.format("yyyy-MM-dd HH:mm zz", Locale.getDefault(), view.context)
 
     if (value is String) {
-        val date = ISO8601DateFormatFactory.ISO8601().parse(value);
-        view.setText(dateFormat.format(date))
+        try {
+            ISO8601DateFormatFactory.ISO8601().parse(value)?.let {
+                view.text = dateFormat.format(it)
+            }
+        } catch (e: ParseException) {}
     } else if (value is Date) {
-        view.setText(dateFormat.format(value))
+        view.text = dateFormat.format(value)
     }
 }
 
@@ -37,11 +41,7 @@ class ViewDate @JvmOverloads constructor(
         defStyleRes: Int = 0
 ) : Field<Date>(context, attrs, defStyle, defStyleRes) {
 
-    private val binding: ViewFormDateBinding
-
-    init {
-        binding = ViewFormDateBinding.inflate(LayoutInflater.from(context), this, true)
-    }
+    private val binding: ViewFormDateBinding = ViewFormDateBinding.inflate(LayoutInflater.from(context), this, true)
 
     override fun bind(lifecycleOwner: LifecycleOwner, formField: FormField<Date>) {
         binding.lifecycleOwner = lifecycleOwner
@@ -57,12 +57,8 @@ class EditDate @JvmOverloads constructor(
 ) : Field<Date>(context, attrs, defStyle, defStyleRes) {
 
     private var clickListener: ((field: FormField<Date>) -> Unit)? = null
-    private var binding: ViewFormEditDateBinding
+    private var binding: ViewFormEditDateBinding = ViewFormEditDateBinding.inflate(LayoutInflater.from(context), this, true)
     private var required = false
-
-    init {
-        binding = ViewFormEditDateBinding.inflate(LayoutInflater.from(context), this, true)
-    }
 
     override fun bind(lifecycleOwner: LifecycleOwner, formField: FormField<Date>) {
         binding.lifecycleOwner = lifecycleOwner

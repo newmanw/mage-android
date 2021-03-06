@@ -29,11 +29,7 @@ class EditCheckbox @JvmOverloads constructor(
         defStyle: Int = 0,
         defStyleRes: Int = 0
 ) : Field<Boolean>(context, attrs, defStyle, defStyleRes)  {
-    private val binding: ViewFormEditCheckboxBinding
-
-    init {
-        binding = ViewFormEditCheckboxBinding.inflate(LayoutInflater.from(context), this, true)
-    }
+    private val binding: ViewFormEditCheckboxBinding = ViewFormEditCheckboxBinding.inflate(LayoutInflater.from(context), this, true)
 
     override fun bind(lifecycleOwner: LifecycleOwner, formField: FormField<Boolean>) {
         binding.lifecycleOwner = lifecycleOwner

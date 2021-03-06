@@ -18,12 +18,12 @@ import java.text.ParseException
 object NumberConverter {
     @JvmStatic
     @InverseMethod("toDouble")
-    fun toString(view: TextInputEditText, oldValue: Number?, value: Number?): String {
+    fun toString(view: TextInputEditText, value: Number?): String {
         if (value == null) return ""
 
         val format = numberFormat()
         try {
-            val parsed = format.parse(view.text.toString()).toDouble()
+            val parsed = format.parse(view.text.toString())?.toDouble()
             if (parsed == value) {
                 return view.text.toString()
             }
@@ -33,14 +33,14 @@ object NumberConverter {
     }
 
     @JvmStatic
-    fun toDouble(view: TextInputEditText, oldValue: Number?, value: String): Number? {
+    fun toDouble(view: TextInputEditText, value: String): Number? {
         if (value.isEmpty()) return null
 
-        try {
-            return numberFormat().parse(value).toDouble()
+        return try {
+            numberFormat().parse(value)?.toDouble()
         } catch (e: ParseException) {
             view.setText("")
-            return null
+            null
         }
     }
 
@@ -61,11 +61,7 @@ class ViewNumber @JvmOverloads constructor(
         defStyleRes: Int = 0
 ) : Field<Number>(context, attrs, defStyle, defStyleRes) {
 
-    private val binding: ViewFormNumberBinding
-
-    init {
-        binding = ViewFormNumberBinding.inflate(LayoutInflater.from(context), this, true)
-    }
+    private val binding: ViewFormNumberBinding = ViewFormNumberBinding.inflate(LayoutInflater.from(context), this, true)
 
     override fun bind(lifecycleOwner: LifecycleOwner, formField: FormField<Number>) {
         binding.lifecycleOwner = lifecycleOwner
@@ -80,14 +76,10 @@ class EditNumber @JvmOverloads constructor(
         defStyleRes: Int = 0
 ) : Field<Number>(context, attrs, defStyle, defStyleRes)  {
 
-    private val binding: ViewFormEditNumberBinding
+    private val binding: ViewFormEditNumberBinding = ViewFormEditNumberBinding.inflate(LayoutInflater.from(context), this, true)
     private var required = false
     private var minValue: Double? = null
     private var maxValue: Double? = null
-
-    init {
-        binding = ViewFormEditNumberBinding.inflate(LayoutInflater.from(context), this, true)
-    }
 
     override fun bind(lifecycleOwner: LifecycleOwner, formField: FormField<Number>) {
         binding.lifecycleOwner = lifecycleOwner

@@ -27,7 +27,7 @@
             android:textIsSelectable="false"
             android:cursorVisible="false"
             android:clickable="false"
-            app:multiSelectText='@{field.valueLiveData}'
+            app:multiSelectText='@{field.value}'
             android:onClick="@{() -> clickListener.invoke() }"/>
 
     </com.google.android.material.textfield.TextInputLayout>

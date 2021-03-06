@@ -2,6 +2,7 @@
 <layout xmlns:android="http://schemas.android.com/apk/res/android">
 
     <data>
+        <import type="androidx.lifecycle.MutableLiveData"/>
         <variable name="field" type="mil.nga.giat.mage.form.FormField&lt;Boolean>"/>
     </data>
 
@@ -23,8 +24,7 @@
             android:id="@+id/checkbox"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:checked="@{safeUnbox(field.valueLiveData)}"
-            android:onCheckedChanged="@{(view, checked) -> field.setValue(checked)}">
+            android:checked="@{safeUnbox(field.value)}">
         </CheckBox>
 
     </LinearLayout>

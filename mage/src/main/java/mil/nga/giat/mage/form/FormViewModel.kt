@@ -25,7 +25,7 @@ class FormViewModel : ViewModel() {
     val primaryMapField: LiveData<FormField<Any>> = Transformations.switchMap(form) { form ->
         val mediator = MediatorLiveData<FormField<Any>>()
         form.fields.find { it.name == form.primaryMapField }?.let { field ->
-            mediator.addSource(field.valueLiveData) {
+            mediator.addSource(field.value) {
                 mediator.value = field
             }
         }
@@ -36,24 +36,13 @@ class FormViewModel : ViewModel() {
     val secondaryMapField: LiveData<FormField<Any>> = Transformations.switchMap(form) { form ->
         val mediator = MediatorLiveData<FormField<Any>>()
         form.fields.find { it.name == form.secondaryMapField }?.let { field ->
-            mediator.addSource(field.valueLiveData) {
+            mediator.addSource(field.value) {
                 mediator.value = field
             }
         }
 
         mediator
     }
-
-//    val fields: LiveData<FormField<Any>> = Transformations.switchMap(form) {
-//        val mediator = MediatorLiveData<FormField<Any>>()
-//        it.fields.forEach { field ->
-//            mediator.addSource(field.valueLiveData) {
-//                mediator.value = field
-//            }
-//        }
-//
-//        mediator
-//    }
 
     fun getTimestamp(): LiveData<FormField<Date>> {
         return timestamp
@@ -99,16 +88,16 @@ class FormViewModel : ViewModel() {
         when (field.type) {
             FieldType.DATE ->
                 if (value is String) {
-                    field.value = ISO8601DateFormatFactory.ISO8601().parse(value)
+                    field.value.value = ISO8601DateFormatFactory.ISO8601().parse(value)
                 } else if (value is Date) {
-                    field.value = value
+                    field.value.value = value
                 }
             FieldType.GEOMETRY ->
                 when (value) {
-                    is ObservationLocation -> field.value = value
-                    is ByteArray -> field.value = ObservationLocation(ObservationLocation.MANUAL_PROVIDER, GeometryUtility.toGeometry(value))
+                    is ObservationLocation -> field.value.value = value
+                    is ByteArray -> field.value.value = ObservationLocation(ObservationLocation.MANUAL_PROVIDER, GeometryUtility.toGeometry(value))
                 }
-            else -> field.value = value
+            else -> field.value.value = value
         }
     }
 }

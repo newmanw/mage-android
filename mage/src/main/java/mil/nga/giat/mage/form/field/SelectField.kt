@@ -1,12 +1,10 @@
 package mil.nga.giat.mage.form.field
 
 import android.content.Context
-import androidx.databinding.BindingAdapter
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.widget.TextView
-import androidx.databinding.BaseObservable
-import androidx.databinding.Observable
+import androidx.databinding.BindingAdapter
 import androidx.lifecycle.LifecycleOwner
 import kotlinx.android.synthetic.main.view_form_edit_select.view.*
 import mil.nga.giat.mage.databinding.ViewFormEditSelectBinding
@@ -18,7 +16,7 @@ fun selectText(view: TextView, value: Any?) {
     if (value is String) {
         view.text = value
     } else {
-        view.setText("")
+        view.text = ""
     }
 }
 

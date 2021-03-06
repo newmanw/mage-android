@@ -78,13 +78,7 @@ open class FormField<T>() {
     var archived: Boolean = false
 
     @SerializedName("value")
-    open var value: T? = null
-        set(value) {
-            field = value
-            valueLiveData.value = value
-        }
-
-    open val valueLiveData = MutableLiveData<T>()
+    val value: T? = null
 
     open fun serialize(): Serializable? {
         (value as? Serializable)?.let {
@@ -105,11 +99,11 @@ open class FormField<T>() {
 
         val rhs = other as FormField<T>
 
-        return name == rhs.name && value?.equals(rhs.value) ?: (rhs.value == null)
+        return name == rhs.name && (value == rhs.value)
     }
 
     override fun hashCode(): Int {
-        return name.hashCode() + (value?.hashCode() ?: 0)
+        return name.hashCode() + (value.hashCode())
     }
 }
 

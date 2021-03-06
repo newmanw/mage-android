@@ -18,12 +18,8 @@ class RadioField @JvmOverloads constructor(
         defStyleRes: Int = 0
 ) : Field<String>(context, attrs, defStyle, defStyleRes)  {
 
-    private val binding: ViewFormEditRadioGroupBinding
+    private val binding: ViewFormEditRadioGroupBinding = ViewFormEditRadioGroupBinding.inflate(LayoutInflater.from(context), this, true)
     private var required = false
-
-    init {
-        binding = ViewFormEditRadioGroupBinding.inflate(LayoutInflater.from(context), this, true)
-    }
 
     override fun bind(lifecycleOwner: LifecycleOwner, formField: FormField<String>) {
         binding.lifecycleOwner = lifecycleOwner
