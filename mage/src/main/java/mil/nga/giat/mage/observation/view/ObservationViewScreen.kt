@@ -648,7 +648,7 @@ fun ObservationIcon(
 ) {
   val primary = formState?.fields?.find { it.definition.name == formState.definition.primaryMapField }?.answer as? FieldValue.Text
   val secondary = formState?.fields?.find { it.definition.name == formState.definition.secondaryMapField }?.answer as? FieldValue.Text
-  val bitmap = ObservationBitmapFactory.bitmap(LocalContext.current, formState?.eventId, formState?.definition?.id, primary, secondary)
+  val bitmap = ObservationBitmapFactory.bitmap(LocalContext.current, formState?.eventId, formState?.definition?.id, primary?.text, secondary?.text)
 
   Box(modifier = Modifier
     .padding(start = 16.dp, end = 16.dp)

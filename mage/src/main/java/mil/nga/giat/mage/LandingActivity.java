@@ -55,6 +55,7 @@ import mil.nga.giat.mage.login.LoginActivity;
 import mil.nga.giat.mage.map.MapFragment;
 import mil.nga.giat.mage.map.cache.CacheProvider;
 import mil.nga.giat.mage.newsfeed.ObservationFeedFragment;
+import mil.nga.giat.mage.newsfeed.ObservationsFragment;
 import mil.nga.giat.mage.newsfeed.PeopleFeedFragment;
 import mil.nga.giat.mage.preferences.GeneralPreferencesActivity;
 import mil.nga.giat.mage.profile.ProfileActivity;
@@ -126,7 +127,7 @@ public class LandingActivity extends AppCompatActivity implements NavigationView
         currentNightMode = getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
 
         bottomNavigationFragments.add(new MapFragment());
-        bottomNavigationFragments.add(new ObservationFeedFragment());
+        bottomNavigationFragments.add(new ObservationsFragment());
         bottomNavigationFragments.add(new PeopleFeedFragment());
 
         // TODO investigate moving this call

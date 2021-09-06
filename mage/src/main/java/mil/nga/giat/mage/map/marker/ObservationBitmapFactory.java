@@ -20,7 +20,6 @@ import java.io.InputStream;
 import java.util.Stack;
 
 import mil.nga.giat.mage.event.EventServerFetch;
-import mil.nga.giat.mage.form.field.FieldValue;
 import mil.nga.giat.mage.sdk.datastore.observation.Observation;
 import mil.nga.giat.mage.sdk.datastore.observation.ObservationProperty;
 
@@ -50,7 +49,7 @@ public class ObservationBitmapFactory {
 	}
 
 	@TargetApi(Build.VERSION_CODES.JELLY_BEAN)
-	public static Bitmap bitmap(Context context, String eventId, Long formId, FieldValue.Text primary, FieldValue.Text secondary) {
+	public static Bitmap bitmap(Context context, String eventId, Long formId, String primary, String secondary) {
 		InputStream iconStream = getIconStream(context, eventId, formId, primary, secondary);
 
 		// scale the image to a good size
@@ -68,7 +67,7 @@ public class ObservationBitmapFactory {
 	}
 
 
-	public static BitmapDescriptor bitmapDescriptor(Context context, String eventId, Long formId, FieldValue.Text primary, FieldValue.Text secondary) {
+	public static BitmapDescriptor bitmapDescriptor(Context context, String eventId, Long formId, String primary, String secondary) {
 		Bitmap bitmap = bitmap(context, eventId, formId, primary, secondary);
 		return BitmapDescriptorFactory.fromBitmap(bitmap);
 	}
@@ -147,7 +146,7 @@ public class ObservationBitmapFactory {
 	 *
 	 * @return
 	 */
-	private static InputStream getIconStream(Context context, String eventId, Long formId, FieldValue.Text primary, FieldValue.Text secondary) {
+	private static InputStream getIconStream(Context context, String eventId, Long formId, String primary, String secondary) {
 		InputStream iconStream = null;
 		if (eventId != null) {
 
@@ -157,11 +156,11 @@ public class ObservationBitmapFactory {
 			Stack<String> iconProperties = new Stack<>();
 
 			if (secondary != null) {
-				iconProperties.add(secondary.getText());
+				iconProperties.add(secondary);
 			}
 
 			if (primary != null) {
-				iconProperties.add(primary.getText());
+				iconProperties.add(primary);
 			}
 
 			iconProperties.add(formId.toString());

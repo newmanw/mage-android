@@ -77,7 +77,7 @@ fun MapViewContent(
         val point = LatLng(centroid.y, centroid.x)
         googleMap.addMarker {
           position(point)
-          icon(ObservationBitmapFactory.bitmapDescriptor(context, formState?.eventId, formState?.definition?.id, primary, secondary))
+          icon(ObservationBitmapFactory.bitmapDescriptor(context, formState?.eventId, formState?.definition?.id, primary?.text, secondary?.text))
         }
 
         if (!location.provider.equals(ObservationLocation.MANUAL_PROVIDER, true) && location.accuracy != null) {
