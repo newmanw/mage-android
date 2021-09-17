@@ -61,6 +61,14 @@ jobs:
           -PRELEASE_MAPS_API_KEY=${{ secrets.MAPS_API_KEY }} \
           -PVERSION_CODE=${{ steps.version_code.outputs.value }}
       working-directory: app
+    - name: mobsfscan
+      uses: MobSF/mobsfscan@0.0.8
+      with:
+        args: '. --sarif --output results.sarif || true'
+    - name: Upload mobsfscan report
+      uses: github/codeql-action/upload-sarif@v1
+      with:
+        sarif_file: results.sarif
     - name: Upload Artifacts
       uses: actions/upload-artifact@v2
       with:
