@@ -42,6 +42,9 @@ import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
 
+import javax.inject.Inject;
+
+import dagger.hilt.android.AndroidEntryPoint;
 import mil.nga.geopackage.GeoPackageFactory;
 import mil.nga.geopackage.GeoPackageManager;
 import mil.nga.giat.mage.R;
@@ -60,17 +63,14 @@ import mil.nga.giat.mage.sdk.datastore.user.Event;
 import mil.nga.giat.mage.sdk.datastore.user.EventHelper;
 import mil.nga.giat.mage.sdk.exceptions.LayerException;
 import mil.nga.giat.mage.sdk.fetch.StaticFeatureServerFetch;
-import mil.nga.giat.mage.sdk.gson.deserializer.LayerDeserializer;
-import mil.nga.giat.mage.sdk.http.HttpClientManager;
 import mil.nga.giat.mage.sdk.http.resource.LayerResource;
 import mil.nga.giat.mage.sdk.utils.StorageUtility;
 import retrofit2.Response;
-import retrofit2.Retrofit;
-import retrofit2.converter.gson.GsonConverterFactory;
 
 /**
  * This activity is the offline layers section and deals with geopackages and static features
  */
+@AndroidEntryPoint
 public class TileOverlayPreferenceActivity extends AppCompatActivity {
 
     private static final String LOG_NAME = TileOverlayPreferenceActivity.class.getName();
@@ -80,6 +80,9 @@ public class TileOverlayPreferenceActivity extends AppCompatActivity {
     private OverlayListFragment offlineLayersFragment;
 
     private static volatile SharedPreferences ourSharedPreferences;
+
+    @Inject
+    LayerResource layerResource;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -378,18 +381,17 @@ public class TileOverlayPreferenceActivity extends AppCompatActivity {
         private void fetchRemoteGeopackageLayers() {
             Context context = getContext();
             Event event = EventHelper.getInstance(context).getCurrentEvent();
-            String baseUrl = PreferenceManager.getDefaultSharedPreferences(context).getString(context.getString(R.string.serverURLKey), context.getString(R.string.serverURLDefaultValue));
-            Retrofit retrofit = new Retrofit.Builder()
-                    .baseUrl(baseUrl)
-                    .addConverterFactory(GsonConverterFactory.create(LayerDeserializer.getGsonBuilder()))
-                    .client(HttpClientManager.getInstance().httpClient())
-                    .build();
-
-            LayerResource.LayerService service = retrofit.create(LayerResource.LayerService.class);
+//            String baseUrl = PreferenceManager.getDefaultSharedPreferences(context).getString(context.getString(R.string.serverURLKey), context.getString(R.string.serverURLDefaultValue));
+//            Retrofit retrofit = new Retrofit.Builder()
+//                    .baseUrl(baseUrl)
+//                    .addConverterFactory(GsonConverterFactory.create(LayerDeserializer.getGsonBuilder()))
+//                    .client(HttpClientManager.getInstance().httpClient())
+//                    .build();
+//
+//            LayerResource.LayerService service = retrofit.create(LayerResource.LayerService.class);
 
             try {
-                Response<Collection<Layer>> response =
-                        service.getLayers(event.getRemoteId(), "GeoPackage").execute();
+                Response<Collection<Layer>> response = layerService.getLayers(event.getRemoteId(), "GeoPackage").execute();
                 if (response.isSuccessful()) {
                     saveGeopackageLayers(response.body(), event);
                 }

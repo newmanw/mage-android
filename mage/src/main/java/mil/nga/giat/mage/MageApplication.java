@@ -43,6 +43,7 @@ import mil.nga.giat.mage.login.ServerUrlActivity;
 import mil.nga.giat.mage.login.SignupActivity;
 import mil.nga.giat.mage.login.idp.IdpLoginActivity;
 import mil.nga.giat.mage.network.Server;
+import mil.nga.giat.mage.network.client.TokenInterceptor;
 import mil.nga.giat.mage.observation.ObservationNotificationListener;
 import mil.nga.giat.mage.observation.sync.AttachmentSyncListener;
 import mil.nga.giat.mage.observation.sync.AttachmentSyncWorker;
@@ -96,7 +97,7 @@ public class MageApplication extends Application implements Configuration.Provid
 	HiltWorkerFactory workerFactory;
 
 	@Inject
-	Server server;
+	TokenInterceptor tokenInterceptor;
 
 	@NonNull
 	@Override
@@ -128,8 +129,6 @@ public class MageApplication extends Application implements Configuration.Provid
 
 		ProcessLifecycleOwner.get().getLifecycle().addObserver(this);
 
-		HttpClientManager.initialize(this, server);
-
 		// setup the screen unlock stuff
 		registerReceiver(ScreenChangeReceiver.getInstance(), new IntentFilter(Intent.ACTION_SCREEN_ON));
 
@@ -156,7 +155,7 @@ public class MageApplication extends Application implements Configuration.Provid
 		SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(this);
 		preferences.registerOnSharedPreferenceChangeListener(this);
 
-		HttpClientManager.getInstance().addListener(this);
+		tokenInterceptor.addListener(this);
 
 		// Start fetching and pushing observations and locations
 		if (!UserUtility.getInstance(getApplicationContext()).isTokenExpired()) {
@@ -169,7 +168,7 @@ public class MageApplication extends Application implements Configuration.Provid
 		SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(this);
 		preferences.registerOnSharedPreferenceChangeListener(this);
 
-		HttpClientManager.getInstance().removeListener(this);
+		tokenInterceptor.removeListener(this);
 
 		destroyFetching();
 	}

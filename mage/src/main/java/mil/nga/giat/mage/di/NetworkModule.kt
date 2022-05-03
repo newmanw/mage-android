@@ -2,6 +2,7 @@ package mil.nga.giat.mage.di
 
 import android.app.Application
 import android.content.Context
+import android.content.SharedPreferences
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.reflect.TypeToken
@@ -16,6 +17,8 @@ import mil.nga.giat.mage.data.gson.GeometryTypeAdapterFactory
 import mil.nga.giat.mage.network.LiveDataCallAdapterFactory
 import mil.nga.giat.mage.network.Server
 import mil.nga.giat.mage.network.api.*
+import mil.nga.giat.mage.network.client.BaseUrlInterceptor
+import mil.nga.giat.mage.network.client.TokenInterceptor
 import mil.nga.giat.mage.network.gson.LocationsTypeAdapter
 import mil.nga.giat.mage.network.gson.observation.AttachmentTypeAdapter
 import mil.nga.giat.mage.network.gson.observation.ObservationTypeAdapter
@@ -33,11 +36,12 @@ import mil.nga.giat.mage.sdk.gson.deserializer.EventsDeserializer
 import mil.nga.giat.mage.sdk.gson.deserializer.LayersDeserializer
 import mil.nga.giat.mage.sdk.gson.deserializer.RolesDeserializer
 import mil.nga.giat.mage.sdk.gson.deserializer.TeamsDeserializer
-import mil.nga.giat.mage.sdk.http.HttpClientManager
+import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.*
+import java.util.concurrent.TimeUnit
 import javax.inject.Qualifier
 import javax.inject.Singleton
 
@@ -51,15 +55,33 @@ class NetworkModule {
 
    @Provides
    @Singleton
-   fun provideHttpClient(): OkHttpClient {
-      val builder = HttpClientManager.getInstance().httpClient().newBuilder()
-      return builder.build()
+   fun providerServer(@ApplicationContext context: Context): Server {
+      return Server(context)
    }
 
    @Provides
    @Singleton
-   fun providerServer(@ApplicationContext context: Context): Server {
-      return Server(context)
+   fun provideBaseUrlInterceptor(server: Server): Interceptor {
+      return BaseUrlInterceptor(server)
+   }
+
+   @Provides
+   @Singleton
+   fun provideTokenInterceptor(application: Application, preferences: SharedPreferences): Interceptor {
+      val userAgent = System.getProperty("http.agent") ?: ""
+      return TokenInterceptor(application.applicationContext, preferences, userAgent)
+   }
+
+   @Provides
+   @Singleton
+   fun provideHttpClient(baseUrlInterceptor: BaseUrlInterceptor, tokenInterceptor: TokenInterceptor): OkHttpClient {
+      return OkHttpClient.Builder()
+         .connectTimeout(60, TimeUnit.SECONDS)
+         .readTimeout(60, TimeUnit.SECONDS)
+         .writeTimeout(60, TimeUnit.SECONDS)
+         .addInterceptor(baseUrlInterceptor)
+         .addInterceptor(tokenInterceptor)
+         .build()
    }
 
    @Provides
@@ -82,66 +104,76 @@ class NetworkModule {
    }
 
    @Provides
+   @Singleton
    fun provideRetrofit(
       gson: Gson,
-      okHttpClient: OkHttpClient,
-      server: Server
+      okHttpClient: OkHttpClient
    ): Retrofit {
       return Retrofit.Builder()
          .addConverterFactory(GsonConverterFactory.create(gson))
          .addCallAdapterFactory(LiveDataCallAdapterFactory())
-         .baseUrl(server.baseUrl)
+         .baseUrl("http://localhost")
          .client(okHttpClient)
          .build()
    }
 
    @Provides
+   @Singleton
    fun provideRoleService(retrofit: Retrofit): RoleService {
       return retrofit.create(RoleService::class.java)
    }
 
    @Provides
+   @Singleton
    fun provideEventService(retrofit: Retrofit): EventService {
       return retrofit.create(EventService::class.java)
    }
 
    @Provides
+   @Singleton
    fun provideLayerService(retrofit: Retrofit): LayerService {
       return retrofit.create(LayerService::class.java)
    }
 
    @Provides
+   @Singleton
    fun provideTeamService(retrofit: Retrofit): TeamService {
       return retrofit.create(TeamService::class.java)
    }
 
    @Provides
+   @Singleton
    fun provideUserService(retrofit: Retrofit): UserService {
       return retrofit.create(UserService::class.java)
    }
 
    @Provides
+   @Singleton
    fun provideObservationService(retrofit: Retrofit): ObservationService {
       return retrofit.create(ObservationService::class.java)
    }
 
    @Provides
+   @Singleton
    fun provideAttachmentService(retrofit: Retrofit): AttachmentService {
       return retrofit.create(AttachmentService::class.java)
    }
 
    @Provides
+   @Singleton
    @server5
    fun provideAttachmentService_server5(retrofit: Retrofit): AttachmentService_server5 {
       return retrofit.create(AttachmentService_server5::class.java)
    }
 
    @Provides
+   @Singleton
    fun provideLocationService(retrofit: Retrofit): LocationService {
       return retrofit.create(LocationService::class.java)
    }
 
    @Provides
+   @Singleton
    fun provideFeedService(retrofit: Retrofit): FeedService {
       return retrofit.create(FeedService::class.java)
    }
