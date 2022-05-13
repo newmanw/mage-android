@@ -1,6 +1,5 @@
 package mil.nga.giat.mage.observation.sync
 
-import android.app.Notification
 import android.content.Context
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -28,6 +27,7 @@ class ObservationSyncWorker @AssistedInject constructor(
     private val observationHelper = ObservationHelper.getInstance(applicationContext)
 
     override suspend fun doWork(): Result {
+        Log.d(LOG_NAME, "WM-MAGE observation push doWork")
         var result = RESULT_SUCCESS_FLAG
 
         try {
@@ -38,7 +38,11 @@ class ObservationSyncWorker @AssistedInject constructor(
             Log.e(LOG_NAME, "Error trying to sync observations with server", e)
         }
 
-        return if (result.containsFlag(RESULT_RETRY_FLAG)) Result.retry() else Result.success()
+        return if (result.containsFlag(RESULT_RETRY_FLAG)) {
+            Result.retry()
+        } else {
+            Result.success()
+        }
     }
 
     override suspend fun getForegroundInfo(): ForegroundInfo {
@@ -47,7 +51,6 @@ class ObservationSyncWorker @AssistedInject constructor(
             .setContentTitle("Sync Observations")
             .setContentText("Pushing observation updates to MAGE.")
             .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setAutoCancel(true)
             .build()
 
         return ForegroundInfo(OBSERVATION_SYNC_NOTIFICATION_ID, notification)
@@ -182,6 +185,7 @@ class ObservationSyncWorker @AssistedInject constructor(
         private const val RESULT_RETRY_FLAG = 2
 
         fun scheduleWork(context: Context) {
+            Log.d(LOG_NAME, "WM-MAGE Schedule observation push work")
             val constraints = Constraints.Builder()
                 .setRequiredNetworkType(NetworkType.CONNECTED)
                 .build()

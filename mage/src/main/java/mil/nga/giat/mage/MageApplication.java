@@ -103,6 +103,7 @@ public class MageApplication extends Application implements Configuration.Provid
 	public Configuration getWorkManagerConfiguration() {
 		return new Configuration.Builder()
 				.setWorkerFactory(workerFactory)
+				.setMinimumLoggingLevel(android.util.Log.DEBUG)
 				.build();
 	}
 
