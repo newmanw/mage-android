@@ -14,7 +14,6 @@ import mil.nga.giat.mage.sdk.datastore.observation.Observation
 import mil.nga.giat.mage.sdk.datastore.observation.ObservationFavorite
 import mil.nga.giat.mage.sdk.datastore.observation.ObservationHelper
 import mil.nga.giat.mage.sdk.datastore.observation.State
-import java.io.IOException
 import java.net.HttpURLConnection
 
 @HiltWorker
@@ -36,8 +35,10 @@ class ObservationSyncWorker @AssistedInject constructor(
             result = syncObservationFavorites().withFlag(result)
         } catch (e: Exception) {
             Log.e(LOG_NAME, "Error trying to sync observations with server", e)
+            result = RESULT_RETRY_FLAG
         }
 
+        Log.d(LOG_NAME, "Observation push with result $result")
         return if (result.containsFlag(RESULT_RETRY_FLAG)) {
             Result.retry()
         } else {
@@ -67,20 +68,13 @@ class ObservationSyncWorker @AssistedInject constructor(
     }
 
     private suspend fun syncObservation(observation: Observation): Int {
-        var result = RESULT_SUCCESS_FLAG
+        val result = RESULT_SUCCESS_FLAG
 
-        try {
-            result = if (observation.state == State.ARCHIVE) {
-                archive(observation).withFlag(result)
-            } else {
-                save(observation).withFlag(result)
-            }
-        } catch(e: IOException) {
-            Log.e(LOG_NAME, "Failed to sync observation with server", e)
-            result = RESULT_FAILURE_FLAG
+        return if (observation.state == State.ARCHIVE) {
+            archive(observation).withFlag(result)
+        } else {
+            save(observation).withFlag(result)
         }
-
-        return result
     }
 
     private suspend fun syncObservationImportant(): Int {

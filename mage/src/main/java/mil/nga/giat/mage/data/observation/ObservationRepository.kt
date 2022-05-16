@@ -39,6 +39,7 @@ import mil.nga.giat.mage.sdk.event.IObservationEventListener
 import mil.nga.giat.mage.sdk.fetch.UserServerFetch
 import mil.nga.giat.mage.sdk.utils.ISO8601DateFormatFactory
 import retrofit2.Response
+import java.lang.RuntimeException
 import java.net.HttpURLConnection
 import java.util.*
 import javax.inject.Inject
@@ -56,7 +57,6 @@ class ObservationRepository @Inject constructor(
    private var refreshTime: Long = 0
    private var refreshJob: Job? = null
    private var oldestObservation: Observation? = null
-   private val refresh = MutableLiveData<Boolean>()
 
    suspend fun create(observation: Observation) = withContext(Dispatchers.IO) {
       var response = observationService.createObservationId(observation.event.remoteId)
