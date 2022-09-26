@@ -1,6 +1,7 @@
 package mil.nga.giat.mage.data.observation
 
 import android.app.PendingIntent
+import android.app.PendingIntent.FLAG_IMMUTABLE
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -401,7 +402,7 @@ class ObservationRepository @Inject constructor(
       if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
 
          val viewIntent = Intent(context, LandingActivity::class.java)
-         val viewPendingIntent = PendingIntent.getActivity(context, 0, viewIntent, 0)
+         val viewPendingIntent = PendingIntent.getActivity(context, 0, viewIntent, FLAG_IMMUTABLE)
 
          val content = if (observations.size == 1) "New observation was created in ${observations.first().event.name}" else "${observations.size} new observations were created in ${observations.first().event.name}"
 
@@ -428,7 +429,7 @@ class ObservationRepository @Inject constructor(
 
          observations.forEach { observation ->
             val intent = Intent(context, LandingActivity::class.java)
-            val pendingIntent = PendingIntent.getActivity(context, 0, intent, 0)
+            val pendingIntent = PendingIntent.getActivity(context, 0, intent, FLAG_IMMUTABLE)
 
             val information = mutableListOf<String>()
             observation.forms.firstOrNull()?.let { observationForm ->

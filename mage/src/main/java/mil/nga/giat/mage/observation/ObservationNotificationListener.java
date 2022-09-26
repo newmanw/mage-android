@@ -1,5 +1,7 @@
 package mil.nga.giat.mage.observation;
 
+import static android.app.PendingIntent.FLAG_IMMUTABLE;
+
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
@@ -63,7 +65,7 @@ public class ObservationNotificationListener implements IObservationEventListene
 				Intent viewIntent = new Intent(mContext, LandingActivity.class);
 				//viewIntent.putExtra(EXTRA_EVENT_ID, eventId);
 				PendingIntent viewPendingIntent =
-						PendingIntent.getActivity(mContext, 0, viewIntent, 0);
+						PendingIntent.getActivity(mContext, 0, viewIntent, FLAG_IMMUTABLE);
 
 				NotificationCompat.Builder notificationBuilder =
 						new NotificationCompat.Builder(mContext, MageApplication.MAGE_NOTIFICATION_CHANNEL_ID)

@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.app.PendingIntent.FLAG_IMMUTABLE
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -74,7 +75,7 @@ open class LocationReportingService : LifecycleService(), Observer<Location>, Sh
         val intent = Intent(applicationContext, LoginActivity::class.java)
         intent.putExtra("LOGOUT", true)
         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        val pendingIntent = PendingIntent.getActivity(applicationContext, 1, intent, 0)
+        val pendingIntent = PendingIntent.getActivity(applicationContext, 1, intent, FLAG_IMMUTABLE)
 
         val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setContentTitle("MAGE Location Service")
