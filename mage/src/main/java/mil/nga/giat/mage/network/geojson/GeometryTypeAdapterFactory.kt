@@ -45,8 +45,12 @@ class GeometryTypeAdapterFactory : TypeAdapterFactory {
         return object : TypeAdapter<Geometry?>() {
             @Throws(IOException::class)
             override fun write(`out`: JsonWriter, value: Geometry?) {
-                value?.let {
-                    typeAdapter.write(`out`, writeFactory[it.geometryType]?.invoke(it))
+                value?.let { geometry ->
+                    val factory = writeFactory[geometry.geometryType]
+                    factory?.let {
+                        val mb = it.invoke(geometry)
+                        typeAdapter.write(`out`, mb)
+                    }
                 }
             }
 
@@ -60,7 +64,11 @@ class GeometryTypeAdapterFactory : TypeAdapterFactory {
 
     private fun readPoint(geometry: com.mapbox.geojson.Geometry): Point {
         val point = geometry as com.mapbox.geojson.Point
-        return Point(point.longitude(), point.latitude(), point.altitude())
+        return Point(point.longitude(), point.latitude()).apply {
+            if (point.hasAltitude()) {
+                z = point.altitude()
+            }
+        }
     }
 
     private fun writePoint(geometry: Geometry): com.mapbox.geojson.Point {

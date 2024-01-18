@@ -6,19 +6,16 @@ import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
-import androidx.lifecycle.ViewModelProvider
 import dagger.hilt.android.AndroidEntryPoint
+import mil.nga.giat.mage.ui.geopackage.media.GeoPackageMedia
+import mil.nga.giat.mage.ui.geopackage.media.GeoPackageMediaKey
+import mil.nga.giat.mage.ui.geopackage.media.GeoPackageMediaScreen
 import java.io.File
-
 
 @AndroidEntryPoint
 class GeoPackageMediaActivity : AppCompatActivity() {
-   private lateinit var viewModel: GeoPackageMediaViewModel
-
    override fun onCreate(savedInstanceState: Bundle?) {
       super.onCreate(savedInstanceState)
-
-      viewModel = ViewModelProvider(this).get(GeoPackageMediaViewModel::class.java)
 
       val geoPackageName = intent.getStringExtra(GEOPACKAGE_NAME)
       require(geoPackageName != null) { "GEOPACKAGE_NAME is required to launch GeoPackageMediaActivity" }
@@ -29,11 +26,9 @@ class GeoPackageMediaActivity : AppCompatActivity() {
       val mediaId = intent.getLongExtra(GEOPACKAGE_MEDIA_ID, -1)
       require(mediaId != -1L) { "GEOPACKAGE_MEDIA_ID is required to launch GeoPackageMediaActivity" }
 
-      viewModel.setMedia(geoPackageName, mediaTable, mediaId)
-
       setContent {
          GeoPackageMediaScreen(
-            liveData = viewModel.geoPackageMedia,
+            key = GeoPackageMediaKey(geoPackageName, mediaTable, mediaId),
             onOpen = { onOpen(it) },
             onClose = { finish() }
          )

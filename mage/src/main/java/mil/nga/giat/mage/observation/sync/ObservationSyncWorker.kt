@@ -188,7 +188,7 @@ class ObservationSyncWorker @AssistedInject constructor(
             val request = OneTimeWorkRequest.Builder(ObservationSyncWorker::class.java)
                 .setConstraints(constraints)
                 .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-                .setBackoffCriteria(BackoffPolicy.LINEAR, 15, TimeUnit.SECONDS)
+                .setBackoffCriteria(BackoffPolicy.LINEAR, 60, TimeUnit.SECONDS)
                 .build()
 
             WorkManager

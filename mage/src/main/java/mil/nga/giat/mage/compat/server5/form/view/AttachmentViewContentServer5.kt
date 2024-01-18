@@ -23,7 +23,7 @@ import com.bumptech.glide.load.resource.bitmap.CenterCrop
 import com.bumptech.glide.request.target.CustomTarget
 import com.bumptech.glide.request.transition.Transition
 import mil.nga.giat.mage.glide.transform.VideoOverlayTransformation
-import mil.nga.giat.mage.observation.edit.AttachmentAction
+import mil.nga.giat.mage.ui.observation.edit.AttachmentAction
 import mil.nga.giat.mage.database.model.observation.Attachment
 import java.util.*
 

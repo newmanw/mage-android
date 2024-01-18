@@ -103,13 +103,13 @@ open class FieldState<F, T : FieldValue> (
 
           val location = if (default != null) {
             if (default is ByteArray) {
-              ObservationLocation(default.toGeometry())
+              ObservationLocation(geometry = default.toGeometry()!!)
             } else {
               default as? ObservationLocation
             }
           } else {
             if (value is ByteArray) {
-              ObservationLocation(value.toGeometry())
+              ObservationLocation(geometry = value.toGeometry())
             } else {
               value as? ObservationLocation
             }

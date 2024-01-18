@@ -4,6 +4,8 @@ import android.util.Log
 import com.google.gson.GsonBuilder
 import com.google.gson.stream.JsonReader
 import com.google.gson.stream.JsonToken
+import com.mapbox.geojson.GeometryAdapterFactory
+import com.mapbox.geojson.gson.GeoJsonAdapterFactory
 import mil.nga.giat.mage.database.model.observation.Attachment
 import mil.nga.giat.mage.database.model.observation.Observation
 import mil.nga.giat.mage.database.model.observation.ObservationFavorite
@@ -26,7 +28,12 @@ import java.text.ParseException
 import java.util.*
 
 class ObservationDeserializer {
-   private val gson = GsonBuilder().registerTypeAdapterFactory(GeometryTypeAdapterFactory()).create()
+   private val gson = GsonBuilder()
+      .registerTypeAdapterFactory(GeometryTypeAdapterFactory())
+      .registerTypeAdapterFactory(GeoJsonAdapterFactory.create())
+      .registerTypeAdapterFactory(GeometryAdapterFactory.create())
+      .create()
+
    private val attachmentDeserializer = AttachmentTypeAdapter()
 
    fun read(reader: JsonReader): Observation {

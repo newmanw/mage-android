@@ -47,6 +47,7 @@ import mil.nga.giat.mage.map.annotation.ShapeStyle
 import mil.nga.giat.mage.map.hasKinks
 import mil.nga.giat.mage.observation.InputFilterDecimal
 import mil.nga.giat.mage.observation.ObservationLocation
+import mil.nga.giat.mage.ui.map.camera.getCameraUpdate
 import mil.nga.mgrs.MGRS
 import mil.nga.mgrs.tile.MGRSTileProvider
 import mil.nga.proj.ProjectionConstants
@@ -84,7 +85,7 @@ class GeometryFieldDialog : DialogFragment(),
 
     private var title = "Location"
     private var clearable = true
-    private var location: ObservationLocation = ObservationLocation(ObservationLocation.MANUAL_PROVIDER, LatLng(0.0, 0.0))
+    private var location: ObservationLocation = ObservationLocation(LatLng(0.0, 0.0), provider = ObservationLocation.MANUAL_PROVIDER)
     private var newDrawing: Boolean = false
     private var markerBitmap: Bitmap? = null
 
@@ -147,7 +148,10 @@ class GeometryFieldDialog : DialogFragment(),
 
         val initialLocation: LatLng? = arguments?.getParcelable(INITIAL_LOCATION)
         if (initialLocation != null) {
-            this.location = ObservationLocation(ObservationLocation.MANUAL_PROVIDER, initialLocation)
+            this.location = ObservationLocation(
+                latLng = initialLocation,
+                provider = ObservationLocation.MANUAL_PROVIDER,
+            )
         }
 
         val location = arguments?.getParcelable(LOCATION_KEY) as? ObservationLocation
@@ -210,11 +214,16 @@ class GeometryFieldDialog : DialogFragment(),
                 override fun onComplete(dialog: DialogFragment, latLng: LatLng?) {
                     dialog.dismiss()
                     latLng?.let {
-                        location = ObservationLocation(ObservationLocation.MANUAL_PROVIDER, it)
-                        val geometry = location.geometry
-                        setShapeType(geometry)
-                        addMapShape(geometry)
-                        map.moveCamera(location.getCameraUpdate(mapFragment.view))
+                        location = ObservationLocation(
+                            latLng = it,
+                            provider = ObservationLocation.MANUAL_PROVIDER
+                        )
+                        location.geometry?.let { geometry ->
+                            setShapeType(geometry)
+                            addMapShape(geometry)
+                        }
+
+                        location.getCameraUpdate()?.let { update -> map.moveCamera(update) }
                     }
                 }
             })
@@ -555,7 +564,7 @@ class GeometryFieldDialog : DialogFragment(),
     }
 
     private fun setupMap() {
-        map.moveCamera(location.getCameraUpdate(mapFragment.view))
+        location.getCameraUpdate()?.let { map.moveCamera(it) }
 
         map.uiSettings.isCompassEnabled = false
         map.uiSettings.isRotateGesturesEnabled = false
@@ -571,9 +580,10 @@ class GeometryFieldDialog : DialogFragment(),
         setupMapButton(binding.editRectangleButton)
         setupMapButton(binding.editPolygonButton)
 
-        val geometry = location.geometry
-        setShapeType(geometry)
-        addMapShape(geometry)
+        location.geometry?.let { geometry ->
+            setShapeType(geometry)
+            addMapShape(geometry)
+        }
     }
 
     private fun setupMapButton(button: FloatingActionButton) {
@@ -1048,10 +1058,13 @@ class GeometryFieldDialog : DialogFragment(),
         editor.putInt(resources.getString(R.string.coordinateSystemEditKey), coordinateSystem.preferenceValue).apply()
 
         val geometry = convertToGeometry() ?: return
-        location.geometry = geometry
-        location.provider = ObservationLocation.MANUAL_PROVIDER
-        location.accuracy = 0.0f
-        location.time = System.currentTimeMillis()
+
+        location = ObservationLocation(
+            geometry = geometry,
+            provider = ObservationLocation.MANUAL_PROVIDER,
+            accuracy = 0.0f,
+            time = System.currentTimeMillis()
+        )
 
         listener?.onLocation(location)
         dismiss()

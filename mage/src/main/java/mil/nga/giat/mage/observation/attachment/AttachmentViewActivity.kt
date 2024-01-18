@@ -4,39 +4,29 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Bundle
 import androidx.activity.compose.setContent
-import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
-import androidx.lifecycle.lifecycleScope
-import com.bumptech.glide.Glide
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import mil.nga.giat.mage.ui.observation.attachment.AttachmentViewScreen
+import mil.nga.giat.mage.ui.observation.attachment.Shareable
 import javax.inject.Inject
 
 @AndroidEntryPoint
 class AttachmentViewActivity: AppCompatActivity() {
    @Inject lateinit var preferences: SharedPreferences
 
-   private val viewModel: AttachmentViewModel by viewModels()
-
    override fun onCreate(savedInstanceState: Bundle?) {
       super.onCreate(savedInstanceState)
 
-      val attachmentId = intent.getLongExtra(ATTACHMENT_ID_EXTRA, -1)
-      viewModel.setAttachment(attachmentId)
-
+      val attachmentId = intent.getLongExtra(ATTACHMENT_ID_EXTRA, -1L)
       val attachmentPath = intent.getStringExtra(ATTACHMENT_PATH_EXTRA)
-      viewModel.setAttachment(attachmentPath)
 
-      viewModel.shareable.observe(this) { onShareAttachment(it) }
 
       setContent {
          AttachmentViewScreen(
-            viewModel = viewModel,
-            onShare = { viewModel.share() },
-            onOpen = { viewModel.open() },
-            onClose = { finish() },
-            onCancelDownload = { cancelDownload() }
+            attachmentId = if (attachmentId == -1L) null else attachmentId,
+            attachmentPath = attachmentPath,
+            onShare = { sharable -> onShareAttachment(sharable) },
+            onClose = { finish() }
          )
       }
    }
@@ -60,10 +50,6 @@ class AttachmentViewActivity: AppCompatActivity() {
       }
 
       startActivity(Intent.createChooser(intent, "Share MAGE Attachment"))
-   }
-
-   private fun cancelDownload() {
-      viewModel.cancelDownload()
    }
 
    companion object {

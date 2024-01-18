@@ -1,15 +1,17 @@
 package mil.nga.giat.mage.map
 
 import android.app.Application
+import android.content.SharedPreferences
 import androidx.lifecycle.*
+import com.google.android.gms.maps.model.CameraPosition
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.transform
 import kotlinx.coroutines.launch
-import mil.nga.giat.mage.search.Geocoder
-import mil.nga.giat.mage.search.SearchResponse
+import mil.nga.giat.mage.R
 import mil.nga.giat.mage.database.model.feed.Feed
 import mil.nga.giat.mage.database.dao.feed.FeedItemDao
 import mil.nga.giat.mage.database.model.feed.FeedWithItems
@@ -31,11 +33,13 @@ import mil.nga.giat.mage.database.model.feature.StaticFeature
 import mil.nga.giat.mage.data.datasource.event.EventLocalDataSource
 import mil.nga.giat.mage.database.model.user.User
 import mil.nga.giat.mage.data.datasource.user.UserLocalDataSource
+import mil.nga.giat.mage.data.repository.map.MapRepository
 import mil.nga.giat.mage.data.repository.settings.SettingsRepository
 import mil.nga.giat.mage.database.model.settings.MapSearchType
 import mil.nga.giat.mage.sdk.exceptions.ObservationException
 import mil.nga.giat.mage.sdk.exceptions.UserException
 import mil.nga.giat.mage.sdk.utils.ISO8601DateFormatFactory
+import mil.nga.giat.mage.ui.geojson.GeoJsonFeatureKey
 import mil.nga.giat.mage.utils.DateFormatFactory
 import java.text.DateFormat
 import java.util.*
@@ -55,14 +59,27 @@ class MapViewModel @Inject constructor(
     private val eventLocalDataSource: EventLocalDataSource,
     private val observationLocalDataSource: ObservationLocalDataSource,
     private val locationLocalDataSource: LocationLocalDataSource,
+    private val sharedPreferences: SharedPreferences,
     settingsRepository: SettingsRepository,
     locationRepository: LocationRepository,
     observationRepository: ObservationRepository,
+    mapRepository: MapRepository
 ): ViewModel() {
     var dateFormat: DateFormat =
         DateFormatFactory.format("yyyy-MM-dd HH:mm zz", Locale.getDefault(), application)
 
+    val mapCenter = mapRepository.mapCenter.asLiveData()
+    val mgrs = mapRepository.mgrs.asLiveData()
+    val gars = mapRepository.gars.asLiveData()
+
     private val eventId = MutableLiveData<Long>()
+
+    fun saveMapPosition(position: CameraPosition) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val xyz = "${position.target.longitude.toString()},${position.target.latitude.toString()},${position.zoom.toString()}"
+            sharedPreferences.edit().putString(application.resources.getString(R.string.recentMapXYZKey), xyz).apply()
+        }
+    }
 
     val showMapSearchButton = settingsRepository.observeMapSettings().map { mapSettings ->
         mapSettings.searchType != MapSearchType.NONE
@@ -149,21 +166,19 @@ class MapViewModel @Inject constructor(
         return FeedState(feedWithItems.feed, mapFeatures)
     }
 
-    private val observationId = MutableLiveData<Long?>()
-    val observationMap: LiveData<ObservationMapState?> = observationId.switchMap { id ->
-        liveData(context = viewModelScope.coroutineContext + Dispatchers.IO) {
-            if (id != null) {
-                val observation = observationLocalDataSource.read(id)
-                emit(toObservationItemState(observation))
-            } else {
-                emit(null)
-            }
+    private val observationFlow = MutableSharedFlow<Long?>(replay = 1)
+    fun setObservation(id: Long?) {
+        viewModelScope.launch {
+            observationFlow.emit(id)
         }
     }
 
-    fun selectObservation(id: Long?) {
-        observationId.value = id
-    }
+    val observation = observationFlow.map { id ->
+        if (id != null) {
+            val observation = observationLocalDataSource.read(id)
+            toObservationItemState(observation)
+        } else null
+    }.asLiveData()
 
     private fun toObservationItemState(observation: Observation): ObservationMapState {
         val currentUser = userLocalDataSource.readCurrentUser()
@@ -232,7 +247,7 @@ class MapViewModel @Inject constructor(
                     }
                 }
 
-                observationId.value = observation.id
+                setObservation(observation.id)
             } catch (ignore: ObservationException) {}
         }
     }
@@ -321,7 +336,7 @@ class MapViewModel @Inject constructor(
         liveData {
             if (id != null) {
                 layerRepository.getStaticFeature(id.layerId, id.featureId)?.let {
-                    emit(staticFeatureToState(it))
+                    emit(staticFeatureToState(id.layerId, it))
                 }
             } else {
                 emit(null)
@@ -333,7 +348,7 @@ class MapViewModel @Inject constructor(
         _staticFeatureId.value = feature
     }
 
-    private fun staticFeatureToState(feature: StaticFeature): StaticFeatureMapState {
+    private fun staticFeatureToState(layerId: Long, feature: StaticFeature): StaticFeatureMapState {
         val properties = feature.propertiesMap
         val timestamp = properties["timestamp"]?.value?.let { timestamp ->
             try {
@@ -344,7 +359,7 @@ class MapViewModel @Inject constructor(
         }
 
         return StaticFeatureMapState(
-            id = feature.id,
+            id = GeoJsonFeatureKey(layerId, feature.id),
             title = timestamp,
             primary = properties["name"]?.value,
             secondary = feature.layer.name,
@@ -360,7 +375,7 @@ class MapViewModel @Inject constructor(
     }
 
     fun deselectFeature() {
-        observationId.value = null
+        setObservation(null)
         locationId.value = null
         feedItemId.value = null
         _geoPackageFeature.value = null

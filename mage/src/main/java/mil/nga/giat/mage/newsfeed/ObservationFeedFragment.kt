@@ -218,19 +218,21 @@ class ObservationFeedFragment : Fragment() {
       var observationLocation: ObservationLocation? = null
 
       // if there is not a location from the location service, then try to pull one from the database.
-      if (locationProvider.value == null) {
+      val lastLocation = locationProvider.value
+      if (lastLocation == null) {
          val locations = locationLocalDataSource.getCurrentUserLocations(user, 1, true)
          locations.firstOrNull()?.let { location ->
             val provider = location.propertiesMap["provider"]?.value?.toString() ?: ObservationLocation.MANUAL_PROVIDER
+            observationLocation = ObservationLocation(
+               geometry = location.geometry,
+               provider = provider,
+               time = location.timestamp.time,
+               accuracy = location.propertiesMap["accuracy"]?.value?.toString()?.toFloat()
+            )
 
-            observationLocation = ObservationLocation(provider, location.geometry)
-            observationLocation?.time = location.timestamp.time
-            location.propertiesMap["accuracy"]?.value?.toString()?.let {
-               observationLocation?.accuracy = it.toFloat()
-            }
          }
       } else {
-         observationLocation = ObservationLocation(locationProvider.value)
+         observationLocation = ObservationLocation(lastLocation)
       }
       return observationLocation
    }

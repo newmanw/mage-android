@@ -36,6 +36,7 @@ import mil.nga.giat.mage.event.EventsActivity.Companion.CLOSABLE_EXTRA
 import mil.nga.giat.mage.event.EventsActivity.Companion.EVENT_ID_EXTRA
 import mil.nga.giat.mage.feed.FeedActivity
 import mil.nga.giat.mage.feed.FeedActivity.Companion.intent
+import mil.nga.giat.mage.geojson.GeoJsonDetailActivity
 import mil.nga.giat.mage.glide.GlideApp
 import mil.nga.giat.mage.glide.model.Avatar.Companion.forUser
 import mil.nga.giat.mage.help.HelpActivity
@@ -340,7 +341,7 @@ class LandingActivity : AppCompatActivity(), NavigationView.OnNavigationItemSele
    }
 
    private fun onFeedResult(resultType: FeedActivity.ResultType?, data: Intent) {
-      if (resultType === FeedActivity.ResultType.NAVIGATE) {
+      if (resultType == FeedActivity.ResultType.NAVIGATE) {
          val feedId = data.getStringExtra(FeedActivity.FEED_ID_EXTRA)
          val itemId = data.getStringExtra(FeedActivity.FEED_ITEM_ID_EXTRA)
          viewModel.startFeedNavigation(feedId!!, itemId!!)

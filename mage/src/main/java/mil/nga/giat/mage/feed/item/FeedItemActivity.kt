@@ -10,7 +10,9 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import dagger.hilt.android.AndroidEntryPoint
 import mil.nga.giat.mage.R
-import mil.nga.giat.mage.feed.FeedItemState
+import mil.nga.giat.mage.ui.feed.item.FeedItemState
+import mil.nga.giat.mage.ui.feed.item.FeedItemKey
+import mil.nga.giat.mage.ui.feed.item.FeedItemScreen
 import mil.nga.giat.mage.utils.googleMapsUri
 
 @AndroidEntryPoint

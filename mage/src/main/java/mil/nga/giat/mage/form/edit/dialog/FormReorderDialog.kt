@@ -25,10 +25,6 @@ import java.util.*
 
 class FormReorderDialog : DialogFragment() {
 
-  interface FormReorderDialogListener {
-    fun onReorder(forms: List<FormState>)
-  }
-
   companion object {
     fun newInstance(): FormReorderDialog {
       val fragment = FormReorderDialog()
@@ -41,7 +37,6 @@ class FormReorderDialog : DialogFragment() {
   }
 
   private lateinit var binding: DialogFormReorderBinding
-  var listener: FormReorderDialogListener? = null
   private lateinit var viewModel: FormViewModel
   private lateinit var itemTouchHelper: ItemTouchHelper
 
@@ -127,7 +122,7 @@ class FormReorderDialog : DialogFragment() {
   }
 
   private fun apply() {
-    forms?.let { listener?.onReorder(it) }
+    forms?.let { viewModel.reorderForms(it) }
     dismiss()
   }
 

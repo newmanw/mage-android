@@ -19,7 +19,7 @@ import mil.nga.giat.mage.form.field.FieldState
 import mil.nga.giat.mage.form.field.FieldValue
 import mil.nga.giat.mage.form.field.GeometryFieldState
 import mil.nga.giat.mage.observation.*
-import mil.nga.giat.mage.observation.edit.MediaAction
+import mil.nga.giat.mage.ui.observation.edit.MediaAction
 import mil.nga.giat.mage.sdk.datastore.user.Permission
 import mil.nga.giat.mage.database.model.user.User
 import mil.nga.giat.mage.data.datasource.user.UserLocalDataSource

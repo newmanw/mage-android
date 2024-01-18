@@ -21,6 +21,7 @@ import mil.nga.giat.mage.coordinate.CoordinateFormatter
 fun CoordinateTextButton(
    latLng: LatLng,
    icon: @Composable (() -> Unit)? = null,
+   accuracy: @Composable (() -> Unit)? = null,
    onCopiedToClipboard: (String) -> Unit
 ) {
    val context = LocalContext.current
@@ -31,7 +32,7 @@ fun CoordinateTextButton(
 
    TextButton(
       colors = ButtonDefaults.textButtonColors(
-         contentColor = MaterialTheme.colorScheme.tertiary
+         contentColor = MaterialTheme.colorScheme.primary
       ),
       onClick = {
          clipboardManager.setText(AnnotatedString(text))
@@ -44,7 +45,14 @@ fun CoordinateTextButton(
                it()
             }
          }
+
          Text(text = text)
+
+         accuracy?.let {
+            Box(Modifier.padding(start = 8.dp)) {
+               it()
+            }
+         }
       }
    }
 }

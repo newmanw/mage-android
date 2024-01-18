@@ -12,6 +12,8 @@ import dagger.hilt.android.AndroidEntryPoint
 import mil.nga.giat.mage.R
 import mil.nga.giat.mage.database.model.feed.Feed
 import mil.nga.giat.mage.feed.item.FeedItemActivity
+import mil.nga.giat.mage.ui.feed.FeedScreen
+import mil.nga.giat.mage.ui.feed.item.FeedItemState
 import mil.nga.giat.mage.utils.googleMapsUri
 
 @AndroidEntryPoint

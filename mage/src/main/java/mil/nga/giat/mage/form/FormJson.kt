@@ -358,7 +358,7 @@ class LocationParser : JsonDeserializer<ObservationLocation>, JsonSerializer<Obs
 
     return try {
       val geometry = gson.fromJson(json.toString(), Geometry::class.java)
-      ObservationLocation(ObservationLocation.MANUAL_PROVIDER, geometry)
+      ObservationLocation(geometry = geometry, provider = ObservationLocation.MANUAL_PROVIDER)
     } catch (_: Exception) { null }
   }
 

@@ -48,6 +48,10 @@ import mil.nga.giat.mage.sdk.Compatibility.Companion.isServerVersion5
 import mil.nga.giat.mage.database.model.observation.Attachment
 import mil.nga.giat.mage.data.datasource.event.EventLocalDataSource
 import mil.nga.giat.mage.sdk.utils.MediaUtility
+import mil.nga.giat.mage.ui.observation.edit.AttachmentAction
+import mil.nga.giat.mage.ui.observation.edit.MediaAction
+import mil.nga.giat.mage.ui.observation.edit.MediaActionType
+import mil.nga.giat.mage.ui.observation.edit.ObservationEditScreen
 import mil.nga.sf.Point
 import java.io.File
 import java.io.IOException
@@ -159,7 +163,6 @@ open class ObservationEditActivity : AppCompatActivity() {
 
     setContent {
       ObservationEditScreen(
-        viewModel = viewModel,
         onSave = { save() },
         onCancel = { cancel() },
         onAddForm = { pickForm() },
@@ -398,7 +401,7 @@ open class ObservationEditActivity : AppCompatActivity() {
 
         dialog.listener = object : GeometryFieldDialog.GeometryFieldDialogListener {
           override fun onLocation(location: ObservationLocation?) {
-            fieldState.answer = if (location != null) FieldValue.Location(ObservationLocation(location)) else null
+            fieldState.answer = if (location != null) FieldValue.Location(location.copy()) else null
           }
         }
         dialog.show(supportFragmentManager, "DIALOG_GEOMETRY_FIELD")
@@ -488,11 +491,6 @@ open class ObservationEditActivity : AppCompatActivity() {
 
   private fun reorderForms() {
     val dialog = FormReorderDialog.newInstance()
-    dialog.listener = object : FormReorderDialog.FormReorderDialogListener {
-      override fun onReorder(forms: List<FormState>) {
-        viewModel.reorderForms(forms)
-      }
-    }
     dialog.show(supportFragmentManager, "DIALOG_FORM_REORDER")
   }
 

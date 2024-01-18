@@ -18,10 +18,10 @@ ext {
     buildToolsVersion = "28.0.3"
     androidxLibVersion = "1.0.0"
     extTruthVersion = '1.2.0'
-    coreVersion = "1.2.0"
-    extJUnitVersion = "1.1.1"
+    coreVersion = "1.5.0"
+    extJUnitVersion = "1.1.5"
     runnerVersion = "1.2.0"
-    espressoVersion = "3.2.0"
+    espressoVersion = "3.5.1"
 }
 
 kapt {
@@ -235,14 +235,14 @@ dependencies {
     implementation files ('libs/sanselanandroid.jar')
 
     // Testing-only dependencies
-    androidTestImplementation 'androidx.test:core:' +coreVersion
-    androidTestImplementation 'androidx.test:core-ktx:' + coreVersion
-    androidTestImplementation 'androidx.test.ext:junit:' + extJUnitVersion
-    androidTestImplementation 'androidx.test.ext:junit-ktx:' + extJUnitVersion
-    androidTestImplementation 'androidx.test:runner:' + runnerVersion
-    androidTestImplementation 'androidx.test:rules:' + runnerVersion
-    androidTestImplementation 'androidx.test.espresso:espresso-core:' +espressoVersion
-    androidTestImplementation 'androidx.test.espresso:espresso-contrib:' + espressoVersion
+    androidTestImplementation "androidx.test:core:$coreVersion"
+    androidTestImplementation "androidx.test:core-ktx:$coreVersion"
+    androidTestImplementation "androidx.test.ext:junit:$extJUnitVersion"
+    androidTestImplementation "androidx.test.ext:junit-ktx:$extJUnitVersion"
+    androidTestImplementation "androidx.test:runner:$runnerVersion"
+    androidTestImplementation "androidx.test:rules:$runnerVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$espressoVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-contrib:$espressoVersion"
 }
 
 tasks.register('androidArtifactVersion') {

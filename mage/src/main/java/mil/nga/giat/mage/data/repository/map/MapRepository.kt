@@ -31,6 +31,57 @@ class MapRepository @Inject constructor(
       awaitClose { sharedPreferences.unregisterOnSharedPreferenceChangeListener(listener) }
    }
 
+   val mapCenter: Flow<Boolean> = callbackFlow {
+      val mapCenterKey = application.getString(R.string.showMapCenterCoordinateKey)
+      val listener = OnSharedPreferenceChangeListener { preferences, key ->
+         try {
+            if (key == mapCenterKey) {
+               trySend(preferences.getBoolean(key, false))
+            }
+         } catch (_: Throwable) { }
+      }
+
+      sharedPreferences.registerOnSharedPreferenceChangeListener(listener)
+
+      trySend(sharedPreferences.getBoolean(mapCenterKey, false))
+
+      awaitClose { sharedPreferences.unregisterOnSharedPreferenceChangeListener(listener) }
+   }
+
+   val mgrs: Flow<Boolean> = callbackFlow {
+      val mgrsKey = application.getString(R.string.showMGRSKey)
+      val listener = OnSharedPreferenceChangeListener { preferences, key ->
+         try {
+            if (key == mgrsKey) {
+               trySend(preferences.getBoolean(key, false))
+            }
+         } catch (_: Throwable) { }
+      }
+
+      sharedPreferences.registerOnSharedPreferenceChangeListener(listener)
+
+      trySend(sharedPreferences.getBoolean(mgrsKey, false))
+
+      awaitClose { sharedPreferences.unregisterOnSharedPreferenceChangeListener(listener) }
+   }
+
+   val gars: Flow<Boolean> = callbackFlow {
+      val garsKey = application.getString(R.string.showGARSKey)
+      val listener = OnSharedPreferenceChangeListener { preferences, key ->
+         try {
+            if (key == garsKey) {
+               trySend(preferences.getBoolean(key, false))
+            }
+         } catch (_: Throwable) { }
+      }
+
+      sharedPreferences.registerOnSharedPreferenceChangeListener(listener)
+
+      trySend(sharedPreferences.getBoolean(garsKey, false))
+
+      awaitClose { sharedPreferences.unregisterOnSharedPreferenceChangeListener(listener) }
+   }
+
    private fun getMapType(preferences: SharedPreferences): MapType {
       return when (preferences.getInt(application.getString(R.string.baseLayerKey), GoogleMap.MAP_TYPE_NORMAL)) {
          GoogleMap.MAP_TYPE_NORMAL -> MapType.NORMAL

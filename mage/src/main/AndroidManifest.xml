@@ -203,6 +203,10 @@
             android:launchMode="singleTop"
             android:label="@string/observation_view"
             android:theme="@style/AppTheme.NoActionBar"/>
+        <activity
+            android:name=".geojson.GeoJsonDetailActivity"
+            android:launchMode="singleTop"
+            android:theme="@style/AppTheme.NoActionBar"/>
 
         <!-- UI presentation for this activity is "compose-first". Compose will handle
              configuration changes an recompose.  We can flag configChanges

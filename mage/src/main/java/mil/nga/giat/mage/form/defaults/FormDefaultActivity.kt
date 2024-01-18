@@ -6,17 +6,17 @@ import android.os.Bundle
 
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
-import androidx.lifecycle.ViewModelProvider
 import dagger.hilt.android.AndroidEntryPoint
 import mil.nga.giat.mage.form.ChoiceFormField
 import mil.nga.giat.mage.form.Form
-
 import mil.nga.giat.mage.form.edit.dialog.DateFieldDialog
 import mil.nga.giat.mage.form.edit.dialog.GeometryFieldDialog
 import mil.nga.giat.mage.form.edit.dialog.SelectFieldDialog
 import mil.nga.giat.mage.form.field.*
 import mil.nga.giat.mage.observation.ObservationLocation
 import mil.nga.giat.mage.database.model.event.Event
+import mil.nga.giat.mage.ui.event.form.FormDefaultScreen
+import mil.nga.giat.mage.ui.event.form.FormKey
 import java.util.*
 
 @AndroidEntryPoint
@@ -34,43 +34,25 @@ class FormDefaultActivity : AppCompatActivity() {
     }
   }
 
-  private lateinit var viewModel: FormDefaultViewModel
-
   public override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
 
     require(intent.hasExtra(EVENT_ID_EXTRA)) { "EVENT_ID_EXTRA is required to launch FormDefaultActivity" }
     require(intent.hasExtra(FORM_ID_EXTRA)) { "FORM_ID_EXTRA is required to launch FormDefaultActivity" }
 
-    viewModel = ViewModelProvider(this).get(FormDefaultViewModel::class.java)
-
-    viewModel.setForm(
-      eventId = intent.getLongExtra(EVENT_ID_EXTRA, 0),
-      formId = intent.getLongExtra(FORM_ID_EXTRA, 0)
-    )
-
     setContent {
       FormDefaultScreen(
-        event = viewModel.event,
-        formStateLiveData = viewModel.formState,
+        key = FormKey(
+          eventId = intent.getLongExtra(EVENT_ID_EXTRA, 0),
+          formId = intent.getLongExtra(FORM_ID_EXTRA, 0)
+        ),
         onClose = { finish() },
-        onSave = { saveDefaults() },
-        onReset = { resetDefaults() },
-        onFieldClick = { fieldState ->  onFieldClick(fieldState = fieldState) },
+        onFieldTap = { fieldState -> onFieldTap(fieldState = fieldState) },
       )
     }
   }
 
-  private fun saveDefaults() {
-    viewModel.saveDefaults()
-    finish()
-  }
-
-  private fun resetDefaults() {
-    viewModel.resetDefaults()
-  }
-
-  private fun onFieldClick(fieldState: FieldState<*, *>) {
+  private fun onFieldTap(fieldState: FieldState<*, *>) {
     when(fieldState) {
       is DateFieldState -> {
         val dialog = DateFieldDialog.newInstance(fieldState.definition.title, fieldState.answer?.date ?: Date())
@@ -85,7 +67,7 @@ class FormDefaultActivity : AppCompatActivity() {
         val dialog = GeometryFieldDialog.newInstance(fieldState.definition.title, fieldState.answer?.location)
         dialog.listener = object : GeometryFieldDialog.GeometryFieldDialogListener {
           override fun onLocation(location: ObservationLocation?) {
-            fieldState.answer = if (location != null) FieldValue.Location(ObservationLocation(location)) else null
+            fieldState.answer = if (location != null) FieldValue.Location(location.copy()) else null
           }
         }
         dialog.show(supportFragmentManager, "DIALOG_GEOMETRY_FIELD")

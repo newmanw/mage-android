@@ -2,6 +2,7 @@ package mil.nga.giat.mage.map
 
 import mil.nga.giat.mage.map.annotation.MapAnnotation
 import mil.nga.giat.mage.observation.ObservationImportantState
+import mil.nga.giat.mage.ui.geojson.GeoJsonFeatureKey
 import mil.nga.sf.Geometry
 
 open class FeatureMapState<I>(
@@ -36,14 +37,14 @@ class UserMapState(
 ): FeatureMapState<Long>(id, title, primary, secondary, geometry, image)
 
 class StaticFeatureMapState(
-   id: Long,
+   id: GeoJsonFeatureKey,
    title: String? = null,
    primary: String? = null,
    secondary: String? = null,
    geometry: Geometry,
    image: Any? = null,
    val content: String? = null
-): FeatureMapState<Long>(id, title, primary, secondary, geometry, image)
+): FeatureMapState<GeoJsonFeatureKey>(id, title, primary, secondary, geometry, image)
 
 class GeoPackageFeatureMapState(
    id: Long,

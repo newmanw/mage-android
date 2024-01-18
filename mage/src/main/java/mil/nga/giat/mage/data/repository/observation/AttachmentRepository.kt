@@ -5,21 +5,23 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Environment
 import android.util.Log
+import android.webkit.MimeTypeMap
 import androidx.exifinterface.media.ExifInterface
 import androidx.preference.PreferenceManager
+import com.google.android.exoplayer2.util.MimeTypes
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import mil.nga.giat.mage.R
+import mil.nga.giat.mage.data.datasource.observation.AttachmentLocalDataSource
+import mil.nga.giat.mage.database.model.observation.Attachment
 import mil.nga.giat.mage.di.Server5
 import mil.nga.giat.mage.network.attachment.AttachmentService
 import mil.nga.giat.mage.network.attachment.AttachmentService_server5
 import mil.nga.giat.mage.observation.sync.AttachmentSyncWorker
 import mil.nga.giat.mage.sdk.Compatibility
-import mil.nga.giat.mage.database.model.observation.Attachment
-import mil.nga.giat.mage.data.datasource.observation.AttachmentLocalDataSource
 import mil.nga.giat.mage.sdk.utils.MediaUtility
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
@@ -29,6 +31,7 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.util.UUID
 import javax.inject.Inject
+
 
 class AttachmentRepository @Inject constructor(
    private val application: Application,
@@ -132,9 +135,10 @@ class AttachmentRepository @Inject constructor(
    }
 
    suspend fun download(attachment: Attachment, progressChannel: Channel<Float>) = withContext(Dispatchers.IO) {
+      val extension = MimeTypeMap.getSingleton().getExtensionFromMimeType(attachment.contentType)
       val destination = File(
          application.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS),
-         UUID.randomUUID().toString()
+         "${UUID.randomUUID()}${ extension?.let { ".${it}" }.orEmpty() }"
       )
 
       try {

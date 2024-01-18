@@ -25,7 +25,7 @@ import mil.nga.giat.mage.form.Form.Companion.fromJson
 import mil.nga.giat.mage.form.defaults.FormPreferences
 import mil.nga.giat.mage.form.field.*
 import mil.nga.giat.mage.observation.*
-import mil.nga.giat.mage.observation.edit.MediaAction
+import mil.nga.giat.mage.ui.observation.edit.MediaAction
 import mil.nga.giat.mage.observation.sync.ObservationSyncWorker
 import mil.nga.giat.mage.sdk.event.IObservationEventListener
 import mil.nga.giat.mage.sdk.exceptions.ObservationException
@@ -139,7 +139,13 @@ open class FormViewModel @Inject constructor(
       defaultMapZoom = defaultMapZoom,
       defaultMapCenter = defaultMapCenter
     )
-    geometryFieldState.answer = FieldValue.Location(ObservationLocation(location.geometry, location.provider, location.accuracy))
+    geometryFieldState.answer = FieldValue.Location(
+      ObservationLocation(
+        geometry = location.geometry,
+        provider = location.provider,
+        accuracy = location.accuracy
+      )
+    )
 
     val definition =  ObservationDefinition(
       event?.minObservationForms,
