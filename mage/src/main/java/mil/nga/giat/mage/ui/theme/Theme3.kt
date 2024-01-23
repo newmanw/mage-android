@@ -1,6 +1,7 @@
 package mil.nga.giat.mage.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material.Colors
 import androidx.compose.material.ContentAlpha
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
@@ -49,4 +50,5 @@ val ColorScheme.linkColor: Color @Composable get() {
   return if (isSystemInDarkTheme()) androidx.compose.material.MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium) else primary
 }
 
+val ColorScheme.warning: Color @Composable get() = Amber700
 val ColorScheme.importantBackground: Color @Composable get() = OrangeA400

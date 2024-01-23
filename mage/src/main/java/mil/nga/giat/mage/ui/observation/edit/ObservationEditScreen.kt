@@ -4,10 +4,25 @@ import android.os.Parcelable
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
-import androidx.compose.material.*
-import androidx.compose.material.ButtonDefaults.textButtonColors
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
@@ -28,7 +43,7 @@ import mil.nga.giat.mage.observation.ObservationState
 import mil.nga.giat.mage.observation.ObservationValidationResult
 import mil.nga.giat.mage.sdk.Compatibility.Companion.isServerVersion5
 import mil.nga.giat.mage.database.model.observation.Attachment
-import mil.nga.giat.mage.ui.theme.MageTheme
+import mil.nga.giat.mage.ui.theme.MageTheme3
 
 enum class AttachmentAction {
   VIEW, DELETE
@@ -59,12 +74,12 @@ fun ObservationEditScreen(
 ) {
   val observationState by viewModel.observationState.observeAsState()
   val scope = rememberCoroutineScope()
-  val scaffoldState = rememberScaffoldState()
+  val snackbarHostState = remember { SnackbarHostState() }
   val listState = rememberLazyListState()
 
-  MageTheme {
+  MageTheme3 {
     Scaffold(
-      scaffoldState = scaffoldState,
+      snackbarHost = { SnackbarHost(snackbarHostState) },
       topBar = {
         ObservationEditTopBar(
           isNewObservation = observationState?.id == null,
@@ -73,7 +88,7 @@ fun ObservationEditScreen(
               when (val result = state.validate()) {
                 is ObservationValidationResult.Invalid -> {
                   scope.launch {
-                    scaffoldState.snackbarHostState.showSnackbar(result.error)
+                    snackbarHostState.showSnackbar(result.error)
                   }
                 }
                 is ObservationValidationResult.Valid -> onSave?.invoke()
@@ -105,7 +120,7 @@ fun ObservationEditScreen(
                   val attachment = attachments[index]
 
                   scope.launch {
-                    val result = scaffoldState.snackbarHostState.showSnackbar("Attachment removed.", "UNDO")
+                    val result = snackbarHostState.showSnackbar("Attachment removed.", "UNDO")
                     if (result == SnackbarResult.ActionPerformed) {
                       // TODO should I modify state here?
                       if (attachment.url?.isNotEmpty() == true) {
@@ -121,7 +136,7 @@ fun ObservationEditScreen(
             onReorderForms = onReorderForms,
             onDeleteForm = { index, formState ->
               scope.launch {
-                val result = scaffoldState.snackbarHostState.showSnackbar("Form deleted", "UNDO")
+                val result = snackbarHostState.showSnackbar("Form deleted", "UNDO")
                 if (result == SnackbarResult.ActionPerformed) {
                   // TODO should I modify state here?
                   val forms = observationState?.forms?.value?.toMutableList() ?: mutableListOf()
@@ -155,6 +170,7 @@ fun ObservationEditScreen(
   }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ObservationEditTopBar(
   isNewObservation: Boolean,
@@ -171,12 +187,17 @@ fun ObservationEditTopBar(
     },
     actions = {
       TextButton(
-        onClick = { onSave.invoke() },
-        colors = textButtonColors(contentColor = Color.White)
+        onClick = { onSave.invoke() }
       ) {
         Text("SAVE")
       }
-    }
+    },
+    colors = TopAppBarDefaults.topAppBarColors(
+      containerColor = MaterialTheme.colorScheme.primary,
+      actionIconContentColor = Color.White,
+      titleContentColor = Color.White,
+      navigationIconContentColor = Color.White
+    )
   )
 }
 
@@ -185,7 +206,7 @@ fun ObservationMediaBar(
   onAction: (MediaActionType) -> Unit
 ) {
   Surface(
-    elevation = 2.dp,
+    shadowElevation = 2.dp,
   ) {
     Row(
       horizontalArrangement = Arrangement.SpaceEvenly,
@@ -274,10 +295,10 @@ fun ObservationEditContent(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.padding(horizontal = 8.dp)
           ) {
-            CompositionLocalProvider(LocalContentAlpha provides ContentAlpha.medium) {
+            CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
               Text(
                 text = "FORMS",
-                style = MaterialTheme.typography.caption,
+                style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier
                   .weight(1f)
@@ -291,7 +312,7 @@ fun ObservationEditContent(
               ) {
                 Icon(
                   Icons.Default.SwapVert,
-                  tint = MaterialTheme.colors.primary,
+                  tint = MaterialTheme.colorScheme.primary,
                   contentDescription = "Reorder Forms")
               }
             }
@@ -325,7 +346,10 @@ fun ObservationEditHeaderContent(
   onLocationClick: (() -> Unit)? = null
 ) {
   Card(
-    Modifier.fillMaxWidth()
+    colors = CardDefaults.cardColors(
+      containerColor = MaterialTheme.colorScheme.surface
+    ),
+    modifier = Modifier.fillMaxWidth()
   ) {
     Column(Modifier.padding(top = 16.dp, start = 16.dp, end = 16.dp)) {
       DateEdit(

@@ -7,12 +7,27 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.LocalContentAlpha
 import androidx.compose.runtime.*
-
-import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.Divider
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.ui.Alignment
 
 import androidx.compose.ui.Modifier
@@ -34,6 +49,7 @@ import mil.nga.giat.mage.form.FormState
 import mil.nga.giat.mage.ui.observation.attachment.AttachmentsViewContent
 import mil.nga.giat.mage.ui.observation.view.FormHeaderContent
 import mil.nga.giat.mage.database.model.observation.Attachment
+import mil.nga.giat.mage.ui.theme.onSurfaceDisabled
 import mil.nga.giat.mage.utils.DateFormatFactory
 import java.util.*
 
@@ -46,7 +62,12 @@ fun FormEditContent(
   onAttachmentAction: ((AttachmentAction, Attachment, FieldState<*, *>) -> Unit)? = null,
   onMediaAction: ((MediaActionType, FormField<*>) -> Unit)? = null
 ) {
-  Card(Modifier.fillMaxWidth()) {
+  Card(
+    colors = CardDefaults.cardColors(
+      containerColor = MaterialTheme.colorScheme.surface
+    ),
+    modifier = Modifier.fillMaxWidth()
+  ) {
     Column(Modifier.animateContentSize()) {
       FormHeaderContent(
         modifier = Modifier.padding(16.dp),
@@ -76,7 +97,7 @@ fun FormEditContent(
           TextButton(
             onClick = { onFormDelete?.invoke() }
           ) {
-            Text("DELETE FORM", color = MaterialTheme.colors.error)
+            Text("DELETE FORM", color = MaterialTheme.colorScheme.error)
           }
         }
       }
@@ -237,10 +258,10 @@ fun AttachmentEdit(
       Modifier
         .fillMaxWidth()
         .clip(shape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
-        .background(MaterialTheme.colors.onSurface.copy(alpha = TextFieldDefaults.BackgroundOpacity))
+        .background(MaterialTheme.colorScheme.surfaceVariant)
     ) {
-      CompositionLocalProvider(LocalContentAlpha provides ContentAlpha.medium) {
-        val titleColor = if (error == null) Color.Unspecified else MaterialTheme.colors.error
+      CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
+        val titleColor = if (error == null) Color.Unspecified else MaterialTheme.colorScheme.error
         val min = fieldDefinition?.min?.toInt() ?: 0
         Text(
           text = "${fieldState.definition.title} ${if (min > 0) "*" else ""}",
@@ -252,7 +273,7 @@ fun AttachmentEdit(
 
       Column {
         if (attachments.isEmpty()) {
-          CompositionLocalProvider(LocalContentAlpha provides ContentAlpha.disabled) {
+          CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceDisabled) {
             Column(
               horizontalAlignment = Alignment.CenterHorizontally,
               verticalArrangement = Arrangement.Center,
@@ -271,7 +292,7 @@ fun AttachmentEdit(
 
               Text(
                 text = "No Attachments",
-                style = MaterialTheme.typography.h5,
+                style = MaterialTheme.typography.headlineSmall,
                 modifier = Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp)
               )
             }
@@ -285,9 +306,9 @@ fun AttachmentEdit(
         }
       }
 
-      Divider(color = MaterialTheme.colors.onSurface.copy(alpha = .4f))
+      Divider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = .4f))
 
-      CompositionLocalProvider(LocalContentAlpha provides ContentAlpha.medium) {
+      CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
         Row(
           horizontalArrangement = Arrangement.End,
           modifier = Modifier.fillMaxWidth()
@@ -364,7 +385,7 @@ fun CheckboxEdit(
       Checkbox(
         checked = value,
         onCheckedChange = onAnswer,
-        colors = CheckboxDefaults.colors(MaterialTheme.colors.primary),
+        colors = CheckboxDefaults.colors(MaterialTheme.colorScheme.primary),
         modifier = Modifier.padding(end = 4.dp)
       )
 
@@ -385,19 +406,19 @@ fun DateEdit(
   val date = fieldState.answer?.date
 
   val focusManager = LocalFocusManager.current
-  val labelColor = if (fieldState.showErrors()) MaterialTheme.colors.error else MaterialTheme.colors.onSurface.copy(ContentAlpha.medium)
+  val labelColor = if (fieldState.showErrors()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceDisabled
 
   Column(modifier) {
     TextField(
       value = if (date != null) dateFormat.format(date) else "",
       onValueChange = { },
       label = { Text("${fieldState.definition.title}${if (fieldState.definition.required) " *" else ""}") },
-      enabled = false,
+      enabled = true,
       isError = fieldState.showErrors(),
-      colors = TextFieldDefaults.textFieldColors(
-        disabledTrailingIconColor = MaterialTheme.colors.onSurface.copy(alpha = TextFieldDefaults.IconOpacity),
-        disabledTextColor = LocalContentColor.current.copy(LocalContentAlpha.current),
-        disabledLabelColor = labelColor
+      colors = TextFieldDefaults.colors(
+        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+        disabledTrailingIconColor = MaterialTheme.colorScheme.onSurface,
+        disabledLabelColor = labelColor,
       ),
       trailingIcon = {
         Icon(
@@ -505,7 +526,7 @@ fun MultiSelectEdit(
   onClick: (() -> Unit)? = null
 ) {
   val focusManager = LocalFocusManager.current
-  val labelColor = if (fieldState.showErrors()) MaterialTheme.colors.error else MaterialTheme.colors.onSurface.copy(ContentAlpha.medium)
+  val labelColor = if (fieldState.showErrors()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceDisabled
 
   Column(modifier) {
     TextField(
@@ -514,10 +535,10 @@ fun MultiSelectEdit(
       label = { Text("${fieldState.definition.title}${if (fieldState.definition.required) " *" else ""}") },
       enabled = false,
       isError = fieldState.showErrors(),
-      colors = TextFieldDefaults.textFieldColors(
-        disabledTrailingIconColor = MaterialTheme.colors.onSurface.copy(alpha = TextFieldDefaults.IconOpacity),
-        disabledTextColor = LocalContentColor.current.copy(LocalContentAlpha.current),
-        disabledLabelColor =  labelColor
+      colors = TextFieldDefaults.colors(
+        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+        disabledTrailingIconColor = MaterialTheme.colorScheme.onSurface,
+        disabledLabelColor = labelColor,
       ),
       trailingIcon = {
         Icon(
@@ -539,6 +560,7 @@ fun MultiSelectEdit(
   }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SelectEdit(
   modifier: Modifier = Modifier,
@@ -546,7 +568,7 @@ fun SelectEdit(
   onClick: (() -> Unit)? = null
 ) {
   val focusManager = LocalFocusManager.current
-  val labelColor = if (fieldState.showErrors()) MaterialTheme.colors.error else MaterialTheme.colors.onSurface.copy(ContentAlpha.medium)
+  val labelColor = if (fieldState.showErrors()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceDisabled
 
   Column(modifier) {
     TextField(
@@ -555,10 +577,10 @@ fun SelectEdit(
       label = { Text("${fieldState.definition.title}${if (fieldState.definition.required) " *" else ""}") },
       enabled = false,
       isError = fieldState.showErrors(),
-      colors = TextFieldDefaults.textFieldColors(
-        disabledTrailingIconColor = MaterialTheme.colors.onSurface.copy(alpha = TextFieldDefaults.IconOpacity),
-        disabledTextColor = LocalContentColor.current.copy(LocalContentAlpha.current),
-        disabledLabelColor =  labelColor
+      colors = TextFieldDefaults.colors(
+        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+        disabledTrailingIconColor = MaterialTheme.colorScheme.onSurface,
+        disabledLabelColor = labelColor,
       ),
       trailingIcon = {
         Icon(
@@ -589,7 +611,7 @@ fun RadioEdit(
   val definition = fieldState.definition as SingleChoiceFormField
 
   Column(modifier) {
-    CompositionLocalProvider(LocalContentAlpha provides ContentAlpha.medium) {
+    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
       Text(
         text = "${fieldState.definition.title}${if (fieldState.definition.required) " *" else ""}",
         fontSize = 14.sp,
@@ -605,7 +627,7 @@ fun RadioEdit(
         RadioButton(
           selected = (fieldState.answer?.text == choice.title),
           onClick = { onAnswer.invoke(choice.title) },
-          colors = RadioButtonDefaults.colors(MaterialTheme.colors.primary),
+          colors = RadioButtonDefaults.colors(MaterialTheme.colorScheme.primary),
           modifier = Modifier.padding(end = 4.dp)
         )
 
@@ -625,11 +647,12 @@ fun TextFieldError(textError: String) {
   Row(modifier = Modifier.fillMaxWidth()) {
     Spacer(modifier = Modifier.width(16.dp))
 
-    CompositionLocalProvider(LocalContentAlpha provides ContentAlpha.medium) {
+    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
       Text(
         text = textError,
         modifier = Modifier.fillMaxWidth(),
-        style = MaterialTheme.typography.caption.copy(color = MaterialTheme.colors.error)
+        color = MaterialTheme.colorScheme.error,
+        style = MaterialTheme.typography.bodySmall
       )
     }
   }

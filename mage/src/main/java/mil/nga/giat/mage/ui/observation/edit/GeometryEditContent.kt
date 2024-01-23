@@ -2,9 +2,15 @@ package mil.nga.giat.mage.ui.observation.edit
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.*
+import androidx.compose.material.ContentAlpha
+import androidx.compose.material.LocalContentAlpha
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Place
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
@@ -17,6 +23,7 @@ import mil.nga.giat.mage.form.FormState
 import mil.nga.giat.mage.form.field.GeometryFieldState
 import mil.nga.giat.mage.ui.observation.view.MapState
 import mil.nga.giat.mage.ui.observation.view.MapViewContent
+import mil.nga.giat.mage.ui.theme.onSurfaceDisabled
 import mil.nga.giat.mage.ui.theme.warning
 
 @Composable
@@ -42,10 +49,10 @@ fun GeometryEditContent(
       label = { Text("${fieldState.definition.title}${if (fieldState.definition.required) " *" else ""}") },
       enabled = false,
       isError = fieldState.showErrors(),
-      colors = TextFieldDefaults.textFieldColors(
-        disabledTrailingIconColor = MaterialTheme.colors.onSurface.copy(alpha = TextFieldDefaults.IconOpacity),
-        disabledTextColor = LocalContentColor.current.copy(LocalContentAlpha.current),
-        disabledLabelColor =  MaterialTheme.colors.onSurface.copy(ContentAlpha.medium)
+      colors = TextFieldDefaults.colors(
+        disabledTextColor = MaterialTheme.colorScheme.onSurface,
+        disabledTrailingIconColor = MaterialTheme.colorScheme.onSurface,
+        disabledLabelColor = MaterialTheme.colorScheme.onSurfaceDisabled,
       ),
       trailingIcon = {
         Icon(
@@ -98,7 +105,8 @@ private fun AccuracyWarning(accuracy: Float) {
       Text(
         text = "Please check observation location, accuracy is $accuracy.",
         modifier = Modifier.fillMaxWidth(),
-        style = MaterialTheme.typography.caption.copy(color = MaterialTheme.colors.warning)
+        color = MaterialTheme.colorScheme.warning,
+        style = MaterialTheme.typography.bodySmall
       )
     }
   }
