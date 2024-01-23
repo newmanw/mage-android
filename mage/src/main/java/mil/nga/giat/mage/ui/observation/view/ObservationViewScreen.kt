@@ -59,10 +59,6 @@ import mil.nga.giat.mage.sdk.Compatibility
 import mil.nga.giat.mage.ui.coordinate.CoordinateTextButton
 import mil.nga.giat.mage.ui.directions.DirectionsDialog
 import mil.nga.giat.mage.ui.directions.NavigationType
-import mil.nga.giat.mage.ui.observation.form.view.MapState
-import mil.nga.giat.mage.ui.observation.form.view.MapViewContent
-import mil.nga.giat.mage.ui.observation.form.view.FormViewContent
-import mil.nga.giat.mage.ui.observation.form.view.FormHeaderContent
 import mil.nga.giat.mage.ui.theme.MageTheme3
 import mil.nga.giat.mage.ui.theme.importantBackground
 import mil.nga.giat.mage.ui.theme.onSurfaceDisabled

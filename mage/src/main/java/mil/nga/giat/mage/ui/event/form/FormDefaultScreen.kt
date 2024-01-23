@@ -40,7 +40,7 @@ import mil.nga.giat.mage.database.model.event.Event
 import mil.nga.giat.mage.form.FieldType
 import mil.nga.giat.mage.form.FormState
 import mil.nga.giat.mage.form.field.FieldState
-import mil.nga.giat.mage.ui.observation.form.edit.FieldEditContent
+import mil.nga.giat.mage.ui.observation.edit.FieldEditContent
 import mil.nga.giat.mage.ui.theme.MageTheme3
 
 data class FormKey(

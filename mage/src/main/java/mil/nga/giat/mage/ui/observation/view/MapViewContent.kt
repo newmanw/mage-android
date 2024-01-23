@@ -1,4 +1,4 @@
-package mil.nga.giat.mage.ui.observation.form.view
+package mil.nga.giat.mage.ui.observation.view
 
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
@@ -43,11 +43,11 @@ data class MapState(val center: LatLng?, val zoom: Float?)
 
 @Composable
 fun MapViewContent(
-  mapState: MapState,
-  event: Event?,
-  formState: FormState?,
-  location: ObservationLocation,
-  viewModel: MapViewModel = hiltViewModel()
+   mapState: MapState,
+   event: Event?,
+   formState: FormState?,
+   location: ObservationLocation,
+   viewModel: MapViewModel = hiltViewModel()
 ) {
   val context = LocalContext.current
 

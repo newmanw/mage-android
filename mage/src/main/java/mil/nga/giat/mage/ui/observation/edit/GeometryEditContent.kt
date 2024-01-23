@@ -1,4 +1,4 @@
-package mil.nga.giat.mage.ui.observation.form.edit
+package mil.nga.giat.mage.ui.observation.edit
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -15,8 +15,8 @@ import mil.nga.giat.mage.coordinate.CoordinateFormatter
 import mil.nga.giat.mage.database.model.event.Event
 import mil.nga.giat.mage.form.FormState
 import mil.nga.giat.mage.form.field.GeometryFieldState
-import mil.nga.giat.mage.ui.observation.form.view.MapState
-import mil.nga.giat.mage.ui.observation.form.view.MapViewContent
+import mil.nga.giat.mage.ui.observation.view.MapState
+import mil.nga.giat.mage.ui.observation.view.MapViewContent
 import mil.nga.giat.mage.ui.theme.warning
 
 @Composable

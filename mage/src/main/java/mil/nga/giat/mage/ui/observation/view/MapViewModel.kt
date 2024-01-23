@@ -1,4 +1,4 @@
-package mil.nga.giat.mage.ui.observation.form.view
+package mil.nga.giat.mage.ui.observation.view
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.asLiveData

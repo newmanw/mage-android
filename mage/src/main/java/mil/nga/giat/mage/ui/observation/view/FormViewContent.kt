@@ -1,4 +1,4 @@
-package mil.nga.giat.mage.ui.observation.form.view
+package mil.nga.giat.mage.ui.observation.view
 
 import android.content.Context
 import androidx.compose.animation.animateContentSize
@@ -7,11 +7,18 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.Divider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -29,6 +36,7 @@ import mil.nga.giat.mage.form.FormState
 import mil.nga.giat.mage.form.field.*
 import mil.nga.giat.mage.database.model.observation.Attachment
 import mil.nga.giat.mage.ui.observation.attachment.AttachmentsViewContent
+import mil.nga.giat.mage.ui.theme.onSurfaceDisabled
 import mil.nga.giat.mage.utils.DateFormatFactory
 import java.util.*
 
@@ -99,11 +107,11 @@ fun FormHeaderContent(
           modifier = Modifier.padding(end = 8.dp)
         )
 
-        CompositionLocalProvider(LocalContentAlpha provides ContentAlpha.medium) {
+        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
           Text(
             formState.definition.name.uppercase(Locale.ROOT),
             fontWeight = FontWeight.Bold,
-            style = MaterialTheme.typography.overline
+            style = MaterialTheme.typography.labelSmall
           )
         }
       }
@@ -112,7 +120,7 @@ fun FormHeaderContent(
     }
 
     Column(Modifier.padding(top = 8.dp)) {
-      CompositionLocalProvider(LocalContentAlpha provides ContentAlpha.disabled) {
+      CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceDisabled) {
         IconButton(onClick = { onToggleExpand(!expanded) }) {
           Icon(
             imageVector = Icons.Default.ExpandMore,
@@ -132,22 +140,20 @@ fun FormHeaderContent(
   val primaryState = formState?.fields?.find { it.definition.name == formState.definition.primaryFeedField }
   if (primaryState?.hasValue() == true) {
     Row {
-      CompositionLocalProvider(LocalContentAlpha provides ContentAlpha.high) {
-        Text(
-          fieldText(primaryState, LocalContext.current),
-          style = MaterialTheme.typography.h6
-        )
-      }
+      Text(
+        fieldText(primaryState, LocalContext.current),
+        style = MaterialTheme.typography.titleLarge
+      )
     }
   }
 
   val secondaryState = formState?.fields?.find { it.definition.name == formState.definition.secondaryFeedField }
   if (secondaryState?.hasValue() == true) {
     Row {
-      CompositionLocalProvider(LocalContentAlpha provides ContentAlpha.medium) {
+      CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
         Text(
           fieldText(secondaryState, LocalContext.current),
-          style = MaterialTheme.typography.subtitle1
+          style = MaterialTheme.typography.titleMedium
         )
       }
     }
@@ -200,7 +206,7 @@ fun AttachmentsFieldContent(
   val attachments = fieldState.answer?.attachments ?: listOf()
   if (attachments.isNotEmpty()) {
     Column(modifier) {
-      CompositionLocalProvider(LocalContentAlpha provides ContentAlpha.medium) {
+      CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
         Text(
           fieldState.definition.title,
           fontSize = 14.sp,
@@ -224,17 +230,15 @@ fun StringFieldContent(
 
   if (text.isNotEmpty()) {
     Column(modifier = modifier) {
-      CompositionLocalProvider(LocalContentAlpha provides ContentAlpha.medium) {
+      CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
         Text(fieldState.definition.title, fontSize = 14.sp)
       }
 
-      CompositionLocalProvider(LocalContentAlpha provides ContentAlpha.high) {
-        Text(
-          text,
-          fontSize = 16.sp,
-          style = MaterialTheme.typography.body1
-        )
-      }
+      Text(
+        text,
+        fontSize = 16.sp,
+        style = MaterialTheme.typography.bodyLarge
+      )
     }
   }
 }
@@ -261,7 +265,7 @@ fun BooleanFieldContent(
             .padding(end = 8.dp)
         )
 
-        CompositionLocalProvider(LocalContentAlpha provides ContentAlpha.medium) {
+        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
           Text(fieldState.definition.title, fontSize = 14.sp)
         }
       }
@@ -288,16 +292,12 @@ fun DateFieldContent(
         Modifier
           .padding(bottom = 4.dp)
       ) {
-        CompositionLocalProvider(LocalContentAlpha provides ContentAlpha.medium) {
+        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
           Text(fieldState.definition.title, fontSize = 14.sp)
         }
       }
 
-      Row {
-        CompositionLocalProvider(LocalContentAlpha provides ContentAlpha.high) {
-          Text(text, fontSize = 16.sp)
-        }
-      }
+      Text(text, fontSize = 16.sp)
     }
   }
 }
@@ -314,16 +314,12 @@ fun MultiFieldContent(
         Modifier
           .padding(bottom = 4.dp)
       ) {
-        CompositionLocalProvider(LocalContentAlpha provides ContentAlpha.medium) {
+        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
           Text(fieldState.definition.title, fontSize = 14.sp)
         }
       }
 
-      Row {
-        CompositionLocalProvider(LocalContentAlpha provides ContentAlpha.high) {
-          Text(value.joinToString(", "), fontSize = 16.sp)
-        }
-      }
+      Text(value.joinToString(", "), fontSize = 16.sp)
     }
   }
 }
@@ -343,7 +339,7 @@ fun GeometryFieldContent(
         Modifier
           .padding(bottom = 4.dp)
       ) {
-        CompositionLocalProvider(LocalContentAlpha provides ContentAlpha.medium) {
+        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
           Text(fieldState.definition.title, fontSize = 14.sp)
         }
       }
@@ -364,13 +360,13 @@ fun GeometryFieldContent(
       ) {
         Icon(
           imageVector = Icons.Default.MyLocation,
-          tint = MaterialTheme.colors.primary,
+          tint = MaterialTheme.colorScheme.primary,
           contentDescription = "Location",
           modifier = Modifier.padding(end = 4.dp).width(16.dp).height(16.dp)
         )
         Text(
           text  = coordinates,fontSize = 14.sp,
-          color = MaterialTheme.colors.primary
+          color = MaterialTheme.colorScheme.primary
         )
       }
     }

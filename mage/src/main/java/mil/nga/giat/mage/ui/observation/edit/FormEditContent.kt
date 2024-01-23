@@ -1,4 +1,4 @@
-package mil.nga.giat.mage.ui.observation.form.edit
+package mil.nga.giat.mage.ui.observation.edit
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
@@ -32,9 +32,7 @@ import mil.nga.giat.mage.database.model.event.Event
 import mil.nga.giat.mage.form.field.*
 import mil.nga.giat.mage.form.FormState
 import mil.nga.giat.mage.ui.observation.attachment.AttachmentsViewContent
-import mil.nga.giat.mage.ui.observation.form.view.FormHeaderContent
-import mil.nga.giat.mage.ui.observation.edit.AttachmentAction
-import mil.nga.giat.mage.ui.observation.edit.MediaActionType
+import mil.nga.giat.mage.ui.observation.view.FormHeaderContent
 import mil.nga.giat.mage.database.model.observation.Attachment
 import mil.nga.giat.mage.utils.DateFormatFactory
 import java.util.*

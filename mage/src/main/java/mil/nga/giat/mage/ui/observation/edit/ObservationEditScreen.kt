@@ -23,9 +23,6 @@ import mil.nga.giat.mage.compat.server5.form.view.AttachmentsViewContentServer5
 import mil.nga.giat.mage.database.model.event.Event
 import mil.nga.giat.mage.form.FormState
 import mil.nga.giat.mage.form.FormViewModel
-import mil.nga.giat.mage.ui.observation.form.edit.DateEdit
-import mil.nga.giat.mage.ui.observation.form.edit.FormEditContent
-import mil.nga.giat.mage.ui.observation.form.edit.GeometryEditContent
 import mil.nga.giat.mage.form.field.*
 import mil.nga.giat.mage.observation.ObservationState
 import mil.nga.giat.mage.observation.ObservationValidationResult
