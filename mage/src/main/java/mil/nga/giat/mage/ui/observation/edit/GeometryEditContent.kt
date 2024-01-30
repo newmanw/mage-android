@@ -78,7 +78,6 @@ fun GeometryEditContent(
           .height(150.dp)
       ) {
         MapViewContent(
-          mapState = MapState(fieldState.defaultMapCenter, fieldState.defaultMapZoom),
           event = event,
           formState = formState,
           location = location

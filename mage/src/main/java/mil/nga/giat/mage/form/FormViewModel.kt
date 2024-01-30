@@ -80,7 +80,7 @@ open class FormViewModel @Inject constructor(
     observationLocalDataSource.removeListener(listener)
   }
 
-  open fun createObservation(timestamp: Date, location: ObservationLocation, defaultMapZoom: Float? = null, defaultMapCenter: LatLng? = null): Boolean {
+  open fun createObservation(location: ObservationLocation, defaultMapZoom: Float? = null, defaultMapCenter: LatLng? = null): Boolean {
     if (_observationState.value != null) return false
 
     val forms = mutableListOf<FormState>()
@@ -125,7 +125,7 @@ open class FormViewModel @Inject constructor(
         archived = false
       ) as FormField<Date>
     )
-    timestampFieldState.answer = FieldValue.Date(timestamp)
+    timestampFieldState.answer = FieldValue.Date(Date())
 
     val geometryFieldState = GeometryFieldState(
       GeometryFormField(
@@ -158,22 +158,27 @@ open class FormViewModel @Inject constructor(
       timestampFieldState = timestampFieldState,
       geometryFieldState = geometryFieldState,
       userDisplayName = user?.displayName,
-      forms = forms)
+      forms = forms
+    )
     _observationState.value = observationState
 
     return observationState.forms.value.isEmpty() && formDefinitions.isNotEmpty()
   }
 
-  fun setObservation(observationId: Long, observeChanges: Boolean = false, defaultMapZoom: Float? = null, defaultMapCenter: LatLng? = null) {
+  fun setObservation(observationId: Long? = null, observeChanges: Boolean = false, defaultMapZoom: Float? = null, defaultMapCenter: LatLng? = null) {
     if (_observationState.value != null) return
 
     this.observeChanges = observeChanges
 
-    try {
-      val observation = observationLocalDataSource.read(observationId)
-      createObservationState(observation, defaultMapZoom, defaultMapCenter)
-    } catch (e: ObservationException) {
-      Log.e(LOG_NAME, "Problem reading observation.", e)
+    if (observationId == null) {
+      createObservation(ObservationLocation())
+    } else {
+      try {
+        val observation = observationLocalDataSource.read(observationId)
+        createObservationState(observation, defaultMapZoom, defaultMapCenter)
+      } catch (e: ObservationException) {
+        Log.e(LOG_NAME, "Problem reading observation.", e)
+      }
     }
   }
 

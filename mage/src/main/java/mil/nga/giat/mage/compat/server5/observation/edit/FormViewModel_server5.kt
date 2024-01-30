@@ -37,7 +37,7 @@ class FormViewModel_server5 @Inject constructor(
 
    val attachments = mutableListOf<Attachment>()
 
-   override fun createObservation(timestamp: Date, location: ObservationLocation, defaultMapZoom: Float?, defaultMapCenter: LatLng?): Boolean {
+   override fun createObservation(location: ObservationLocation, defaultMapZoom: Float?, defaultMapCenter: LatLng?): Boolean {
       if (_observationState.value != null) return false
 
       val forms = mutableListOf<FormState>()
@@ -79,7 +79,7 @@ class FormViewModel_server5 @Inject constructor(
             archived = false
          ) as FormField<Date>
       )
-      timestampFieldState.answer = FieldValue.Date(timestamp)
+      timestampFieldState.answer = FieldValue.Date(Date())
 
       val geometryFieldState = GeometryFieldState(
          GeometryFormField(

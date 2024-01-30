@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.LocalContentAlpha
 import androidx.compose.runtime.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -29,12 +28,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.ui.Alignment
-
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import mil.nga.giat.mage.form.*
-
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -413,7 +410,7 @@ fun DateEdit(
       value = if (date != null) dateFormat.format(date) else "",
       onValueChange = { },
       label = { Text("${fieldState.definition.title}${if (fieldState.definition.required) " *" else ""}") },
-      enabled = true,
+      enabled = false,
       isError = fieldState.showErrors(),
       colors = TextFieldDefaults.colors(
         disabledTextColor = MaterialTheme.colorScheme.onSurface,

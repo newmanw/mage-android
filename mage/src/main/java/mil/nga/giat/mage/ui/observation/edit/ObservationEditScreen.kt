@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -14,6 +15,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -23,15 +25,19 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.*
 import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.google.gson.JsonParser
 import kotlinx.coroutines.launch
 import kotlinx.parcelize.Parcelize
 import mil.nga.giat.mage.compat.server5.form.view.AttachmentsViewContentServer5
@@ -43,6 +49,13 @@ import mil.nga.giat.mage.observation.ObservationState
 import mil.nga.giat.mage.observation.ObservationValidationResult
 import mil.nga.giat.mage.sdk.Compatibility.Companion.isServerVersion5
 import mil.nga.giat.mage.database.model.observation.Attachment
+import mil.nga.giat.mage.form.Form
+import mil.nga.giat.mage.network.gson.asJsonObjectOrNull
+import mil.nga.giat.mage.observation.ObservationLocation
+import mil.nga.giat.mage.ui.observation.edit.dialog.DateFieldDialog
+import mil.nga.giat.mage.ui.observation.edit.dialog.GeometryFieldDialog
+import mil.nga.giat.mage.ui.observation.edit.dialog.MultiSelectFieldDialog
+import mil.nga.giat.mage.ui.observation.edit.dialog.SelectFieldDialog
 import mil.nga.giat.mage.ui.theme.MageTheme3
 
 enum class AttachmentAction {
@@ -60,22 +73,45 @@ data class MediaAction (
    val fieldName: String?
 ): Parcelable
 
+sealed class ObservationEditType {
+  data class Create(val location: ObservationLocation): ObservationEditType()
+  data class Update(val id: Long): ObservationEditType()
+}
+
 @Composable
 fun ObservationEditScreen(
-   onSave: (() -> Unit)? = null,
-   onCancel: (() -> Unit)? = null,
-   onAddForm: (() -> Unit)? = null,
-   onDeleteForm: ((Int) -> Unit)? = null,
-   onReorderForms: (() -> Unit)? = null,
-   onFieldClick: ((FieldState<*, *>) -> Unit)? = null,
-   onAttachmentAction: ((AttachmentAction, Attachment, FieldState<*, *>?) -> Unit)? = null,
-   onMediaAction: ((MediaAction) -> Unit)? = null,
-   viewModel: FormViewModel = hiltViewModel()
+  type: ObservationEditType,
+  onSave: (() -> Unit)? = null,
+  onCancel: (() -> Unit)? = null,
+  onFormReorder: () -> Unit,
+  onAttachmentAction: ((AttachmentAction, Attachment, FieldState<*, *>?) -> Unit)? = null,
+  onMediaAction: ((MediaAction) -> Unit)? = null,
+  viewModel: FormViewModel = hiltViewModel()
 ) {
-  val observationState by viewModel.observationState.observeAsState()
   val scope = rememberCoroutineScope()
   val snackbarHostState = remember { SnackbarHostState() }
   val listState = rememberLazyListState()
+  var dateFieldState by remember { mutableStateOf<DateFieldState?>(null) }
+  var selectFieldState by remember { mutableStateOf<SelectFieldState?>(null) }
+  var multiSelectFieldState by remember { mutableStateOf<MultiSelectFieldState?>(null) }
+  var geometryFieldState by remember { mutableStateOf<GeometryFieldState?>(null) }
+  var showFormBottomSheet by remember { mutableStateOf(false) }
+
+  val observationState by viewModel.observationState.observeAsState()
+
+  LaunchedEffect(type) {
+    when(type) {
+      is ObservationEditType.Create -> {
+        val showPicker = viewModel.createObservation(type.location)
+        if (showPicker) {
+          showFormBottomSheet = true
+        }
+      }
+      is ObservationEditType.Update -> {
+        viewModel.setObservation(type.id)
+      }
+    }
+  }
 
   MageTheme3 {
     Scaffold(
@@ -108,7 +144,15 @@ fun ObservationEditScreen(
             event = viewModel.event,
             observationState = observationState,
             listState = listState,
-            onFieldClick = onFieldClick,
+            onFieldClick = { fieldState ->
+              when (fieldState) {
+                is DateFieldState -> dateFieldState = fieldState
+                is GeometryFieldState -> geometryFieldState = fieldState
+                is SelectFieldState -> selectFieldState = fieldState
+                is MultiSelectFieldState -> multiSelectFieldState = fieldState
+                else -> {}
+              }
+            },
             onMediaAction = onMediaAction,
             onAttachmentAction = { action, media, fieldState ->
               when (action) {
@@ -133,8 +177,9 @@ fun ObservationEditScreen(
                 }
               }
             },
-            onReorderForms = onReorderForms,
+            onReorderForms = { onFormReorder() },
             onDeleteForm = { index, formState ->
+              viewModel.deleteForm(index)
               scope.launch {
                 val result = snackbarHostState.showSnackbar("Form deleted", "UNDO")
                 if (result == SnackbarResult.ActionPerformed) {
@@ -144,7 +189,6 @@ fun ObservationEditScreen(
                   observationState?.forms?.value = forms
                 }
               }
-              onDeleteForm?.invoke(index)
             }
           )
         }
@@ -162,10 +206,76 @@ fun ObservationEditScreen(
               )
             },
             text = { Text("ADD FORM", color = Color.White) },
-            onClick = { onAddForm?.invoke() }
+            onClick = {
+              showFormBottomSheet = true
+            }
           )
         }
       }
+    )
+
+    FormBottomSheet(
+      open = showFormBottomSheet,
+      forms = viewModel.event?.forms?.mapNotNull { form ->
+        JsonParser.parseString(form.json).asJsonObjectOrNull()?.let {Form.fromJson(it) }
+      } ?: emptyList(),
+      onForm = { form ->
+        showFormBottomSheet = false
+        viewModel.addForm(form)
+      },
+      onDismiss = { showFormBottomSheet = false }
+    )
+
+    DateFieldDialog(
+      state = dateFieldState,
+      onSave = { field, date ->
+        field.answer = FieldValue.Date(date)
+        dateFieldState = null
+      },
+      onClear = { field ->
+        field.answer = null
+        dateFieldState = null
+      },
+      onCancel = { dateFieldState = null }
+    )
+
+    GeometryFieldDialog(
+      state = geometryFieldState,
+      onSave = { field, location ->
+        geometryFieldState = null
+        field.answer = FieldValue.Location(location)
+      },
+      onClear = { field ->
+        field.answer = null
+        geometryFieldState = null
+      },
+      onCancel = { geometryFieldState = null }
+    )
+
+    SelectFieldDialog(
+      state = selectFieldState,
+      onSave = { field, choice ->
+        field.answer = choice.title.let { FieldValue.Text(it) }
+        selectFieldState = null
+      },
+      onClear = { field ->
+        field.answer = null
+        selectFieldState = null
+      },
+      onCancel = { selectFieldState = null }
+    )
+
+    MultiSelectFieldDialog(
+      state = multiSelectFieldState,
+      onSave = { field, choices ->
+        field.answer = FieldValue.Multi(choices)
+        multiSelectFieldState = null
+      },
+      onClear = { field ->
+        field.answer = null
+        multiSelectFieldState = null
+      },
+      onCancel = { multiSelectFieldState = null }
     )
   }
 }
@@ -189,7 +299,10 @@ fun ObservationEditTopBar(
       TextButton(
         onClick = { onSave.invoke() }
       ) {
-        Text("SAVE")
+        Text(
+          text = "SAVE",
+          color = MaterialTheme.colorScheme.onPrimary
+        )
       }
     },
     colors = TopAppBarDefaults.topAppBarColors(
@@ -365,6 +478,78 @@ fun ObservationEditHeaderContent(
         onClick = onLocationClick,
         modifier = Modifier.padding(bottom = 16.dp)
       )
+    }
+  }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun FormBottomSheet(
+  open: Boolean,
+  forms: Collection<Form>,
+  onForm: (Form) -> Unit,
+  onDismiss: () -> Unit
+) {
+  val bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+  if (open) {
+    ModalBottomSheet(
+      onDismissRequest = { onDismiss() },
+      sheetState = bottomSheetState,
+    ) {
+      Column(
+        Modifier
+          .fillMaxWidth()
+          .padding(top = 8.dp, bottom = 32.dp)
+      ) {
+        Text(
+          text = "Forms",
+          style = MaterialTheme.typography.headlineSmall,
+          fontWeight = FontWeight.Medium,
+          color = MaterialTheme.colorScheme.primary,
+          modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
+        )
+
+        forms.forEach { form ->
+          Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+              .fillMaxWidth()
+              .clickable { onForm(form) }
+              .padding(vertical = 16.dp, horizontal = 16.dp)
+          ) {
+            CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
+              Icon(
+                Icons.Outlined.Description,
+                contentDescription = "Form",
+                modifier = Modifier
+                  .size(48.dp)
+                  .padding(end = 16.dp)
+              )
+            }
+
+            Column {
+              Text(
+                text = form.name,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+              )
+
+              form.description?.let { description ->
+                CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
+                  Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                  )
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

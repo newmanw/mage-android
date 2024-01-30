@@ -16,7 +16,6 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.bumptech.glide.Glide
 import com.bumptech.glide.request.target.CustomTarget
 import com.bumptech.glide.request.transition.Transition
-import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.*
 import com.google.maps.android.compose.Circle
 import com.google.maps.android.compose.GoogleMap
@@ -43,7 +42,6 @@ data class MapState(val center: LatLng?, val zoom: Float?)
 
 @Composable
 fun MapViewContent(
-   mapState: MapState,
    event: Event?,
    formState: FormState?,
    location: ObservationLocation,
@@ -61,14 +59,8 @@ fun MapViewContent(
 
   val cameraPositionState = rememberCameraPositionState()
 
-  LaunchedEffect(mapState, location) {
-    if (mapState.center != null && mapState.zoom != null) {
-      cameraPositionState.move(
-        update = CameraUpdateFactory.newLatLngZoom(mapState.center, mapState.zoom)
-      )
-    }
-
-    location.getCameraUpdate()?.let { cameraPositionState.animate(update = it) }
+  LaunchedEffect(location) {
+    location.getCameraUpdate()?.let { cameraPositionState.move(update = it) }
   }
 
   val uiSettings = MapUiSettings(

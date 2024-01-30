@@ -543,7 +543,6 @@ fun ObservationViewHeaderContent(
           val mapState = MapState(observationState.geometryFieldState.defaultMapCenter, observationState.geometryFieldState.defaultMapZoom)
           MapViewContent(
             event = event,
-            mapState = mapState,
             formState = formState,
             location = location
           )
@@ -785,7 +784,7 @@ fun ObservationActions(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MoreBottomSheet(
+private fun MoreBottomSheet(
   open: Boolean,
   reorder: Boolean,
   onEdit: () -> Unit,

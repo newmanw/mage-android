@@ -9,12 +9,12 @@ import androidx.appcompat.app.AppCompatActivity
 import dagger.hilt.android.AndroidEntryPoint
 import mil.nga.giat.mage.form.ChoiceFormField
 import mil.nga.giat.mage.form.Form
-import mil.nga.giat.mage.form.edit.dialog.DateFieldDialog
 import mil.nga.giat.mage.form.edit.dialog.GeometryFieldDialog
-import mil.nga.giat.mage.form.edit.dialog.SelectFieldDialog
 import mil.nga.giat.mage.form.field.*
 import mil.nga.giat.mage.observation.ObservationLocation
 import mil.nga.giat.mage.database.model.event.Event
+import mil.nga.giat.mage.form.edit.dialog.DateFieldDialog
+import mil.nga.giat.mage.form.edit.dialog.SelectFieldDialog
 import mil.nga.giat.mage.ui.event.form.FormDefaultScreen
 import mil.nga.giat.mage.ui.event.form.FormKey
 import java.util.*
