@@ -73,6 +73,14 @@ open class GeometryFieldDialogViewModel @Inject constructor(
 
    val baseMap = mapRepository.baseMapType.asLiveData()
 
+   private val geometryTypeFlow = MutableSharedFlow<GeometryType?>(replay = 1)
+   val geometryType = geometryTypeFlow.asLiveData()
+   fun setGeometryType(type: GeometryType?) {
+      viewModelScope.launch {
+         geometryTypeFlow.emit(type)
+      }
+   }
+
    private val latLngStateFlow = MutableSharedFlow<LatLngState>(replay = 1)
    val latLngState = latLngStateFlow.asLiveData()
    fun setLatLng(latitude: String, longitude: String) {
