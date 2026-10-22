@@ -3,129 +3,166 @@ package mil.nga.giat.mage.login.idp
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
-import android.net.Uri
 import android.os.Bundle
 import android.util.TypedValue
 import androidx.appcompat.content.res.AppCompatResources
+import androidx.browser.customtabs.CustomTabsClient
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.graphics.drawable.toBitmap
 import androidx.fragment.app.FragmentActivity
 import mil.nga.giat.mage.R
+import androidx.core.net.toUri
+import mil.nga.giat.mage.data.datasource.authentication.AuthenticationStrategyType
 import mil.nga.giat.mage.login.AccountStateActivity
-import mil.nga.giat.mage.login.ServerAuthTypes
 
-/**
- * Created by wnewman on 10/14/15.
- */
+data class IdpLoginRequest(
+	val serverUrl: String,
+	val strategy: AuthenticationStrategyType
+) {
+
+	companion object {
+		private const val EXTRA_SERVER_URL = "EXTRA_SERVER_URL"
+		private const val EXTRA_IDP_STRATEGY = "EXTRA_IDP_STRATEGY"
+
+		fun fromIntent(intent: Intent): IdpLoginRequest? {
+			val serverUrl = intent.getStringExtra(EXTRA_SERVER_URL) ?: return null
+			val strategy = intent.getStringExtra(EXTRA_IDP_STRATEGY)
+				?.let(AuthenticationStrategyType::fromType)
+				?: return null
+
+			return IdpLoginRequest(serverUrl = serverUrl, strategy = strategy)
+		}
+
+		fun toIntent(
+			context: Context,
+			serverUrl: String,
+			strategy: AuthenticationStrategyType
+		): Intent =
+			Intent(context, IdpLoginActivity::class.java).apply {
+				putExtra(EXTRA_SERVER_URL, serverUrl)
+				putExtra(EXTRA_IDP_STRATEGY, strategy.type)
+			}
+	}
+}
+
 class IdpLoginActivity : FragmentActivity() {
-    companion object {
-        private const val KEY_AUTHORIZATION_STARTED = "AUTHORIZATION_STARTED"
-        private const val EXTRA_SERVER_URL = "EXTRA_SERVER_URL"
+	companion object {
+		private const val KEY_AUTHORIZATION_STARTED = "AUTHORIZATION_STARTED"
 
-        const val EXTRA_IDP_STRATEGY = "EXTRA_IDP_STRATEGY"
-        const val EXTRA_IDP_TOKEN = "EXTRA_IDP_TOKEN"
+		const val EXTRA_IDP_STRATEGY = "EXTRA_IDP_STRATEGY"
+		const val EXTRA_IDP_TOKEN = "EXTRA_IDP_TOKEN"
+	}
 
-        fun intent(context: Context?, url: String, authType: ServerAuthTypes): Intent {
-            val intent = Intent(context, IdpLoginActivity::class.java)
-            intent.putExtra(EXTRA_SERVER_URL, url)
-            intent.putExtra(EXTRA_IDP_STRATEGY, authType.name)
-            return intent
-        }
-    }
+	private var authorizationStarted = false
+	private lateinit var loginRequest: IdpLoginRequest
 
-    private var authorizationStarted = false
-    private var serverURL: String? = null
-    private var idpURL: String? = null
-    private var  idpStrategy: String? = null
+	override fun onCreate(savedInstanceState: Bundle?) {
+		super.onCreate(savedInstanceState)
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+		loginRequest = IdpLoginRequest.fromIntent(intent) ?: run {
+			finish()
+			return
+		}
 
-        serverURL = intent.getStringExtra(EXTRA_SERVER_URL)
-        idpStrategy = intent.getStringExtra(EXTRA_IDP_STRATEGY)
-        idpURL = String.format("%s/auth/%s/signin?state=mobile", serverURL, idpStrategy)
+		if (savedInstanceState == null) {
+			extractState(intent.extras)
+		} else {
+			extractState(savedInstanceState)
+		}
+	}
 
-        if (savedInstanceState == null) {
-            extractState(intent.extras)
-        } else {
-            extractState(savedInstanceState)
-        }
-    }
+	override fun onNewIntent(intent: Intent) {
+		super.onNewIntent(intent)
+		setIntent(intent)
+	}
 
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-    }
+	override fun onResume() {
+		super.onResume()
 
-    override fun onResume() {
-        super.onResume()
+		if (!authorizationStarted) {
+			val customTabsIntent = CustomTabsIntent.Builder()
+				.setCloseButtonIcon(backButtonIcon())
+				.setToolbarColor(primaryColor())
+				.build()
 
-        if (!authorizationStarted) {
-            val customTabsIntent = CustomTabsIntent.Builder()
-                    .setCloseButtonIcon(backButtonIcon())
-                    .setToolbarColor(primaryColor())
-                    .build()
+			// Prefer Chrome when it supports Custom Tabs, otherwise fall back to the default browser
+			CustomTabsClient.getPackageName(this, listOf("com.android.chrome"), true)?.let {
+				customTabsIntent.intent.setPackage(it)
+			}
 
-            customTabsIntent.launchUrl(this, Uri.parse(idpURL))
+			val baseUrl = loginRequest.serverUrl.trim().removeSuffix("/")
+			val idpUrl = baseUrl.toUri()
+				.buildUpon()
+				.appendPath("auth")
+				.appendPath(loginRequest.strategy.type)
+				.appendPath("signin")
+				.appendQueryParameter("state", "mobile")
+				.build()
+				.toString()
 
-            authorizationStarted = true
+			customTabsIntent.launchUrl(this, idpUrl.toUri())
 
-            return
-        }
+			authorizationStarted = true
 
-        if (intent.data != null) {
-            handleAuthenticationComplete()
-        } else {
-            handleAuthenticationCanceled()
-        }
-    }
+			return
+		}
 
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        outState.putBoolean(KEY_AUTHORIZATION_STARTED, authorizationStarted)
-    }
+		if (intent.data != null) {
+			handleAuthenticationComplete()
+		} else {
+			handleAuthenticationCanceled()
+		}
+	}
 
-    private fun extractState(state: Bundle?) {
-        if (state == null) {
-            finish()
-            return
-        }
+	override fun onSaveInstanceState(outState: Bundle) {
+		super.onSaveInstanceState(outState)
+		outState.putBoolean(KEY_AUTHORIZATION_STARTED, authorizationStarted)
+	}
 
-        authorizationStarted = state.getBoolean(KEY_AUTHORIZATION_STARTED, false)
-    }
+	private fun extractState(state: Bundle?) {
+		if (state == null) {
+			finish()
+			return
+		}
 
-    private fun handleAuthenticationComplete() {
-        when (intent.data?.path) {
-            "/invalid_account" -> {
-                val intent = AccountStateActivity.intent(this, intent.data)
-                startActivity(intent)
-                finish()
-            }
-            "/authentication" -> {
-                val jwt = intent.data?.getQueryParameter("token") ?: ""
-                val intent = Intent()
-                intent.putExtra(EXTRA_IDP_TOKEN, jwt)
-                intent.putExtra(EXTRA_IDP_STRATEGY, idpStrategy)
-                setResult(RESULT_OK, intent)
-                finish()
-            }
-            else -> {
-                handleAuthenticationCanceled()
-            }
-        }
-    }
+		authorizationStarted = state.getBoolean(KEY_AUTHORIZATION_STARTED, false)
+	}
 
-    private fun handleAuthenticationCanceled() {
-        finish()
-    }
+	private fun handleAuthenticationComplete() {
+		when (intent.data?.path) {
+			"/invalid_account" -> {
+				val intent = AccountStateActivity.intent(this, intent.data)
+				startActivity(intent)
+				finish()
+			}
 
-    private fun primaryColor(): Int {
-        val typedValue = TypedValue()
-        theme.resolveAttribute (R.attr.colorPrimary, typedValue, true)
-        return typedValue.data
-    }
+			"/authentication" -> {
+				val jwt = intent.data?.getQueryParameter("token") ?: ""
+				val intent = Intent()
+				intent.putExtra(EXTRA_IDP_TOKEN, jwt)
+				intent.putExtra(EXTRA_IDP_STRATEGY, loginRequest.strategy.type)
+				setResult(RESULT_OK, intent)
+				finish()
+			}
 
-    private fun backButtonIcon(): Bitmap {
-        return AppCompatResources.getDrawable(applicationContext, R.drawable.ic_arrow_back_white_24dp)!!.toBitmap()
-    }
+			else -> {
+				handleAuthenticationCanceled()
+			}
+		}
+	}
+
+	private fun handleAuthenticationCanceled() {
+		finish()
+	}
+
+	private fun primaryColor(): Int {
+		val typedValue = TypedValue()
+		theme.resolveAttribute(R.attr.colorPrimary, typedValue, true)
+		return typedValue.data
+	}
+
+	private fun backButtonIcon(): Bitmap {
+		return AppCompatResources.getDrawable(applicationContext, R.drawable.ic_arrow_back_white_24dp)!!
+			.toBitmap()
+	}
 }

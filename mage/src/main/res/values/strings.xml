@@ -2,6 +2,7 @@
 <resources>
 
     <string name="app_name">MAGE</string>
+    <string name="app_title">MAGE</string>
     <string name="aboutText">MAGE provides mobile situational awareness capabilities. The MAGE app on your mobile device allows you to create geotagged field reports that contain media such as photos, videos, and voice recordings and share them instantly with who you want. Using the GPS in your mobile device, MAGE can also track users locations in real time. Your locations can be automatically shared with the other members of your team.\n\nThe app remains functional if your mobile device loses its network connection, and will upload its local content when a connection is re-established. When disconnected from the network, MAGE will use local data layers to continue to provide relevant GEOINT. Data layers, including map tiles and vector data, can be stored on your mobile device and are available at all times.</string>
     <string name="map_settings">Map Settings</string>
     <string name="location_settings">Location Services</string>
@@ -213,7 +214,7 @@
     <string name="confirm_password">Confirm Password</string>
     <string name="generating_captcha">Generating Captcha...</string>
     <string name="captcha_text">Captcha Text</string>
-    <string name="signup">Signup</string>
+    <string name="signup">Sign Up</string>
     <string name="save">Save</string>
     <string name="avatar_photo_not_set">Avatar Photo Not Set</string>
     <string name="view_profile_photo">View Profile Photo</string>
@@ -235,10 +236,10 @@
     <string name="filter">Filter</string>
     <string name="clear_defaults">Clear Defaults</string>
     <string name="sign_in">Sign In</string>
+    <string name="sign_in_with">Sign In with %1$s</string>
     <string name="ldap_username">LDAP Username</string>
     <string name="ldap_password">LDAP Password</string>
     <string name="new_to_mage">New to MAGE?</string>
-    <string name="signup_here">SIGNUP HERE</string>
     <string name="no_locations">No Locations</string>
     <string name="no_users_have_reported_location_message">No users have reported their location within your configured time filter for this event.</string>
     <string name="adjust_filter">Adjust Filter</string>
@@ -290,8 +291,8 @@
     <string name="latitude">Latitude</string>
     <string name="longitude">Longitude</string>
     <string name="search_button">Search Button</string>
-    <string name="login_error_message">An error has occurred.  Please contact your server administrator, or try the server URL again.</string>
-    <string name="sign_in_account">Sign into your Account</string>
+    <string name="login_error_title">Oops</string>
+    <string name="login_error_message">An unexpected error occurred. Try again later, or contact your administrator for assistance.</string>
     <string name="or">or</string>
     <string name="wand_description">A Magic Wand With Sparkles</string>
     <string name="contact_us">Contact Us</string>
